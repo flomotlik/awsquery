@@ -9,16 +9,16 @@ nested structures.
 from .aws_responses import get_paginated_response, get_complex_nested_response
 from .policy_samples import (
     get_readonly_policy,
-    get_restrictive_policy, 
+    get_restrictive_policy,
     get_wildcard_policy,
-    get_deny_policy
+    get_deny_policy,
 )
 
 __all__ = [
-    'get_paginated_response',
-    'get_complex_nested_response',
-    'get_readonly_policy',
-    'get_restrictive_policy',
-    'get_wildcard_policy',
-    'get_deny_policy'
+    "get_paginated_response",
+    "get_complex_nested_response",
+    "get_readonly_policy",
+    "get_restrictive_policy",
+    "get_wildcard_policy",
+    "get_deny_policy",
 ]
