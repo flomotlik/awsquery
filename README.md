@@ -1,16 +1,20 @@
 # awsquery - AWS API Query Tool
 
-CLI tool to call the AWS API through boto3 with flexible filtering similar to awsinfo.
+Advanced CLI tool to query AWS APIs through boto3 with flexible filtering, automatic parameter resolution, and comprehensive security validation.
 
 ## Features
 
-- Query AWS APIs with flexible value-based filtering
-- Security validation against ReadOnly AWS policy
-- Tabular output with customizable columns  
-- Auto-completion support (with argcomplete)
-- Pagination support for large responses
-- Dry-run mode for safe testing
-- Keys discovery command
+- **Smart Multi-Level Calls**: Automatically resolves missing parameters by inferring and calling list operations
+- **Flexible Filtering**: Multi-level filtering with `--` separators for resource, value, and column filters
+- **Keys Discovery**: Show all available fields from any API response with `-k`/`--keys`
+- **Debug Mode**: Comprehensive debug output with `-d`/`--debug` 
+- **Security Validation**: Enforces ReadOnly AWS policy with wildcard pattern matching
+- **Auto-completion**: Tab completion for AWS services and actions (filtered by security policy)
+- **Smart Parameter Extraction**: Handles both specific fields and standard AWS field patterns (Name, Id, Arn)
+- **Intelligent Response Processing**: Clean extraction of list data, ignoring metadata
+- **Tabular Output**: Customizable column display with automatic filtering
+- **Pagination Support**: Handles large AWS responses automatically
+- **Dry-Run Mode**: Safe testing without making actual AWS calls
 
 ## Requirements
 

@@ -1,11 +1,9 @@
-FROM python:3.11-slim
+FROM python:3.11-slim as production
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    make \
     curl \
     unzip \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
 # Install AWS CLI with architecture detection
@@ -27,27 +25,26 @@ RUN ARCH=$(uname -m) \
 # Set working directory
 WORKDIR /app
 
-# Copy project configuration files
+# Copy project configuration and source code
 COPY pyproject.toml .
-COPY pytest.ini .
-COPY .coveragerc .
-COPY Makefile .
 COPY policy.json .
-
-# Copy source code and tests
 COPY src/ ./src/
-COPY tests/ ./tests/
 COPY awsquery.py .
 
-# Install the package with all dependencies (production + dev for testing)
-RUN pip install --no-cache-dir -e ".[dev]"
+# Install only production dependencies
+RUN pip install --no-cache-dir .
 
 # Make original awsquery.py executable for backward compatibility
 RUN chmod +x awsquery.py
 
-# Create symlinks for both access methods
+# Create symlinks for access methods
 RUN ln -sf /app/awsquery.py /usr/local/bin/awsquery-legacy \
     && ln -sf /usr/local/bin/awsquery /usr/local/bin/awsquery-cli
 
-# Set default command to bash for interactive use
-ENTRYPOINT ["/bin/bash"]
+# Create non-root user for security
+RUN useradd -m -u 1000 awsquery
+USER awsquery
+
+# Set default command to the CLI tool
+ENTRYPOINT ["awsquery"]
+CMD ["--help"]

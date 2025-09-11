@@ -1,7 +1,8 @@
 version: '3.8'
 
 services:
-  awsquery:
+  # Development environment with all dev dependencies and testing tools
+  awsquery-dev:
     build: 
       context: .
       dockerfile: Dockerfile
@@ -24,3 +25,25 @@ services:
     stdin_open: true
     tty: true
     working_dir: /app
+
+  # Production environment with minimal dependencies
+  awsquery-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    volumes:
+      # Mount AWS credentials (read-only for security)
+      - ~/.aws:/home/awsquery/.aws:ro
+    environment:
+      # Set default AWS region if not specified
+      - AWS_REGION=${AWS_REGION:-eu-central-1}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-eu-central-1}
+      # Preserve other AWS environment variables
+      - AWS_PROFILE=${AWS_PROFILE:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
+
+  # Legacy service name for backward compatibility
+  awsquery:
+    extends: awsquery-dev
