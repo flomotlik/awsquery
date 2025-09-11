@@ -1,0 +1,27 @@
+# Ignore sample responses directory during build
+sample-responses/
+
+# Ignore temporary files
+*.pyc
+__pycache__/
+.pytest_cache/
+*.egg-info/
+
+# Ignore git and IDE files
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Ignore test files
+test_*.py
+*_test.py
+
+# Ignore documentation
+*.md
+!README.md
+
+# Ignore Docker files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore

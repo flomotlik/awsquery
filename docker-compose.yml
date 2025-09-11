@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  awsquery:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount AWS credentials (read-only for security)
+      - ~/.aws:/root/.aws:ro
+      # Mount current directory for development
+      - .:/app
+      # Mount sample responses directory
+      - ./sample-responses:/app/sample-responses
+    environment:
+      # Set default AWS region if not specified
+      - AWS_REGION=${AWS_REGION:-eu-central-1}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-eu-central-1}
+      # Preserve other AWS environment variables
+      - AWS_PROFILE=${AWS_PROFILE:-}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN:-}
+    stdin_open: true
+    tty: true
+    working_dir: /app
