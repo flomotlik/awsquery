@@ -7,6 +7,69 @@ from tabulate import tabulate
 from .utils import debug_print, simplify_key
 
 
+def detect_aws_tags(obj):
+    """Detect if object contains AWS Tag structure"""
+    if isinstance(obj, dict) and "Tags" in obj:
+        tags = obj["Tags"]
+        if isinstance(tags, list) and len(tags) > 0:
+            # Check if first item has Key/Value structure
+            if isinstance(tags[0], dict) and "Key" in tags[0] and "Value" in tags[0]:
+                return True
+    return False
+
+
+def transform_tags_structure(data, visited=None):
+    """Transform AWS Tag lists to searchable maps recursively with circular reference protection
+
+    Converts Tags from [{"Key": "Name", "Value": "web-server"}] format
+    to {"Name": "web-server"} format for easier searching and filtering.
+    Preserves original data alongside transformed data for debugging.
+    """
+    if visited is None:
+        visited = set()
+
+    # Circular reference protection
+    if isinstance(data, (dict, list)) and id(data) in visited:
+        return data  # Return original to avoid infinite recursion
+
+    if isinstance(data, dict):
+        visited.add(id(data))
+        result = {}
+        for key, value in data.items():
+            if key == "Tags" and isinstance(value, list):
+                # Check if this looks like AWS Tags structure
+                if value and isinstance(value[0], dict) and "Key" in value[0] and "Value" in value[0]:
+                    # Transform Tag list to map
+                    tag_map = {}
+                    for tag in value:
+                        if isinstance(tag, dict) and "Key" in tag and "Value" in tag:
+                            # Only add tags with non-empty keys
+                            tag_key = tag["Key"]
+                            if tag_key and tag_key.strip():
+                                tag_map[tag_key] = tag["Value"]
+
+                    # Use transformed map
+                    result[key] = tag_map
+                    # Preserve original for debugging
+                    result[f"{key}_Original"] = value
+                    debug_print(f"Transformed {len(tag_map)} AWS Tags to map format")
+                else:
+                    # Not AWS Tags structure, keep as is
+                    result[key] = transform_tags_structure(value, visited)
+            else:
+                # Recursively transform nested structures
+                result[key] = transform_tags_structure(value, visited)
+        visited.remove(id(data))
+        return result
+    elif isinstance(data, list):
+        visited.add(id(data))
+        result = [transform_tags_structure(item, visited) for item in data]
+        visited.remove(id(data))
+        return result
+    else:
+        return data
+
+
 def flatten_response(data):
     """Flatten AWS response to extract resource lists"""
     if isinstance(data, list):
@@ -120,10 +183,16 @@ def format_table_output(resources, column_filters=None):
     if not resources:
         return "No results found."
 
+    # Apply tag transformation before processing
+    transformed_resources = []
+    for resource in resources:
+        transformed = transform_tags_structure(resource)
+        transformed_resources.append(transformed)
+
     flattened_resources = []
     all_keys = set()
 
-    for resource in resources:
+    for resource in transformed_resources:
         flat = flatten_dict_keys(resource)
         flattened_resources.append(flat)
         all_keys.update(flat.keys())
@@ -195,12 +264,18 @@ def format_json_output(resources, column_filters=None):
     if not resources:
         return json.dumps({"results": []}, indent=2)
 
+    # Apply tag transformation before processing
+    transformed_resources = []
+    for resource in resources:
+        transformed = transform_tags_structure(resource)
+        transformed_resources.append(transformed)
+
     if column_filters:
         for filter_word in column_filters:
             debug_print(f"Applying column filter to JSON: {filter_word}")
 
         filtered_resources = []
-        for resource in resources:
+        for resource in transformed_resources:
             flat = flatten_dict_keys(resource)
 
             simplified_groups: dict[str, set[str]] = {}
@@ -226,7 +301,7 @@ def format_json_output(resources, column_filters=None):
                 filtered_resources.append(filtered)
         return json.dumps({"results": filtered_resources}, indent=2, default=str)
     else:
-        return json.dumps({"results": resources}, indent=2, default=str)
+        return json.dumps({"results": transformed_resources}, indent=2, default=str)
 
 
 def extract_and_sort_keys(resources):
@@ -234,8 +309,14 @@ def extract_and_sort_keys(resources):
     if not resources:
         return []
 
-    all_keys = set()
+    # Apply tag transformation before processing
+    transformed_resources = []
     for resource in resources:
+        transformed = transform_tags_structure(resource)
+        transformed_resources.append(transformed)
+
+    all_keys = set()
+    for resource in transformed_resources:
         flat = flatten_dict_keys(resource)
         all_keys.update(flat.keys())
 
@@ -252,7 +333,7 @@ def show_keys(service, action, dry_run=False):
     """Show all available keys from API response"""
     from .core import execute_aws_call
 
-    response = execute_aws_call(service, action, dry_run)
+    response = execute_aws_call(service, action, dry_run, session=None)
     if dry_run:
         return "DRY RUN: Would show keys for this response."
 

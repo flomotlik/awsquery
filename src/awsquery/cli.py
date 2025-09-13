@@ -7,7 +7,7 @@ import sys
 import argcomplete
 import boto3
 
-from .core import execute_aws_call, execute_multi_level_call
+from .core import execute_aws_call, execute_multi_level_call, execute_with_tracking, execute_multi_level_call_with_tracking, show_keys_from_result
 from .filters import filter_resources, parse_multi_level_filters_for_mode
 from .formatters import (
     extract_and_sort_keys,
@@ -17,7 +17,8 @@ from .formatters import (
     show_keys,
 )
 from .security import action_to_policy_format, load_security_policy, validate_security
-from .utils import debug_print, get_aws_services, sanitize_input
+from .utils import debug_print, get_aws_services, sanitize_input, create_session
+from .config import apply_default_filters
 
 
 def service_completer(prefix, parsed_args, **kwargs):
@@ -25,6 +26,22 @@ def service_completer(prefix, parsed_args, **kwargs):
     session = boto3.Session()
     services = session.get_available_services()
     return [s for s in services if s.startswith(prefix)]
+
+
+def determine_column_filters(column_filters, service, action):
+    """Determine which column filters to apply - user specified or defaults"""
+    if column_filters:
+        debug_print(f"Using user-specified column filters: {column_filters}")
+        return column_filters
+
+    # Check for defaults
+    default_columns = apply_default_filters(service, action)
+    if default_columns:
+        debug_print(f"Applying default column filters for {service}.{action}: {default_columns}")
+        return default_columns
+
+    debug_print(f"No column filters (user or default) for {service}.{action}")
+    return None
 
 
 def action_completer(prefix, parsed_args, **kwargs):
@@ -85,6 +102,8 @@ Examples:
         "-k", "--keys", action="store_true", help="Show all available keys for the command"
     )
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug output")
+    parser.add_argument("--region", help="AWS region to use for requests")
+    parser.add_argument("--profile", help="AWS profile to use for requests")
 
     service_arg = parser.add_argument("service", nargs="?", help="AWS service name")
     service_arg.completer = service_completer  # type: ignore[attr-defined]
@@ -97,11 +116,18 @@ Examples:
     keys_mode = False
     debug_mode = False
     cleaned_argv = []
-    for arg in sys.argv[1:]:
+    skip_next = False
+    for i, arg in enumerate(sys.argv[1:]):
+        if skip_next:
+            skip_next = False
+            continue
         if arg in ["--keys", "-k"]:
             keys_mode = True
         elif arg in ["--debug", "-d"]:
             debug_mode = True
+        elif arg in ["--region", "--profile"]:
+            # Skip this argument and the next one (its value)
+            skip_next = True
         else:
             cleaned_argv.append(arg)
 
@@ -119,7 +145,7 @@ Examples:
     sys.argv = modified_argv
 
     try:
-        args = parser.parse_args(modified_argv[1:])
+        args = parser.parse_args(original_argv[1:])
     except SystemExit:
         sys.argv = original_argv
         raise
@@ -153,13 +179,38 @@ Examples:
     else:
         debug_print(f"DEBUG: Action {service}:{policy_action} IS ALLOWED by security policy")
 
+    # Create session with region/profile if specified
+    session = create_session(region=args.region, profile=args.profile)
+    debug_print(f"DEBUG: Created session with region={args.region}, profile={args.profile}")
+
+    # Determine final column filters (user-specified or defaults)
+    final_column_filters = determine_column_filters(column_filters, service, action)
+
     is_multi_level = False
 
     if keys_mode:
         print(f"Showing all available keys for {service}.{action}:", file=sys.stderr)
 
         try:
-            result = show_keys(service, action, args.dry_run)
+            # Use tracking to get keys from the last successful request
+            call_result = execute_with_tracking(service, action, args.dry_run, session=session)
+
+            # If the initial call failed, try multi-level resolution
+            if not call_result.final_success:
+                debug_print("Keys mode: Initial call failed, trying multi-level resolution")
+                _, multi_resource_filters, multi_value_filters, multi_column_filters = (
+                    parse_multi_level_filters_for_mode(cleaned_argv, mode="multi")
+                )
+                call_result, _ = execute_multi_level_call_with_tracking(
+                    service,
+                    action,
+                    multi_resource_filters,
+                    multi_value_filters,
+                    multi_column_filters,
+                    args.dry_run,
+                )
+
+            result = show_keys_from_result(call_result)
             print(result)
             return
         except Exception as e:
@@ -168,7 +219,7 @@ Examples:
 
     try:
         debug_print(f"Using single-level execution first")
-        response = execute_aws_call(service, action, args.dry_run)
+        response = execute_aws_call(service, action, args.dry_run, session=session)
 
         if args.dry_run:
             return
@@ -183,13 +234,16 @@ Examples:
                 f"Resource: {multi_resource_filters}, Value: {multi_value_filters}, "
                 f"Column: {multi_column_filters}"
             )
+            # Apply defaults for multi-level if no user columns specified
+            final_multi_column_filters = determine_column_filters(multi_column_filters, service, action)
             filtered_resources = execute_multi_level_call(
                 service,
                 action,
                 multi_resource_filters,
                 multi_value_filters,
-                multi_column_filters,
+                final_multi_column_filters,
                 args.dry_run,
+                session,
             )
             debug_print(f"Multi-level call completed with {len(filtered_resources)} resources")
         else:
@@ -198,8 +252,8 @@ Examples:
 
             filtered_resources = filter_resources(resources, value_filters)
 
-        if column_filters:
-            for filter_word in column_filters:
+        if final_column_filters:
+            for filter_word in final_column_filters:
                 debug_print(f"Applying column filter: {filter_word}")
 
         if keys_mode:
@@ -209,9 +263,9 @@ Examples:
             print(output)
         else:
             if args.json:
-                output = format_json_output(filtered_resources, column_filters)
+                output = format_json_output(filtered_resources, final_column_filters)
             else:
-                output = format_table_output(filtered_resources, column_filters)
+                output = format_table_output(filtered_resources, final_column_filters)
             print(output)
 
     except KeyboardInterrupt:

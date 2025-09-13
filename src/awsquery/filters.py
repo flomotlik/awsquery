@@ -2,7 +2,7 @@
 
 import sys
 
-from .formatters import convert_parameter_name, flatten_dict_keys
+from .formatters import convert_parameter_name, flatten_dict_keys, transform_tags_structure
 from .utils import debug_print, simplify_key
 
 
@@ -14,8 +14,14 @@ def filter_resources(resources, value_filters):
     for filter_text in value_filters:
         debug_print(f"Applying value filter: {filter_text}")
 
-    filtered: list[dict] = []
+    # Apply tag transformation before filtering
+    transformed_resources = []
     for resource in resources:
+        transformed = transform_tags_structure(resource)
+        transformed_resources.append(transformed)
+
+    filtered: list[dict] = []
+    for resource in transformed_resources:
         flattened = flatten_dict_keys(resource)
 
         searchable_items = []
@@ -154,12 +160,18 @@ def extract_parameter_values(resources, parameter_name):
         )
         return resources
 
+    # Apply tag transformation before parameter extraction
+    transformed_resources = []
+    for resource in resources:
+        transformed = transform_tags_structure(resource)
+        transformed_resources.append(transformed)
+
     pascal_case_name = convert_parameter_name(parameter_name)
     search_names = [parameter_name, pascal_case_name]
 
     debug_print(f"Looking for parameter values using names: {search_names}")
 
-    for resource in resources:
+    for resource in transformed_resources:
         flat = flatten_dict_keys(resource)
 
         found_value = None

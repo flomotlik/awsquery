@@ -7,10 +7,44 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from .filters import extract_parameter_values, filter_resources
-from .utils import debug_print, normalize_action_name
+from .utils import debug_print, normalize_action_name, get_client
 
 
-def execute_aws_call(service, action, dry_run=False, parameters=None):
+class CallResult:
+    """Track successful responses throughout call chain"""
+    def __init__(self):
+        self.successful_responses = []
+        self.final_success = False
+        self.last_successful_response = None
+        self.error_messages = []
+
+
+def execute_with_tracking(service, action, dry_run=False, parameters=None, session=None):
+    """Execute AWS call with tracking for keys mode"""
+    result = CallResult()
+
+    try:
+        response = execute_aws_call(service, action, dry_run, parameters, session)
+
+        # Check if response indicates a validation error (for multi-level calls)
+        if isinstance(response, dict) and "validation_error" in response:
+            result.final_success = False
+            result.error_messages.append(f"Validation error: {response['validation_error']}")
+        else:
+            # Successful response
+            result.successful_responses.append(response)
+            result.last_successful_response = response
+            result.final_success = True
+            debug_print(f"Tracking: Successful call to {service}.{action}")
+    except Exception as e:
+        result.final_success = False
+        result.error_messages.append(f"Call failed: {str(e)}")
+        debug_print(f"Tracking: Failed call to {service}.{action}: {e}")
+
+    return result
+
+
+def execute_aws_call(service, action, dry_run=False, parameters=None, session=None):
     """Execute AWS API call with pagination support and optional parameters"""
     normalized_action = normalize_action_name(action)
 
@@ -22,7 +56,7 @@ def execute_aws_call(service, action, dry_run=False, parameters=None):
         return []
 
     try:
-        client = boto3.client(service)
+        client = get_client(service, session)
         operation = getattr(client, normalized_action, None)
 
         if not operation:
@@ -91,8 +125,208 @@ def execute_aws_call(service, action, dry_run=False, parameters=None):
         sys.exit(1)
 
 
+def execute_multi_level_call_with_tracking(
+    service, action, resource_filters, value_filters, column_filters, dry_run=False, session=None
+):
+    """Handle multi-level API calls with automatic parameter resolution and tracking"""
+    debug_print(f"Starting multi-level call with tracking for {service}.{action}")
+    debug_print(
+        f"Resource filters: {resource_filters}, "
+        f"Value filters: {value_filters}, Column filters: {column_filters}"
+    )
+
+    call_result = CallResult()
+
+    # First attempt - main call
+    try:
+        response = execute_aws_call(service, action, dry_run, parameters=None, session=session)
+
+        if isinstance(response, dict) and "validation_error" in response:
+            call_result.error_messages.append(f"Initial call validation error: {response['validation_error']}")
+            error_info = response["validation_error"]
+            parameter_name = error_info["parameter_name"]
+            debug_print(f"Validation error - missing parameter: {parameter_name}")
+        else:
+            # Initial call succeeded
+            call_result.successful_responses.append(response)
+            call_result.last_successful_response = response
+            call_result.final_success = True
+            debug_print(f"Tracking: Initial call to {service}.{action} succeeded")
+
+            from .formatters import flatten_response
+            resources = flatten_response(response)
+            debug_print(f"Final call returned {len(resources)} resources")
+
+            if value_filters:
+                filtered_resources = filter_resources(resources, value_filters)
+                debug_print(f"After value filtering: {len(filtered_resources)} resources")
+            else:
+                filtered_resources = resources
+
+            return call_result, filtered_resources
+
+    except Exception as e:
+        call_result.error_messages.append(f"Initial call failed: {str(e)}")
+        debug_print(f"Initial call failed: {e}")
+        # Continue to multi-level resolution
+
+    # Multi-level resolution needed
+    if isinstance(response, dict) and "validation_error" in response:
+        error_info = response["validation_error"]
+        parameter_name = error_info["parameter_name"]
+        debug_print(f"Validation error - missing parameter: {parameter_name}")
+
+        print(f"Resolving required parameter '{parameter_name}'", file=sys.stderr)
+
+        possible_operations = infer_list_operation(service, parameter_name, action)
+
+        list_response = None
+        successful_operation = None
+
+        for operation in possible_operations:
+            try:
+                debug_print(f"Trying list operation: {operation}")
+                print(f"Calling {operation} to find available resources...", file=sys.stderr)
+
+                list_response = execute_aws_call(service, operation, dry_run, parameters=None, session=session)
+
+                if isinstance(list_response, list) and list_response:
+                    successful_operation = operation
+                    debug_print(f"Successfully executed: {operation}")
+                    # Track the successful list operation
+                    call_result.successful_responses.append(list_response)
+                    break
+
+            except Exception as e:
+                debug_print(f"Operation {operation} failed: {e}")
+                continue
+
+        if not list_response or not successful_operation:
+            call_result.error_messages.append(f"Could not find working list operation for parameter '{parameter_name}'")
+            print(
+                f"ERROR: Could not find a working list operation for parameter '{parameter_name}'",
+                file=sys.stderr,
+            )
+            print(f"ERROR: Tried operations: {possible_operations}", file=sys.stderr)
+            return call_result, []
+
+        from .formatters import flatten_response
+
+        list_resources = flatten_response(list_response)
+        debug_print(f"Got {len(list_resources)} resources from {successful_operation}")
+
+        if resource_filters:
+            filtered_list_resources = filter_resources(list_resources, resource_filters)
+            debug_print(f"After resource filtering: {len(filtered_list_resources)} resources")
+        else:
+            filtered_list_resources = list_resources
+
+        print(f"Found {len(filtered_list_resources)} resources matching filters", file=sys.stderr)
+
+        if not filtered_list_resources:
+            call_result.error_messages.append(f"No resources found matching resource filters: {resource_filters}")
+            print(
+                f"ERROR: No resources found matching resource filters: {resource_filters}",
+                file=sys.stderr,
+            )
+            return call_result, []
+
+        parameter_values = extract_parameter_values(filtered_list_resources, parameter_name)
+
+        if not parameter_values:
+            call_result.error_messages.append(f"Could not extract parameter '{parameter_name}' from filtered results")
+            print(
+                f"ERROR: Could not extract parameter '{parameter_name}' from filtered results",
+                file=sys.stderr,
+            )
+            return call_result, []
+
+        expects_list = parameter_expects_list(parameter_name)
+
+        if expects_list:
+            param_value = parameter_values
+        else:
+            if len(parameter_values) > 1:
+                print(f"Multiple {parameter_name} values found matching filters:", file=sys.stderr)
+                display_values = parameter_values[:10]
+                for value in display_values:
+                    print(f"- {value}", file=sys.stderr)
+
+                if len(parameter_values) > 10:
+                    remaining = len(parameter_values) - 10
+                    print(
+                        f"... and {remaining} more "
+                        f"(showing first 10 of {len(parameter_values)} total)",
+                        file=sys.stderr,
+                    )
+
+                print(f"Using first match: {parameter_values[0]}", file=sys.stderr)
+            elif len(parameter_values) == 1:
+                print(f"Using: {parameter_values[0]}", file=sys.stderr)
+
+            param_value = parameter_values[0]
+
+        debug_print(f"Using parameter value(s): {param_value}")
+
+        try:
+            client = get_client(service, session)
+            converted_parameter_name = get_correct_parameter_name(client, action, parameter_name)
+            debug_print(
+                f"Parameter name resolution: {parameter_name} -> {converted_parameter_name}"
+            )
+        except Exception as e:
+            debug_print(f"Could not create client for parameter introspection: {e}")
+            converted_parameter_name = convert_parameter_name(parameter_name)
+            debug_print(
+                f"Fallback parameter name conversion: "
+                f"{parameter_name} -> {converted_parameter_name}"
+            )
+
+        parameters = {converted_parameter_name: param_value}
+
+        # Final call with resolved parameters
+        try:
+            final_response = execute_aws_call(service, action, dry_run, parameters, session)
+
+            if isinstance(final_response, dict) and "validation_error" in final_response:
+                call_result.error_messages.append(f"Still getting validation error after parameter resolution: {final_response['validation_error']}")
+                print(
+                    f"ERROR: Still getting validation error after parameter resolution: "
+                    f"{final_response['validation_error']}",
+                    file=sys.stderr,
+                )
+                return call_result, []
+            else:
+                # Final call succeeded
+                call_result.successful_responses.append(final_response)
+                call_result.last_successful_response = final_response
+                call_result.final_success = True
+                debug_print(f"Tracking: Final call to {service}.{action} succeeded")
+
+        except Exception as e:
+            call_result.error_messages.append(f"Final call failed: {str(e)}")
+            debug_print(f"Final call failed: {e}")
+            return call_result, []
+
+    if call_result.last_successful_response:
+        from .formatters import flatten_response
+
+        resources = flatten_response(call_result.last_successful_response)
+        debug_print(f"Final call returned {len(resources)} resources")
+
+        if value_filters:
+            filtered_resources = filter_resources(resources, value_filters)
+            debug_print(f"After value filtering: {len(filtered_resources)} resources")
+        else:
+            filtered_resources = resources
+
+        return call_result, filtered_resources
+    else:
+        return call_result, []
+
+
 def execute_multi_level_call(
-    service, action, resource_filters, value_filters, column_filters, dry_run=False
+    service, action, resource_filters, value_filters, column_filters, dry_run=False, session=None
 ):
     """Handle multi-level API calls with automatic parameter resolution"""
     debug_print(f"Starting multi-level call for {service}.{action}")
@@ -101,7 +335,7 @@ def execute_multi_level_call(
         f"Value filters: {value_filters}, Column filters: {column_filters}"
     )
 
-    response = execute_aws_call(service, action, dry_run)
+    response = execute_aws_call(service, action, dry_run, session=session)
 
     if isinstance(response, dict) and "validation_error" in response:
         error_info = response["validation_error"]
@@ -122,7 +356,7 @@ def execute_multi_level_call(
 
                 print(f"Calling {operation} to find available resources...", file=sys.stderr)
 
-                list_response = execute_aws_call(service, operation, dry_run)
+                list_response = execute_aws_call(service, operation, dry_run, parameters=None, session=session)
 
                 if isinstance(list_response, list) and list_response:
                     successful_operation = operation
@@ -198,7 +432,7 @@ def execute_multi_level_call(
         debug_print(f"Using parameter value(s): {param_value}")
 
         try:
-            client = boto3.client(service)
+            client = get_client(service, session)
             converted_parameter_name = get_correct_parameter_name(client, action, parameter_name)
             debug_print(
                 f"Parameter name resolution: {parameter_name} -> {converted_parameter_name}"
@@ -212,7 +446,7 @@ def execute_multi_level_call(
             )
 
         parameters = {converted_parameter_name: param_value}
-        response = execute_aws_call(service, action, dry_run, parameters)
+        response = execute_aws_call(service, action, dry_run, parameters, session)
 
         if isinstance(response, dict) and "validation_error" in response:
             print(
@@ -435,3 +669,22 @@ def get_correct_parameter_name(client, action, parameter_name):
         fallback = convert_parameter_name(parameter_name)
         debug_print(f"Falling back to PascalCase: {parameter_name} -> {fallback}")
         return fallback
+
+
+def show_keys_from_result(call_result):
+    """Show keys only if final call succeeded"""
+    if call_result.final_success and call_result.last_successful_response:
+        from .formatters import flatten_response, extract_and_sort_keys
+
+        resources = flatten_response(call_result.last_successful_response)
+        if not resources:
+            return "Error: No data to extract keys from in successful response"
+
+        sorted_keys = extract_and_sort_keys(resources)
+        return "\n".join(f"  {key}" for key in sorted_keys)
+    else:
+        if call_result.error_messages:
+            error_msg = "; ".join(call_result.error_messages)
+            return f"Error: No successful response to show keys from ({error_msg})"
+        else:
+            return "Error: No successful response to show keys from"
