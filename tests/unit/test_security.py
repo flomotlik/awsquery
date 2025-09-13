@@ -1,42 +1,34 @@
-"""
-Comprehensive unit tests for security validation functions.
+"""Unit tests for security validation functions."""
 
-This module provides thorough test coverage for the security policy loading,
-validation, and action name conversion functions with 95% coverage target.
-"""
+import json
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
-import json
-import tempfile
-import os
-from unittest.mock import patch, mock_open, MagicMock
-from pathlib import Path
 
-from src.awsquery.security import load_security_policy, validate_security, action_to_policy_format
+from src.awsquery.security import action_to_policy_format, load_security_policy, validate_security
 from tests.fixtures.policy_samples import (
-    get_readonly_policy, 
-    get_restrictive_policy, 
-    get_wildcard_policy, 
     get_deny_policy,
     get_legacy_policy_formats,
-    get_malformed_policies
+    get_malformed_policies,
+    get_readonly_policy,
+    get_restrictive_policy,
+    get_wildcard_policy,
 )
 
 
 class TestLoadSecurityPolicy:
-    """Test policy loading from various formats and error conditions."""
 
     @pytest.mark.unit
     @pytest.mark.critical
     def test_load_policy_with_policyversion_structure(self):
-        """Test loading policy with nested PolicyVersion structure."""
         policy_content = get_readonly_policy()
         policy_json = json.dumps(policy_content)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
-        # Verify comprehensive read-only permissions were loaded
         assert len(allowed_actions) > 0
         assert "ec2:Describe*" in allowed_actions
         assert "s3:List*" in allowed_actions
@@ -46,95 +38,73 @@ class TestLoadSecurityPolicy:
     @pytest.mark.unit
     @pytest.mark.critical
     def test_load_policy_with_direct_statement_structure(self):
-        """Test loading policy with direct Statement structure (no PolicyVersion wrapper)."""
-        policy_content = get_legacy_policy_formats()['direct_statement']
+        policy_content = get_legacy_policy_formats()["direct_statement"]
         policy_json = json.dumps(policy_content)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
+
         assert len(allowed_actions) == 2
         assert "ec2:DescribeInstances" in allowed_actions
         assert "s3:ListBuckets" in allowed_actions
 
     @pytest.mark.unit
     def test_load_policy_with_single_action_string(self):
-        """Test loading policy where Action is a single string instead of array."""
-        policy_content = get_legacy_policy_formats()['single_action_string']
+        policy_content = get_legacy_policy_formats()["single_action_string"]
         policy_json = json.dumps(policy_content)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
+
         assert len(allowed_actions) == 1
         assert "ec2:DescribeInstances" in allowed_actions
 
     @pytest.mark.unit
     def test_load_policy_with_multiple_statements(self):
-        """Test loading policy with multiple Allow statements."""
-        policy_content = get_legacy_policy_formats()['multiple_statements']
+        policy_content = get_legacy_policy_formats()["multiple_statements"]
         policy_json = json.dumps(policy_content)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
-        # Should include actions from both Allow statements, ignore Deny
         assert "ec2:Describe*" in allowed_actions
         assert "s3:List*" in allowed_actions
         assert "s3:Get*" in allowed_actions
-        # Should NOT include denied actions
         assert "ec2:TerminateInstances" not in allowed_actions
 
     @pytest.mark.unit
     def test_load_policy_ignores_deny_statements(self):
-        """Test that Deny statements are ignored when loading allowed actions."""
         policy_content = {
             "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": ["ec2:DescribeInstances"]
-                },
-                {
-                    "Effect": "Deny", 
-                    "Action": ["ec2:TerminateInstances"]
-                }
+                {"Effect": "Allow", "Action": ["ec2:DescribeInstances"]},
+                {"Effect": "Deny", "Action": ["ec2:TerminateInstances"]},
             ]
         }
         policy_json = json.dumps(policy_content)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
+
         assert "ec2:DescribeInstances" in allowed_actions
         assert "ec2:TerminateInstances" not in allowed_actions
 
     @pytest.mark.unit
     def test_load_policy_with_empty_statements(self):
-        """Test loading policy with empty Statement array."""
-        policy_content = get_malformed_policies()['empty_statement']
+        policy_content = get_malformed_policies()["empty_statement"]
         policy_json = json.dumps(policy_content)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
+
         assert len(allowed_actions) == 0
 
     @pytest.mark.unit
     def test_load_policy_with_missing_statement(self):
-        """Test loading policy with missing Statement field."""
-        policy_content = {
-            "PolicyVersion": {
-                "Document": {
-                    "Version": "2012-10-17"
-                    # Missing Statement
-                }
-            }
-        }
+        policy_content = {"PolicyVersion": {"Document": {"Version": "2012-10-17"}}}
         policy_json = json.dumps(policy_content)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
+
         assert len(allowed_actions) == 0
 
     @pytest.mark.unit
@@ -149,10 +119,10 @@ class TestLoadSecurityPolicy:
             ]
         }
         policy_json = json.dumps(policy_content)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
+
         assert len(allowed_actions) == 0
 
     @pytest.mark.unit
@@ -168,7 +138,7 @@ class TestLoadSecurityPolicy:
     def test_load_policy_invalid_json_error(self):
         """Test proper error handling when policy.json contains invalid JSON."""
         invalid_json = '{"PolicyVersion": {"Document": {invalid json}'
-        
+
         with patch("builtins.open", mock_open(read_data=invalid_json)):
             with pytest.raises(SystemExit):
                 load_security_policy()
@@ -181,25 +151,28 @@ class TestLoadSecurityPolicy:
                 load_security_policy()
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("policy_scenario,expected_actions", [
-        ("readonly", ["ec2:Describe*", "s3:List*", "iam:Get*"]),
-        ("restrictive", ["ec2:DescribeInstances", "s3:ListBuckets", "iam:GetUser"]),
-        ("wildcard", ["*:Describe*", "*:List*", "ec2:Get*"])
-    ])
+    @pytest.mark.parametrize(
+        "policy_scenario,expected_actions",
+        [
+            ("readonly", ["ec2:Describe*", "s3:List*", "iam:Get*"]),
+            ("restrictive", ["ec2:DescribeInstances", "s3:ListBuckets", "iam:GetUser"]),
+            ("wildcard", ["*:Describe*", "*:List*", "ec2:Get*"]),
+        ],
+    )
     def test_load_various_policy_formats(self, policy_scenario, expected_actions):
         """Test loading various policy format scenarios."""
         policy_functions = {
             "readonly": get_readonly_policy,
             "restrictive": get_restrictive_policy,
-            "wildcard": get_wildcard_policy
+            "wildcard": get_wildcard_policy,
         }
-        
+
         policy_content = policy_functions[policy_scenario]()
         policy_json = json.dumps(policy_content)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
+
         for expected_action in expected_actions:
             assert expected_action in allowed_actions
 
@@ -207,13 +180,13 @@ class TestLoadSecurityPolicy:
     def test_load_policy_debug_output(self, capsys):
         """Test debug output during policy loading."""
         # Enable debug mode
-        with patch('src.awsquery.utils.debug_enabled', True):
+        with patch("src.awsquery.utils.debug_enabled", True):
             policy_content = get_restrictive_policy()
             policy_json = json.dumps(policy_content)
-            
+
             with patch("builtins.open", mock_open(read_data=policy_json)):
                 allowed_actions = load_security_policy()
-                
+
         captured = capsys.readouterr()
         assert "DEBUG: Loaded policy with keys:" in captured.err
         assert "DEBUG: Found PolicyVersion structure" in captured.err
@@ -248,7 +221,7 @@ class TestValidateSecurity:
         # These should match service-specific patterns like "s3:List*", "iam:List*"
         assert validate_security("s3", "ListObjects", mock_security_policy) is True
         assert validate_security("iam", "ListRoles", mock_security_policy) is True
-        
+
         # These should NOT match because there's no "*:List*" pattern in mock_security_policy
         assert validate_security("rds", "ListDatabases", mock_security_policy) is False
         assert validate_security("lambda", "ListFunctions", mock_security_policy) is False
@@ -260,7 +233,7 @@ class TestValidateSecurity:
         # Should be case-sensitive
         assert validate_security("ec2", "describeinstances", mock_security_policy) is False
         assert validate_security("EC2", "DescribeInstances", mock_security_policy) is False
-        
+
         # Correct case should work
         assert validate_security("ec2", "DescribeInstances", mock_security_policy) is True
 
@@ -268,7 +241,7 @@ class TestValidateSecurity:
     def test_validate_security_empty_allowed_actions(self):
         """Test validation with empty allowed_actions set (default allow behavior)."""
         empty_actions = set()
-        
+
         # Should return True for any action when allowed_actions is empty
         assert validate_security("ec2", "DescribeInstances", empty_actions) is True
         assert validate_security("s3", "DeleteBucket", empty_actions) is True
@@ -298,16 +271,16 @@ class TestValidateSecurity:
             "s3:*Bucket*",  # Should match anything with "Bucket" in it
             "ec2:*Instance*",  # Should match anything with "Instance" in it
             "*:List*",  # Should match any service with List* actions
-            "cloudformation:*Stack*"  # Should match anything with "Stack" in it
+            "cloudformation:*Stack*",  # Should match anything with "Stack" in it
         }
-        
+
         # Test complex pattern matching
         assert validate_security("s3", "CreateBucket", complex_policy) is True
         assert validate_security("s3", "DeleteBucketPolicy", complex_policy) is True
         assert validate_security("ec2", "TerminateInstances", complex_policy) is True
         assert validate_security("rds", "ListDatabases", complex_policy) is True
         assert validate_security("cloudformation", "CreateStackSet", complex_policy) is True
-        
+
         # These should not match
         assert validate_security("ec2", "CreateVolume", complex_policy) is False
         assert validate_security("s3", "GetObject", complex_policy) is False
@@ -317,22 +290,29 @@ class TestValidateSecurity:
         """Test that service:action format is properly constructed."""
         # These tests ensure the service:action string is built correctly
         assert validate_security("ec2", "DescribeInstances", mock_security_policy) is True
-        assert validate_security("", "DescribeInstances", mock_security_policy) is False  # Empty service
+        assert (
+            validate_security("", "DescribeInstances", mock_security_policy) is False
+        )  # Empty service
         assert validate_security("ec2", "", mock_security_policy) is False  # Empty action
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("service,action,expected", [
-        ("ec2", "DescribeInstances", True),   # Direct match
-        ("ec2", "DescribeImages", True),      # Wildcard match  
-        ("s3", "ListBuckets", True),          # Direct match
-        ("s3", "ListObjects", True),          # Wildcard match
-        ("ec2", "TerminateInstances", False), # No match
-        ("s3", "DeleteBucket", False),        # No match
-        ("unknown", "SomeAction", False),     # Unknown service
-        ("", "DescribeInstances", False),     # Empty service
-        ("ec2", "", False)                    # Empty action
-    ])
-    def test_validate_security_parametrized_scenarios(self, mock_security_policy, service, action, expected):
+    @pytest.mark.parametrize(
+        "service,action,expected",
+        [
+            ("ec2", "DescribeInstances", True),  # Direct match
+            ("ec2", "DescribeImages", True),  # Wildcard match
+            ("s3", "ListBuckets", True),  # Direct match
+            ("s3", "ListObjects", True),  # Wildcard match
+            ("ec2", "TerminateInstances", False),  # No match
+            ("s3", "DeleteBucket", False),  # No match
+            ("unknown", "SomeAction", False),  # Unknown service
+            ("", "DescribeInstances", False),  # Empty service
+            ("ec2", "", False),  # Empty action
+        ],
+    )
+    def test_validate_security_parametrized_scenarios(
+        self, mock_security_policy, service, action, expected
+    ):
         """Parametrized tests for various validation scenarios."""
         result = validate_security(service, action, mock_security_policy)
         assert result is expected
@@ -340,13 +320,13 @@ class TestValidateSecurity:
     @pytest.mark.unit
     def test_validate_security_debug_output(self, mock_security_policy, capsys):
         """Test debug output during security validation."""
-        with patch('src.awsquery.utils.debug_enabled', True):
+        with patch("src.awsquery.utils.debug_enabled", True):
             # Test successful validation
             validate_security("ec2", "DescribeInstances", mock_security_policy)
-            
+
             # Test failed validation
             validate_security("ec2", "TerminateInstances", mock_security_policy)
-            
+
         captured = capsys.readouterr()
         assert "DEBUG: Validating ec2:DescribeInstances against" in captured.err
         assert "DEBUG: Direct match found for ec2:DescribeInstances" in captured.err
@@ -357,43 +337,40 @@ class TestActionToPolicyFormat:
     """Test action name conversion to PascalCase."""
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("input_action,expected_output", [
-        # Kebab-case to PascalCase
-        ("describe-instances", "DescribeInstances"),
-        ("list-buckets", "ListBuckets"),
-        ("get-user", "GetUser"),
-        ("create-capacity-provider", "CreateCapacityProvider"),
-        ("describe-security-groups", "DescribeSecurityGroups"),
-        
-        # Snake_case to PascalCase
-        ("describe_instances", "DescribeInstances"),
-        ("list_buckets", "ListBuckets"),
-        ("get_user", "GetUser"),
-        ("create_capacity_provider", "CreateCapacityProvider"),
-        
-        # Mixed case
-        ("describe-stack_resources", "DescribeStackResources"),
-        ("list_bucket-policies", "ListBucketPolicies"),
-        
-        # Single words
-        ("describe", "Describe"),
-        ("list", "List"),
-        ("get", "Get"),
-        
-        # Already PascalCase (gets split and re-joined)
-        ("DescribeInstances", "Describeinstances"),
-        ("ListBuckets", "Listbuckets"),
-        
-        # Multiple consecutive separators
-        ("describe--instances", "DescribeInstances"),
-        ("list__buckets", "ListBuckets"),
-        ("get-_user", "GetUser"),
-        
-        # Leading/trailing separators
-        ("-describe-instances", "DescribeInstances"),
-        ("list-buckets-", "ListBuckets"),
-        ("_get_user_", "GetUser"),
-    ])
+    @pytest.mark.parametrize(
+        "input_action,expected_output",
+        [
+            # Kebab-case to PascalCase
+            ("describe-instances", "DescribeInstances"),
+            ("list-buckets", "ListBuckets"),
+            ("get-user", "GetUser"),
+            ("create-capacity-provider", "CreateCapacityProvider"),
+            ("describe-security-groups", "DescribeSecurityGroups"),
+            # Snake_case to PascalCase
+            ("describe_instances", "DescribeInstances"),
+            ("list_buckets", "ListBuckets"),
+            ("get_user", "GetUser"),
+            ("create_capacity_provider", "CreateCapacityProvider"),
+            # Mixed case
+            ("describe-stack_resources", "DescribeStackResources"),
+            ("list_bucket-policies", "ListBucketPolicies"),
+            # Single words
+            ("describe", "Describe"),
+            ("list", "List"),
+            ("get", "Get"),
+            # Already PascalCase (gets split and re-joined)
+            ("DescribeInstances", "Describeinstances"),
+            ("ListBuckets", "Listbuckets"),
+            # Multiple consecutive separators
+            ("describe--instances", "DescribeInstances"),
+            ("list__buckets", "ListBuckets"),
+            ("get-_user", "GetUser"),
+            # Leading/trailing separators
+            ("-describe-instances", "DescribeInstances"),
+            ("list-buckets-", "ListBuckets"),
+            ("_get_user_", "GetUser"),
+        ],
+    )
     def test_action_to_policy_format_standard_cases(self, input_action, expected_output):
         """Test standard action name conversion scenarios."""
         result = action_to_policy_format(input_action)
@@ -413,22 +390,23 @@ class TestActionToPolicyFormat:
         assert action_to_policy_format("_") == ""
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("special_input,expected", [
-        # Numbers in action names
-        ("describe-db-instances-2", "DescribeDbInstances2"),
-        ("list-s3-buckets", "ListS3Buckets"),
-        ("get-ec2-info", "GetEc2Info"),
-        
-        # Special characters (only - and _ are treated as separators, others preserved)
-        ("describe.instances", "Describe.instances"),  # Dots not treated as separators
-        ("list@buckets", "List@buckets"),              # @ not treated as separators  
-        ("get+user", "Get+user"),                      # + not treated as separators
-        
-        # Whitespace handling
-        ("describe instances", "DescribeInstances"),
-        ("list  buckets", "ListBuckets"),
-        (" get user ", "GetUser"),
-    ])
+    @pytest.mark.parametrize(
+        "special_input,expected",
+        [
+            # Numbers in action names
+            ("describe-db-instances-2", "DescribeDbInstances2"),
+            ("list-s3-buckets", "ListS3Buckets"),
+            ("get-ec2-info", "GetEc2Info"),
+            # Special characters (only - and _ are treated as separators, others preserved)
+            ("describe.instances", "Describe.instances"),  # Dots not treated as separators
+            ("list@buckets", "List@buckets"),  # @ not treated as separators
+            ("get+user", "Get+user"),  # + not treated as separators
+            # Whitespace handling
+            ("describe instances", "DescribeInstances"),
+            ("list  buckets", "ListBuckets"),
+            (" get user ", "GetUser"),
+        ],
+    )
     def test_action_to_policy_format_special_cases(self, special_input, expected):
         """Test conversion with special characters and numbers."""
         result = action_to_policy_format(special_input)
@@ -447,13 +425,12 @@ class TestActionToPolicyFormat:
             ("list-identity-providers", "ListIdentityProviders"),
             ("get-queue-attributes", "GetQueueAttributes"),
             ("describe-auto-scaling-groups", "DescribeAutoScalingGroups"),
-            
             # Edge cases with AWS service prefixes
             ("ec2-describe-instances", "Ec2DescribeInstances"),
             ("s3-list-buckets", "S3ListBuckets"),
             ("iam-get-user", "IamGetUser"),
         ]
-        
+
         for input_action, expected in test_cases:
             result = action_to_policy_format(input_action)
             assert result == expected, f"Expected {expected}, got {result} for input {input_action}"
@@ -465,7 +442,7 @@ class TestActionToPolicyFormat:
         already_pascal = "DescribeInstances"
         result = action_to_policy_format(already_pascal)
         assert result == "Describeinstances"  # Gets split and rejoined
-        
+
         # Test double conversion - should be stable after first conversion
         kebab_input = "describe-instances"
         first_conversion = action_to_policy_format(kebab_input)
@@ -483,27 +460,29 @@ class TestActionToPolicyFormat:
             ("Get-User", "GetUser"),
             ("camelCase-action", "CamelcaseAction"),
             ("UPPER-CASE", "UpperCase"),
-            
             # All lowercase
             ("describe-instances", "DescribeInstances"),
             ("list_buckets", "ListBuckets"),
         ]
-        
+
         for input_action, expected in test_cases:
             result = action_to_policy_format(input_action)
             assert result == expected
 
     @pytest.mark.unit
-    @pytest.mark.parametrize("input_str", [
-        "describe-instances",
-        "list_buckets", 
-        "get-user",
-        "create-capacity-provider",
-        "describe_security_groups",
-        "",
-        "single",
-        "DescribeInstances"
-    ])
+    @pytest.mark.parametrize(
+        "input_str",
+        [
+            "describe-instances",
+            "list_buckets",
+            "get-user",
+            "create-capacity-provider",
+            "describe_security_groups",
+            "",
+            "single",
+            "DescribeInstances",
+        ],
+    )
     def test_action_to_policy_format_returns_string(self, input_str):
         """Test that function always returns a string."""
         result = action_to_policy_format(input_str)
@@ -522,17 +501,17 @@ class TestSecurityIntegration:
         policy_content = get_restrictive_policy()
         policy_file = tmp_path / "policy.json"
         policy_file.write_text(json.dumps(policy_content))
-        
+
         # Mock the file path
         with patch("src.awsquery.security.open", mock_open(read_data=json.dumps(policy_content))):
             # Load the policy
             allowed_actions = load_security_policy()
-            
+
             # Test validation with loaded policy
             assert validate_security("ec2", "DescribeInstances", allowed_actions) is True
             assert validate_security("s3", "ListBuckets", allowed_actions) is True
             assert validate_security("iam", "GetUser", allowed_actions) is True
-            
+
             # These should fail with restrictive policy
             assert validate_security("ec2", "TerminateInstances", allowed_actions) is False
             assert validate_security("s3", "DeleteBucket", allowed_actions) is False
@@ -543,10 +522,10 @@ class TestSecurityIntegration:
         # Convert kebab-case action to policy format
         converted_action = action_to_policy_format("describe-instances")
         assert converted_action == "DescribeInstances"
-        
+
         # Use converted action in validation
         assert validate_security("ec2", converted_action, mock_security_policy) is True
-        
+
         # Test with action that needs conversion but won't match policy
         converted_deny_action = action_to_policy_format("terminate-instances")
         assert converted_deny_action == "TerminateInstances"
@@ -560,7 +539,7 @@ class TestSecurityIntegration:
         with patch("builtins.open", side_effect=FileNotFoundError()):
             with pytest.raises(SystemExit):
                 load_security_policy()
-        
+
         # Validation should still work with empty policy set
         empty_policy = set()
         assert validate_security("ec2", "DescribeInstances", empty_policy) is True
@@ -570,26 +549,25 @@ class TestSecurityIntegration:
         """Test comprehensive wildcard matching scenarios."""
         wildcard_policy = get_wildcard_policy()
         policy_json = json.dumps(wildcard_policy)
-        
+
         with patch("builtins.open", mock_open(read_data=policy_json)):
             allowed_actions = load_security_policy()
-            
+
         # Test various wildcard patterns
         test_cases = [
-            ("ec2", "DescribeInstances", True),   # *:Describe*
-            ("s3", "ListBuckets", True),          # *:List*  
-            ("rds", "DescribeDBInstances", True), # *:Describe*
-            ("lambda", "ListFunctions", True),    # *:List*
-            ("ec2", "GetConsoleOutput", True),    # ec2:Get*
-            ("s3", "GetBucketPolicy", True),      # s3:*Bucket*
-            ("cloudformation", "DescribeStacks", True), # cloudformation:*Stack*
-            ("iam", "GetUser", True),             # iam:*User*
-            
+            ("ec2", "DescribeInstances", True),  # *:Describe*
+            ("s3", "ListBuckets", True),  # *:List*
+            ("rds", "DescribeDBInstances", True),  # *:Describe*
+            ("lambda", "ListFunctions", True),  # *:List*
+            ("ec2", "GetConsoleOutput", True),  # ec2:Get*
+            ("s3", "GetBucketPolicy", True),  # s3:*Bucket*
+            ("cloudformation", "DescribeStacks", True),  # cloudformation:*Stack*
+            ("iam", "GetUser", True),  # iam:*User*
             # These should not match
-            ("ec2", "CreateInstances", False),    # No Create* pattern
-            ("s3", "DeleteObject", False),        # No Delete* pattern
+            ("ec2", "CreateInstances", False),  # No Create* pattern
+            ("s3", "DeleteObject", False),  # No Delete* pattern
         ]
-        
+
         for service, action, expected in test_cases:
             result = validate_security(service, action, allowed_actions)
             assert result is expected, f"Expected {expected} for {service}:{action}"

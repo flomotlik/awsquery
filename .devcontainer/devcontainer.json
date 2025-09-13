@@ -1,0 +1,81 @@
+{
+  "name": "AWSQuery Development",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11-bullseye",
+  
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0.5": {},
+    "ghcr.io/devcontainers/features/aws-cli:1": {
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "ppa": true,
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers-contrib/features/pre-commit:2": {}
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.black-formatter",
+        "ms-python.pylint",
+        "ms-python.isort",
+        "ms-python.mypy-type-checker",
+        "charliermarsh.ruff",
+        "littlefoxteam.vscode-python-test-adapter",
+        "tamasfe.even-better-toml",
+        "eamodio.gitlens",
+        "GitHub.vscode-pull-request-github"
+      ],
+      "settings": {
+        "python.defaultInterpreter": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.linting.pylintEnabled": true,
+        "python.formatting.provider": "black",
+        "python.formatting.blackArgs": ["--line-length=100"],
+        "python.linting.mypyEnabled": true,
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false,
+        "python.testing.pytestArgs": ["tests"],
+        "editor.formatOnSave": true,
+        "editor.rulers": [100],
+        "[python]": {
+          "editor.defaultFormatter": "ms-python.black-formatter",
+          "editor.codeActionsOnSave": {
+            "source.organizeImports": "explicit"
+          }
+        },
+        "isort.args": ["--profile", "black", "--line-length", "100"]
+      }
+    }
+  },
+
+  "postCreateCommand": "pip install -e '.[dev]' && pre-commit install",
+  
+  "postStartCommand": "echo 'Welcome to AWSQuery development environment!'",
+
+  "remoteUser": "vscode",
+
+  "mounts": [
+    {
+      "source": "${localEnv:HOME}/.aws",
+      "target": "/home/vscode/.aws",
+      "type": "bind",
+      "consistency": "cached"
+    }
+  ],
+
+  "containerEnv": {
+    "AWS_REGION": "${localEnv:AWS_REGION}",
+    "AWS_PROFILE": "${localEnv:AWS_PROFILE}",
+    "AWS_DEFAULT_REGION": "${localEnv:AWS_DEFAULT_REGION}"
+  },
+
+  "forwardPorts": [],
+
+  "remoteEnv": {
+    "PYTHONPATH": "/workspaces/awsquery/src:${PYTHONPATH}"
+  }
+}

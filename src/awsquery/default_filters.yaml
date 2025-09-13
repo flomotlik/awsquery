@@ -1,0 +1,77 @@
+# Default column filters for AWS service actions
+# Phase 3A: Core Services (Priority 1)
+
+ec2:
+  describe_instances:
+    columns:
+      - "Tags.Name"
+      - "InstanceId"
+      - "InstanceType"
+      - "State.Name"
+      - "PublicIpAddress"
+      - "PrivateIpAddress"
+    description: "Default columns for EC2 instance listing"
+
+  describe_security_groups:
+    columns:
+      - "GroupName"
+      - "GroupId"
+      - "Description"
+      - "VpcId"
+    description: "Default columns for security group listing"
+
+  describe_volumes:
+    columns:
+      - "VolumeId"
+      - "VolumeType"
+      - "Size"
+      - "State"
+      - "AvailabilityZone"
+      - "Tags.Name"
+    description: "Default columns for EBS volume listing"
+
+s3:
+  list_buckets:
+    columns:
+      - "Name"
+      - "CreationDate"
+    description: "Default columns for S3 bucket listing"
+
+  list_objects_v2:
+    columns:
+      - "Key"
+      - "LastModified"
+      - "Size"
+      - "StorageClass"
+    description: "Default columns for S3 object listing"
+
+lambda:
+  list_functions:
+    columns:
+      - "FunctionName"
+      - "Runtime"
+      - "LastModified"
+      - "CodeSize"
+      - "Description"
+    description: "Default columns for Lambda function listing"
+
+rds:
+  describe_db_instances:
+    columns:
+      - "DBInstanceIdentifier"
+      - "DBInstanceClass"
+      - "Engine"
+      - "DBInstanceStatus"
+      - "AllocatedStorage"
+      - "AvailabilityZone"
+    description: "Default columns for RDS instance listing"
+
+cloudformation:
+  describe_stacks:
+    columns:
+      - "StackName"
+      - "StackStatus"
+      - "CreationTime"
+      - "Tags.Environment"
+      - "Description"
+    description: "Default columns for CloudFormation stack listing"

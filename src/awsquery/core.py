@@ -1,383 +1,628 @@
-"""
-Core AWS operations for AWS Query Tool.
+"""Core AWS operations for AWS Query Tool."""
 
-This module contains the core functionality for executing AWS API calls,
-handling pagination, parameter resolution, and multi-level API call orchestration.
-"""
-
-import sys
 import re
+import sys
+
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
-from .utils import debug_print, normalize_action_name
-from .filters import filter_resources, extract_parameter_values
+
+from .filters import extract_parameter_values, filter_resources
+from .utils import debug_print, get_client, normalize_action_name
 
 
-def execute_aws_call(service, action, dry_run=False, parameters=None):
+class CallResult:
+    """Track successful responses throughout call chain"""
+
+    def __init__(self):
+        """Initialize CallResult with tracking lists."""
+        self.successful_responses = []
+        self.final_success = False
+        self.last_successful_response = None
+        self.error_messages = []
+
+
+def execute_with_tracking(service, action, dry_run=False, parameters=None, session=None):
+    """Execute AWS call with tracking for keys mode"""
+    result = CallResult()
+
+    try:
+        response = execute_aws_call(service, action, dry_run, parameters, session)
+
+        # Check if response indicates a validation error (for multi-level calls)
+        if isinstance(response, dict) and "validation_error" in response:
+            result.final_success = False
+            result.error_messages.append(f"Validation error: {response['validation_error']}")
+        else:
+            # Successful response
+            result.successful_responses.append(response)
+            result.last_successful_response = response
+            result.final_success = True
+            debug_print(f"Tracking: Successful call to {service}.{action}")
+    except Exception as e:
+        result.final_success = False
+        result.error_messages.append(f"Call failed: {str(e)}")
+        debug_print(f"Tracking: Failed call to {service}.{action}: {e}")
+
+    return result
+
+
+def execute_aws_call(service, action, dry_run=False, parameters=None, session=None):
     """Execute AWS API call with pagination support and optional parameters"""
-    # Normalize the action name for boto3 compatibility
     normalized_action = normalize_action_name(action)
-    
+
     if dry_run:
         params_str = f" with parameters {parameters}" if parameters else ""
-        print(f"DRY RUN: Would execute {service}.{normalized_action}(){params_str}", file=sys.stderr)
+        print(
+            f"DRY RUN: Would execute {service}.{normalized_action}(){params_str}", file=sys.stderr
+        )
         return []
-    
+
     try:
-        client = boto3.client(service)
+        client = get_client(service, session)
         operation = getattr(client, normalized_action, None)
-        
+
         if not operation:
-            # Try the original action name as a fallback
             operation = getattr(client, action, None)
             if not operation:
-                raise ValueError(f"Action {action} (normalized: {normalized_action}) not available for service {service}")
-        
-        # Prepare parameters
+                raise ValueError(
+                    f"Action {action} (normalized: {normalized_action}) "
+                    f"not available for service {service}"
+                )
+
         call_params = parameters or {}
-        
-        # Try to get paginator first
+
         try:
-            # Use normalized action for paginator too
             paginator = client.get_paginator(normalized_action)
             results = []
             for page in paginator.paginate(**call_params):
                 results.append(page)
             return results
         except Exception as e:
-            # Check the exception type
             exception_name = type(e).__name__
             debug_print(f"Pagination exception type: {exception_name}, message: {e}")
-            
-            # Handle specific exception types
-            if exception_name == 'OperationNotPageableError':
-                # This operation cannot be paginated - fall back to direct call
+
+            if exception_name == "OperationNotPageableError":
                 debug_print(f"Operation not pageable, falling back to direct call")
                 return [operation(**call_params)]
-            elif exception_name == 'ParamValidationError':
-                # This is a parameter validation error - let it bubble up to be handled by multi-level logic
+            elif exception_name == "ParamValidationError":
                 debug_print(f"ParamValidationError detected during pagination, re-raising")
                 raise e
             elif isinstance(e, ClientError):
-                error_code = e.response.get('Error', {}).get('Code', '')
-                if error_code in ['ValidationException', 'ValidationError']:
-                    # This is a validation error - let it bubble up to be handled by multi-level logic
-                    debug_print(f"ValidationError ({error_code}) detected during pagination, re-raising")
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code in ["ValidationException", "ValidationError"]:
+                    debug_print(
+                        f"ValidationError ({error_code}) detected during pagination, re-raising"
+                    )
                     raise e
                 else:
-                    # Other ClientError - fall back to direct call
-                    debug_print(f"ClientError ({error_code}) during pagination, falling back to direct call")
+                    debug_print(
+                        f"ClientError ({error_code}) during pagination, falling back to direct call"
+                    )
                     return [operation(**call_params)]
             else:
-                # Unknown exception type - fall back to direct call
                 debug_print(f"Unknown pagination error, falling back to direct call")
                 return [operation(**call_params)]
-    
+
     except NoCredentialsError:
         print("ERROR: AWS credentials not found. Configure credentials first.", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        # Check for ParamValidationError specifically
-        if type(e).__name__ == 'ParamValidationError':
-            # This is a parameter validation error that we can handle
+        if type(e).__name__ == "ParamValidationError":
             error_info = parse_validation_error(e)
             if error_info:
-                # Return a special result indicating we need parameter resolution
-                return {'validation_error': error_info, 'original_error': e}
+                return {"validation_error": error_info, "original_error": e}
             else:
                 print(f"ERROR: Could not parse parameter validation error: {e}", file=sys.stderr)
                 sys.exit(1)
-        # Fall through to other exception handlers
-        
-        # Check for ClientError
+
         if isinstance(e, ClientError):
-            # Check if this is a validation error that we can handle
             error_info = parse_validation_error(e)
             if error_info:
-                # Return a special result indicating we need parameter resolution
-                return {'validation_error': error_info, 'original_error': e}
+                return {"validation_error": error_info, "original_error": e}
             else:
                 print(f"ERROR: AWS API call failed: {e}", file=sys.stderr)
                 sys.exit(1)
-                
-        # Unknown error type
+
         print(f"ERROR: Unexpected error: {e}", file=sys.stderr)
         sys.exit(1)
 
 
-def execute_multi_level_call(service, action, resource_filters, value_filters, column_filters, dry_run=False):
-    """Handle multi-level API calls with automatic parameter resolution"""
-    debug_print(f"Starting multi-level call for {service}.{action}")
-    debug_print(f"Resource filters: {resource_filters}, Value filters: {value_filters}, Column filters: {column_filters}")
-    
-    # Try initial call without parameters
-    response = execute_aws_call(service, action, dry_run)
-    
-    # Check if we got a validation error
-    if isinstance(response, dict) and 'validation_error' in response:
-        error_info = response['validation_error']
-        parameter_name = error_info['parameter_name']
-        
+def execute_multi_level_call_with_tracking(
+    service, action, resource_filters, value_filters, column_filters, dry_run=False, session=None
+):
+    """Handle multi-level API calls with automatic parameter resolution and tracking"""
+    debug_print(f"Starting multi-level call with tracking for {service}.{action}")
+    debug_print(
+        f"Resource filters: {resource_filters}, "
+        f"Value filters: {value_filters}, Column filters: {column_filters}"
+    )
+
+    call_result = CallResult()
+
+    # First attempt - main call
+    try:
+        response = execute_aws_call(service, action, dry_run, parameters=None, session=session)
+
+        if isinstance(response, dict) and "validation_error" in response:
+            call_result.error_messages.append(
+                f"Initial call validation error: {response['validation_error']}"
+            )
+            error_info = response["validation_error"]
+            parameter_name = error_info["parameter_name"]
+            debug_print(f"Validation error - missing parameter: {parameter_name}")
+        else:
+            # Initial call succeeded
+            call_result.successful_responses.append(response)
+            call_result.last_successful_response = response
+            call_result.final_success = True
+            debug_print(f"Tracking: Initial call to {service}.{action} succeeded")
+
+            from .formatters import flatten_response
+
+            resources = flatten_response(response)
+            debug_print(f"Final call returned {len(resources)} resources")
+
+            if value_filters:
+                filtered_resources = filter_resources(resources, value_filters)
+                debug_print(f"After value filtering: {len(filtered_resources)} resources")
+            else:
+                filtered_resources = resources
+
+            return call_result, filtered_resources
+
+    except Exception as e:
+        call_result.error_messages.append(f"Initial call failed: {str(e)}")
+        debug_print(f"Initial call failed: {e}")
+        # Continue to multi-level resolution
+
+    # Multi-level resolution needed
+    if isinstance(response, dict) and "validation_error" in response:
+        error_info = response["validation_error"]
+        parameter_name = error_info["parameter_name"]
         debug_print(f"Validation error - missing parameter: {parameter_name}")
-        
-        # Infer list operation using both parameter name and action name
+
+        print(f"Resolving required parameter '{parameter_name}'", file=sys.stderr)
+
         possible_operations = infer_list_operation(service, parameter_name, action)
-        
-        # Try each possible list operation
+
         list_response = None
         successful_operation = None
-        
+
         for operation in possible_operations:
             try:
                 debug_print(f"Trying list operation: {operation}")
-                list_response = execute_aws_call(service, operation, dry_run)
-                
-                # Check if this returned actual data (not an error)
+                print(f"Calling {operation} to find available resources...", file=sys.stderr)
+
+                list_response = execute_aws_call(service, operation, dry_run, session=session)
+
                 if isinstance(list_response, list) and list_response:
                     successful_operation = operation
                     debug_print(f"Successfully executed: {operation}")
+                    # Track the successful list operation
+                    call_result.successful_responses.append(list_response)
                     break
-                    
+
             except Exception as e:
                 debug_print(f"Operation {operation} failed: {e}")
                 continue
-        
+
         if not list_response or not successful_operation:
-            print(f"ERROR: Could not find a working list operation for parameter '{parameter_name}'", file=sys.stderr)
+            call_result.error_messages.append(
+                f"Could not find working list operation for parameter '{parameter_name}'"
+            )
+            print(
+                f"ERROR: Could not find a working list operation for parameter '{parameter_name}'",
+                file=sys.stderr,
+            )
             print(f"ERROR: Tried operations: {possible_operations}", file=sys.stderr)
-            sys.exit(1)
-        
-        # Import here to avoid circular dependency
+            return call_result, []
+
         from .formatters import flatten_response
-        
-        # Flatten and filter the list response
+
         list_resources = flatten_response(list_response)
         debug_print(f"Got {len(list_resources)} resources from {successful_operation}")
-        
-        # Apply resource filters to the list results
+
         if resource_filters:
             filtered_list_resources = filter_resources(list_resources, resource_filters)
             debug_print(f"After resource filtering: {len(filtered_list_resources)} resources")
         else:
             filtered_list_resources = list_resources
-        
+
+        print(f"Found {len(filtered_list_resources)} resources matching filters", file=sys.stderr)
+
         if not filtered_list_resources:
-            print(f"ERROR: No resources found matching resource filters: {resource_filters}", file=sys.stderr)
-            sys.exit(1)
-        
-        # Extract parameter values from filtered results
+            call_result.error_messages.append(
+                f"No resources found matching resource filters: {resource_filters}"
+            )
+            print(
+                f"ERROR: No resources found matching resource filters: {resource_filters}",
+                file=sys.stderr,
+            )
+            return call_result, []
+
         parameter_values = extract_parameter_values(filtered_list_resources, parameter_name)
-        
+
         if not parameter_values:
-            print(f"ERROR: Could not extract parameter '{parameter_name}' from filtered results", file=sys.stderr)
-            sys.exit(1)
-        
-        # Determine if we need single value or list
+            call_result.error_messages.append(
+                f"Could not extract parameter '{parameter_name}' from filtered results"
+            )
+            print(
+                f"ERROR: Could not extract parameter '{parameter_name}' from filtered results",
+                file=sys.stderr,
+            )
+            return call_result, []
+
         expects_list = parameter_expects_list(parameter_name)
-        
+
         if expects_list:
             param_value = parameter_values
         else:
-            # Show all options when multiple values found
             if len(parameter_values) > 1:
                 print(f"Multiple {parameter_name} values found matching filters:", file=sys.stderr)
-                for value in parameter_values:
+                display_values = parameter_values[:10]
+                for value in display_values:
                     print(f"- {value}", file=sys.stderr)
+
+                if len(parameter_values) > 10:
+                    remaining = len(parameter_values) - 10
+                    print(
+                        f"... and {remaining} more "
+                        f"(showing first 10 of {len(parameter_values)} total)",
+                        file=sys.stderr,
+                    )
+
                 print(f"Using first match: {parameter_values[0]}", file=sys.stderr)
             elif len(parameter_values) == 1:
-                # Even for single values, show what was found for transparency
-                print(f"Found {parameter_name}: {parameter_values[0]}", file=sys.stderr)
-            
-            param_value = parameter_values[0]  # Use first match
-        
+                print(f"Using: {parameter_values[0]}", file=sys.stderr)
+
+            param_value = parameter_values[0]
+
         debug_print(f"Using parameter value(s): {param_value}")
-        
-        # Create a client to introspect the correct parameter name
+
         try:
-            client = boto3.client(service)
-            # Get the correct case-sensitive parameter name using service model introspection
+            client = get_client(service, session)
             converted_parameter_name = get_correct_parameter_name(client, action, parameter_name)
-            debug_print(f"Parameter name resolution: {parameter_name} -> {converted_parameter_name}")
+            debug_print(
+                f"Parameter name resolution: {parameter_name} -> {converted_parameter_name}"
+            )
         except Exception as e:
             debug_print(f"Could not create client for parameter introspection: {e}")
-            # Fallback to PascalCase conversion
             converted_parameter_name = convert_parameter_name(parameter_name)
-            debug_print(f"Fallback parameter name conversion: {parameter_name} -> {converted_parameter_name}")
-        
-        # Retry the original call with the parameter
+            debug_print(
+                f"Fallback parameter name conversion: "
+                f"{parameter_name} -> {converted_parameter_name}"
+            )
+
         parameters = {converted_parameter_name: param_value}
-        response = execute_aws_call(service, action, dry_run, parameters)
-        
-        # Check for another validation error
-        if isinstance(response, dict) and 'validation_error' in response:
-            print(f"ERROR: Still getting validation error after parameter resolution: {response['validation_error']}", file=sys.stderr)
+
+        # Final call with resolved parameters
+        try:
+            final_response = execute_aws_call(service, action, dry_run, parameters, session)
+
+            if isinstance(final_response, dict) and "validation_error" in final_response:
+                call_result.error_messages.append(
+                    f"Still getting validation error after parameter resolution: "
+                    f"{final_response['validation_error']}"
+                )
+                print(
+                    f"ERROR: Still getting validation error after parameter resolution: "
+                    f"{final_response['validation_error']}",
+                    file=sys.stderr,
+                )
+                return call_result, []
+            else:
+                # Final call succeeded
+                call_result.successful_responses.append(final_response)
+                call_result.last_successful_response = final_response
+                call_result.final_success = True
+                debug_print(f"Tracking: Final call to {service}.{action} succeeded")
+
+        except Exception as e:
+            call_result.error_messages.append(f"Final call failed: {str(e)}")
+            debug_print(f"Final call failed: {e}")
+            return call_result, []
+
+    if call_result.last_successful_response:
+        from .formatters import flatten_response
+
+        resources = flatten_response(call_result.last_successful_response)
+        debug_print(f"Final call returned {len(resources)} resources")
+
+        if value_filters:
+            filtered_resources = filter_resources(resources, value_filters)
+            debug_print(f"After value filtering: {len(filtered_resources)} resources")
+        else:
+            filtered_resources = resources
+
+        return call_result, filtered_resources
+    else:
+        return call_result, []
+
+
+def execute_multi_level_call(
+    service, action, resource_filters, value_filters, column_filters, dry_run=False, session=None
+):
+    """Handle multi-level API calls with automatic parameter resolution"""
+    debug_print(f"Starting multi-level call for {service}.{action}")
+    debug_print(
+        f"Resource filters: {resource_filters}, "
+        f"Value filters: {value_filters}, Column filters: {column_filters}"
+    )
+
+    response = execute_aws_call(service, action, dry_run, session=session)
+
+    if isinstance(response, dict) and "validation_error" in response:
+        error_info = response["validation_error"]
+        parameter_name = error_info["parameter_name"]
+
+        debug_print(f"Validation error - missing parameter: {parameter_name}")
+
+        print(f"Resolving required parameter '{parameter_name}'", file=sys.stderr)
+
+        possible_operations = infer_list_operation(service, parameter_name, action)
+
+        list_response = None
+        successful_operation = None
+
+        for operation in possible_operations:
+            try:
+                debug_print(f"Trying list operation: {operation}")
+
+                print(f"Calling {operation} to find available resources...", file=sys.stderr)
+
+                list_response = execute_aws_call(service, operation, dry_run, session=session)
+
+                if isinstance(list_response, list) and list_response:
+                    successful_operation = operation
+                    debug_print(f"Successfully executed: {operation}")
+                    break
+
+            except Exception as e:
+                debug_print(f"Operation {operation} failed: {e}")
+                continue
+
+        if not list_response or not successful_operation:
+            print(
+                f"ERROR: Could not find a working list operation for parameter '{parameter_name}'",
+                file=sys.stderr,
+            )
+            print(f"ERROR: Tried operations: {possible_operations}", file=sys.stderr)
             sys.exit(1)
-    
-    # Import here to avoid circular dependency
+
+        from .formatters import flatten_response
+
+        list_resources = flatten_response(list_response)
+        debug_print(f"Got {len(list_resources)} resources from {successful_operation}")
+
+        if resource_filters:
+            filtered_list_resources = filter_resources(list_resources, resource_filters)
+            debug_print(f"After resource filtering: {len(filtered_list_resources)} resources")
+        else:
+            filtered_list_resources = list_resources
+
+        print(f"Found {len(filtered_list_resources)} resources matching filters", file=sys.stderr)
+
+        if not filtered_list_resources:
+            print(
+                f"ERROR: No resources found matching resource filters: {resource_filters}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        parameter_values = extract_parameter_values(filtered_list_resources, parameter_name)
+
+        if not parameter_values:
+            print(
+                f"ERROR: Could not extract parameter '{parameter_name}' from filtered results",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        expects_list = parameter_expects_list(parameter_name)
+
+        if expects_list:
+            param_value = parameter_values
+        else:
+            if len(parameter_values) > 1:
+                print(f"Multiple {parameter_name} values found matching filters:", file=sys.stderr)
+                display_values = parameter_values[:10]
+                for value in display_values:
+                    print(f"- {value}", file=sys.stderr)
+
+                if len(parameter_values) > 10:
+                    remaining = len(parameter_values) - 10
+                    print(
+                        f"... and {remaining} more "
+                        f"(showing first 10 of {len(parameter_values)} total)",
+                        file=sys.stderr,
+                    )
+
+                print(f"Using first match: {parameter_values[0]}", file=sys.stderr)
+            elif len(parameter_values) == 1:
+                print(f"Using: {parameter_values[0]}", file=sys.stderr)
+
+            param_value = parameter_values[0]
+
+        debug_print(f"Using parameter value(s): {param_value}")
+
+        try:
+            client = get_client(service, session)
+            converted_parameter_name = get_correct_parameter_name(client, action, parameter_name)
+            debug_print(
+                f"Parameter name resolution: {parameter_name} -> {converted_parameter_name}"
+            )
+        except Exception as e:
+            debug_print(f"Could not create client for parameter introspection: {e}")
+            converted_parameter_name = convert_parameter_name(parameter_name)
+            debug_print(
+                f"Fallback parameter name conversion: "
+                f"{parameter_name} -> {converted_parameter_name}"
+            )
+
+        parameters = {converted_parameter_name: param_value}
+        response = execute_aws_call(service, action, dry_run, parameters, session)
+
+        if isinstance(response, dict) and "validation_error" in response:
+            print(
+                f"ERROR: Still getting validation error after parameter resolution: "
+                f"{response['validation_error']}",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
     from .formatters import flatten_response
-    
-    # We now have a successful response - process it normally
+
     resources = flatten_response(response)
     debug_print(f"Final call returned {len(resources)} resources")
-    
-    # Apply value filters
+
     if value_filters:
         filtered_resources = filter_resources(resources, value_filters)
         debug_print(f"After value filtering: {len(filtered_resources)} resources")
     else:
         filtered_resources = resources
-    
+
     return filtered_resources
 
 
 def parse_validation_error(error):
     """Extract missing parameter info from ValidationError"""
     error_message = str(error)
-    
-    # Look for patterns like "Value null at 'parameterName'"
+
     pattern = r"Value null at '([^']+)'"
     match = re.search(pattern, error_message)
-    
+
     if match:
         parameter_name = match.group(1)
-        return {
-            'parameter_name': parameter_name,
-            'is_required': True,
-            'error_type': 'null_value'
-        }
-    
-    # Look for patterns like "Member must not be null" with parameter context
+        return {"parameter_name": parameter_name, "is_required": True, "error_type": "null_value"}
+
     pattern = r"'([^']+)'[^:]*: Member must not be null"
     match = re.search(pattern, error_message)
-    
+
     if match:
         parameter_name = match.group(1)
         return {
-            'parameter_name': parameter_name,
-            'is_required': True,
-            'error_type': 'required_parameter'
+            "parameter_name": parameter_name,
+            "is_required": True,
+            "error_type": "required_parameter",
         }
-    
-    # Look for patterns like "Either StackName or PhysicalResourceId must be specified"
+
     pattern = r"Either (\w+) or \w+ must be specified"
     match = re.search(pattern, error_message)
-    
+
     if match:
         parameter_name = match.group(1)
         return {
-            'parameter_name': parameter_name,
-            'is_required': True,
-            'error_type': 'either_parameter'
+            "parameter_name": parameter_name,
+            "is_required": True,
+            "error_type": "either_parameter",
         }
-    
-    # Look for patterns like "Missing required parameter in input: 'clusterName'"
+
     pattern = r"Missing required parameter in input: ['\"]([^'\"]+)['\"]"
     match = re.search(pattern, error_message)
-    
+
     if match:
         parameter_name = match.group(1)
         return {
-            'parameter_name': parameter_name,
-            'is_required': True,
-            'error_type': 'missing_parameter'
+            "parameter_name": parameter_name,
+            "is_required": True,
+            "error_type": "missing_parameter",
         }
-    
-    # Add debug output to help identify unmatched patterns
+
     debug_print(f"Could not parse validation error: {error_message}")
-    
+
     return None
 
 
 def infer_list_operation(service, parameter_name, action):
     """Infer the list operation from parameter name first, then action name as fallback"""
-    
+
     possible_operations = []
-    
-    # FIRST: Try parameter-based inference (unless parameter is too generic)
-    if parameter_name.lower() not in ['name', 'id', 'arn']:
-        # Remove common suffixes from parameter name
+
+    if parameter_name.lower() not in ["name", "id", "arn"]:
         resource_name = parameter_name
-        suffixes_to_remove = ['Name', 'Id', 'Arn', 'ARN']
+        suffixes_to_remove = ["Name", "Id", "Arn", "ARN"]
         for suffix in suffixes_to_remove:
             if resource_name.endswith(suffix):
-                resource_name = resource_name[:-len(suffix)]
+                resource_name = resource_name[: -len(suffix)]
                 break
-        
-        # Convert to lowercase and pluralize
+
         resource_name = resource_name.lower()
-        
-        if resource_name.endswith('y'):
-            plural_name = resource_name[:-1] + 'ies'
-        elif resource_name.endswith(('s', 'sh', 'ch', 'x', 'z')):
-            plural_name = resource_name + 'es'
+
+        if resource_name.endswith("y"):
+            plural_name = resource_name[:-1] + "ies"
+        elif resource_name.endswith(("s", "sh", "ch", "x", "z")):
+            plural_name = resource_name + "es"
         else:
-            plural_name = resource_name + 's'
-        
-        # Add parameter-based operations
-        possible_operations.extend([
-            f'list_{plural_name}',
-            f'describe_{plural_name}',
-            f'get_{plural_name}',
-            f'list_{resource_name}',
-            f'describe_{resource_name}',
-            f'get_{resource_name}'
-        ])
-        
-        debug_print(f"Parameter-based inference: '{parameter_name}' -> '{resource_name}' -> {len(possible_operations)} operations")
+            plural_name = resource_name + "s"
+
+        possible_operations.extend(
+            [
+                f"list_{plural_name}",
+                f"describe_{plural_name}",
+                f"get_{plural_name}",
+                f"list_{resource_name}",
+                f"describe_{resource_name}",
+                f"get_{resource_name}",
+            ]
+        )
+
+        debug_print(
+            f"Parameter-based inference: '{parameter_name}' -> '{resource_name}' -> "
+            f"{len(possible_operations)} operations"
+        )
     else:
-        debug_print(f"Parameter '{parameter_name}' is too generic, skipping parameter-based inference")
-    
-    # SECOND: Add action-based inference as fallback
-    # Extract resource name from action
-    prefixes = ['describe', 'get', 'update', 'delete', 'create', 'list']
-    action_lower = action.lower().replace('-', '_')
-    
+        debug_print(
+            f"Parameter '{parameter_name}' is too generic, skipping parameter-based inference"
+        )
+
+    prefixes = ["describe", "get", "update", "delete", "create", "list"]
+    action_lower = action.lower().replace("-", "_")
+
     action_resource = action_lower
     for prefix in prefixes:
-        if action_lower.startswith(prefix + '_'):
-            action_resource = action_lower[len(prefix) + 1:]
+        if action_lower.startswith(prefix + "_"):
+            action_resource = action_lower[len(prefix) + 1 :]
             break
-    
-    # Pluralize action-derived resource (if not already plural)
-    if action_resource.endswith('s') and len(action_resource) > 1:
-        # Likely already plural (instances, clusters, etc.)
+
+    if action_resource.endswith("s") and len(action_resource) > 1:
         action_plural = action_resource
-    elif action_resource.endswith('y'):
-        action_plural = action_resource[:-1] + 'ies'
-    elif action_resource.endswith(('sh', 'ch', 'x', 'z')):
-        action_plural = action_resource + 'es'
+    elif action_resource.endswith("y"):
+        action_plural = action_resource[:-1] + "ies"
+    elif action_resource.endswith(("sh", "ch", "x", "z")):
+        action_plural = action_resource + "es"
     else:
-        action_plural = action_resource + 's'
-    
-    # Add action-based operations (avoiding duplicates)
+        action_plural = action_resource + "s"
+
     action_operations = [
-        f'list_{action_plural}',
-        f'describe_{action_plural}',
-        f'get_{action_plural}',
-        f'list_{action_resource}',
-        f'describe_{action_resource}',
-        f'get_{action_resource}'
+        f"list_{action_plural}",
+        f"describe_{action_plural}",
+        f"get_{action_plural}",
+        f"list_{action_resource}",
+        f"describe_{action_resource}",
+        f"get_{action_resource}",
     ]
-    
+
     for op in action_operations:
         if op not in possible_operations:
             possible_operations.append(op)
-    
-    debug_print(f"Action-based inference: '{action}' -> '{action_resource}' -> added {len(action_operations)} operations")
+
+    debug_print(
+        f"Action-based inference: '{action}' -> '{action_resource}' -> "
+        f"added {len(action_operations)} operations"
+    )
     debug_print(f"Total possible operations: {possible_operations}")
-    
+
     return possible_operations
 
 
 def parameter_expects_list(parameter_name):
     """Determine if parameter expects list or single value"""
-    # Check if parameter name suggests it expects multiple values
-    list_indicators = ['s', 'Names', 'Ids', 'Arns', 'ARNs']
-    
+    list_indicators = ["s", "Names", "Ids", "Arns", "ARNs"]
+
     for indicator in list_indicators:
         if parameter_name.endswith(indicator):
             return True
-    
+
     return False
 
 
@@ -385,61 +630,76 @@ def convert_parameter_name(parameter_name):
     """Convert parameter name from camelCase to PascalCase for AWS API compatibility"""
     if not parameter_name:
         return parameter_name
-    
-    # Convert camelCase to PascalCase (first letter uppercase)
-    # stackName -> StackName
-    # instanceId -> InstanceId
-    # bucketName -> BucketName
-    
-    return parameter_name[0].upper() + parameter_name[1:] if len(parameter_name) > 0 else parameter_name
+
+    return (
+        parameter_name[0].upper() + parameter_name[1:]
+        if len(parameter_name) > 0
+        else parameter_name
+    )
 
 
 def get_correct_parameter_name(client, action, parameter_name):
-    """Get the correct case-sensitive parameter name for an operation by introspecting the service model"""
+    """Get the correct case-sensitive parameter name for an operation.
+
+    By introspecting the service model.
+    """
     try:
-        # Convert action name to PascalCase for service model lookup
-        # list-nodegroups -> ListNodegroups  
-        action_words = action.replace('-', '_').replace('_', ' ').split()
-        pascal_case_action = ''.join(word.capitalize() for word in action_words)
-        
-        # Get the operation model from the service model
+        action_words = action.replace("-", "_").replace("_", " ").split()
+        pascal_case_action = "".join(word.capitalize() for word in action_words)
+
         operation_model = client.meta.service_model.operation_model(pascal_case_action)
-        
+
         debug_print(f"Introspecting parameter name for {action} (PascalCase: {pascal_case_action})")
-        
-        # Get the input shape (parameters) for this operation
+
         if operation_model.input_shape:
             members = operation_model.input_shape.members
             debug_print(f"Available parameters: {list(members.keys())}")
-            
-            # Try exact match first
+
             if parameter_name in members:
                 debug_print(f"Found exact match: {parameter_name}")
                 return parameter_name
-            
-            # Try case-insensitive match
+
             for member_name in members:
                 if member_name.lower() == parameter_name.lower():
                     debug_print(f"Found case-insensitive match: {parameter_name} -> {member_name}")
                     return member_name
-            
-            # Try PascalCase conversion as fallback
+
             pascal_case = parameter_name[0].upper() + parameter_name[1:]
             if pascal_case in members:
                 debug_print(f"Found PascalCase match: {parameter_name} -> {pascal_case}")
                 return pascal_case
-            
-            debug_print(f"No parameter match found for '{parameter_name}' in {list(members.keys())}")
+
+            debug_print(
+                f"No parameter match found for '{parameter_name}' in {list(members.keys())}"
+            )
         else:
             debug_print(f"Operation {pascal_case_action} has no input shape")
-        
-        # Default fallback to original parameter name
+
         debug_print(f"Using original parameter name: {parameter_name}")
         return parameter_name
-        
+
     except Exception as e:
         debug_print(f"Could not introspect parameter name: {e}")
-        # Fallback to PascalCase conversion
         fallback = convert_parameter_name(parameter_name)
         debug_print(f"Falling back to PascalCase: {parameter_name} -> {fallback}")
         return fallback
+
+
+def show_keys_from_result(call_result):
+    """Show keys only if final call succeeded"""
+    if call_result.final_success and call_result.last_successful_response:
+        from .formatters import extract_and_sort_keys, flatten_response
+
+        resources = flatten_response(call_result.last_successful_response)
+        if not resources:
+            return "Error: No data to extract keys from in successful response"
+
+        # Use non-simplified keys to show full nested structure
+        sorted_keys = extract_and_sort_keys(resources, simplify=False)
+        return "\n".join(f"  {key}" for key in sorted_keys)
+    else:
+        if call_result.error_messages:
+            error_msg = "; ".join(call_result.error_messages)
+            return f"Error: No successful response to show keys from ({error_msg})"
+        else:
+            return "Error: No successful response to show keys from"
