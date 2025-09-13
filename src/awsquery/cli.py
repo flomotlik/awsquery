@@ -34,13 +34,15 @@ def determine_column_filters(column_filters, service, action):
         debug_print(f"Using user-specified column filters: {column_filters}")
         return column_filters
 
-    # Check for defaults
-    default_columns = apply_default_filters(service, action)
+    # Check for defaults - normalize action name for lookup
+    from .utils import normalize_action_name
+    normalized_action = normalize_action_name(action)
+    default_columns = apply_default_filters(service, normalized_action)
     if default_columns:
-        debug_print(f"Applying default column filters for {service}.{action}: {default_columns}")
+        debug_print(f"Applying default column filters for {service}.{normalized_action}: {default_columns}")
         return default_columns
 
-    debug_print(f"No column filters (user or default) for {service}.{action}")
+    debug_print(f"No column filters (user or default) for {service}.{normalized_action}")
     return None
 
 

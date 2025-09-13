@@ -288,7 +288,7 @@ class TestTransformTagsStructure:
         assert result["Tags"]["Environment"] == "production"
         assert result["Tags"]["Name"] == "web-server"
 
-    @patch('src.awsquery.utils.debug_print')
+    @patch('src.awsquery.formatters.debug_print')
     def test_transform_debug_output(self, mock_debug):
         """Test that transformation produces debug output."""
         from src.awsquery import utils

@@ -72,10 +72,13 @@ def transform_tags_structure(data, visited=None):
 
 def flatten_response(data):
     """Flatten AWS response to extract resource lists"""
-    if isinstance(data, list):
-        debug_print(f"Paginated response with {len(data)} pages")
+    # First, transform tags in the entire response
+    transformed_data = transform_tags_structure(data)
+
+    if isinstance(transformed_data, list):
+        debug_print(f"Paginated response with {len(transformed_data)} pages")
         all_items = []
-        for i, page in enumerate(data):
+        for i, page in enumerate(transformed_data):
             debug_print(f"Processing page {i+1}")
             items = flatten_single_response(page)
             all_items.extend(items)
@@ -83,7 +86,7 @@ def flatten_response(data):
         return all_items
     else:
         debug_print("Single response (not paginated)")
-        result = flatten_single_response(data)
+        result = flatten_single_response(transformed_data)
         debug_print(f"Total resources extracted: {len(result)}")
         return result
 
@@ -304,7 +307,7 @@ def format_json_output(resources, column_filters=None):
         return json.dumps({"results": transformed_resources}, indent=2, default=str)
 
 
-def extract_and_sort_keys(resources):
+def extract_and_sort_keys(resources, simplify=True):
     """Extract all keys from resources and sort them case-insensitively"""
     if not resources:
         return []
@@ -320,12 +323,17 @@ def extract_and_sort_keys(resources):
         flat = flatten_dict_keys(resource)
         all_keys.update(flat.keys())
 
-    simplified_keys = set()
-    for key in all_keys:
-        simplified = simplify_key(key)
-        simplified_keys.add(simplified)
+    if simplify:
+        # Simplify keys for column filtering and basic display
+        simplified_keys = set()
+        for key in all_keys:
+            simplified = simplify_key(key)
+            simplified_keys.add(simplified)
+        sorted_keys = sorted(list(simplified_keys), key=str.lower)
+    else:
+        # Return full nested keys for detailed structure display
+        sorted_keys = sorted(list(all_keys), key=str.lower)
 
-    sorted_keys = sorted(list(simplified_keys), key=str.lower)
     return sorted_keys
 
 

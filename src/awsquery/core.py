@@ -188,7 +188,7 @@ def execute_multi_level_call_with_tracking(
                 debug_print(f"Trying list operation: {operation}")
                 print(f"Calling {operation} to find available resources...", file=sys.stderr)
 
-                list_response = execute_aws_call(service, operation, dry_run, parameters=None, session=session)
+                list_response = execute_aws_call(service, operation, dry_run, session=session)
 
                 if isinstance(list_response, list) and list_response:
                     successful_operation = operation
@@ -356,7 +356,7 @@ def execute_multi_level_call(
 
                 print(f"Calling {operation} to find available resources...", file=sys.stderr)
 
-                list_response = execute_aws_call(service, operation, dry_run, parameters=None, session=session)
+                list_response = execute_aws_call(service, operation, dry_run, session=session)
 
                 if isinstance(list_response, list) and list_response:
                     successful_operation = operation
@@ -680,7 +680,8 @@ def show_keys_from_result(call_result):
         if not resources:
             return "Error: No data to extract keys from in successful response"
 
-        sorted_keys = extract_and_sort_keys(resources)
+        # Use non-simplified keys to show full nested structure
+        sorted_keys = extract_and_sort_keys(resources, simplify=False)
         return "\n".join(f"  {key}" for key in sorted_keys)
     else:
         if call_result.error_messages:

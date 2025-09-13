@@ -3,7 +3,6 @@
 import sys
 from unittest.mock import MagicMock, Mock, call, patch
 
-import boto3
 import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 
@@ -40,30 +39,35 @@ class TestExecuteAwsCall:
         assert "DRY RUN: Would execute ec2.describe_instances() with parameters" in captured.err
         assert "InstanceIds" in captured.err
 
-    @patch("src.awsquery.core.boto3")
-    def test_successful_paginated_call(self, mock_boto3, sample_ec2_response):
+    def test_successful_paginated_call(self, sample_ec2_response):
+        from src.awsquery import utils
+
         mock_client = Mock()
         mock_paginator = Mock()
         mock_paginator.paginate.return_value = [sample_ec2_response]
         mock_client.get_paginator.return_value = mock_paginator
         mock_client.describe_instances = Mock()
-        mock_boto3.client.return_value = mock_client
+
+        # Configure boto3 mock to return our client
+        utils.boto3.client.return_value = mock_client
 
         result = execute_aws_call("ec2", "describe-instances")
 
         assert result == [sample_ec2_response]
-        mock_boto3.client.assert_called_once_with("ec2")
+        utils.boto3.client.assert_called_once_with("ec2")
         mock_client.get_paginator.assert_called_once_with("describe_instances")
         mock_paginator.paginate.assert_called_once_with()
 
-    @patch("src.awsquery.core.boto3")
-    def test_successful_paginated_call_with_parameters(self, mock_boto3, sample_ec2_response):
-        """Test successful AWS call with pagination and parameters."""
+    def test_successful_paginated_call_with_parameters(self, sample_ec2_response):
+        from src.awsquery import utils
+
         mock_client = Mock()
         mock_paginator = Mock()
         mock_paginator.paginate.return_value = [sample_ec2_response]
         mock_client.get_paginator.return_value = mock_paginator
-        mock_boto3.client.return_value = mock_client
+
+        # Configure boto3 mock to return our client
+        utils.boto3.client.return_value = mock_client
 
         params = {"InstanceIds": ["i-123"]}
         result = execute_aws_call("ec2", "describe-instances", parameters=params)
@@ -71,9 +75,7 @@ class TestExecuteAwsCall:
         assert result == [sample_ec2_response]
         mock_paginator.paginate.assert_called_once_with(**params)
 
-    @patch("src.awsquery.core.boto3")
-    def test_fallback_to_direct_call_when_not_pageable(self, mock_boto3, sample_ec2_response):
-        """Test fallback to direct call when operation is not pageable."""
+    def test_fallback_to_direct_call_when_not_pageable(self, sample_ec2_response):
         mock_client = Mock()
         mock_operation = Mock(return_value=sample_ec2_response)
         mock_client.describe_instances = mock_operation
@@ -85,7 +87,8 @@ class TestExecuteAwsCall:
             operation_name="describe_instances"
         )
 
-        mock_boto3.client.return_value = mock_client
+        from src.awsquery import utils
+        utils.boto3.client.return_value = mock_client
 
         result = execute_aws_call("ec2", "describe-instances")
 
@@ -93,8 +96,7 @@ class TestExecuteAwsCall:
         mock_client.get_paginator.assert_called_once_with("describe_instances")
         mock_operation.assert_called_once_with()
 
-    @patch("src.awsquery.core.boto3")
-    def test_fallback_to_original_action_name(self, mock_boto3, sample_ec2_response):
+    def test_fallback_to_original_action_name(self, sample_ec2_response):
         """Test fallback to original action name when normalized name fails."""
         mock_client = Mock()
 
@@ -106,15 +108,15 @@ class TestExecuteAwsCall:
         # Mock paginator to fail for both normalized and original
         mock_client.get_paginator.side_effect = Exception("OperationNotPageableError")
 
-        mock_boto3.client.return_value = mock_client
+        from src.awsquery import utils
+        utils.boto3.client.return_value = mock_client
 
         result = execute_aws_call("ec2", "describe-instances")
 
         assert result == [sample_ec2_response]
         original_operation.assert_called_once_with()
 
-    @patch("src.awsquery.core.boto3")
-    def test_action_not_available_error(self, mock_boto3, capsys):
+    def test_action_not_available_error(self, capsys):
         """Test error when action is not available for service."""
         mock_client = Mock()
 
@@ -122,7 +124,8 @@ class TestExecuteAwsCall:
         mock_client.describe_nonexistent = None
         setattr(mock_client, "describe-nonexistent", None)
 
-        mock_boto3.client.return_value = mock_client
+        from src.awsquery import utils
+        utils.boto3.client.return_value = mock_client
 
         with pytest.raises(SystemExit, match="1"):
             execute_aws_call("ec2", "describe-nonexistent")
@@ -131,10 +134,10 @@ class TestExecuteAwsCall:
         assert "Action describe-nonexistent" in captured.err
         assert "not available for service ec2" in captured.err
 
-    @patch("src.awsquery.core.boto3")
-    def test_no_credentials_error_exits(self, mock_boto3, capsys):
+    def test_no_credentials_error_exits(self, capsys):
         """Test NoCredentialsError causes system exit with error message."""
-        mock_boto3.client.side_effect = NoCredentialsError()
+        from src.awsquery import utils
+        utils.boto3.client.side_effect = NoCredentialsError()
 
         with pytest.raises(SystemExit, match="1"):
             execute_aws_call("ec2", "describe-instances")
@@ -142,9 +145,8 @@ class TestExecuteAwsCall:
         captured = capsys.readouterr()
         assert "AWS credentials not found" in captured.err
 
-    @patch("src.awsquery.core.boto3")
     @patch("src.awsquery.core.parse_validation_error")
-    def test_param_validation_error_handling(self, mock_parse, mock_boto3):
+    def test_param_validation_error_handling(self, mock_parse):
         """Test parameter validation error is parsed and returned."""
 
         # Create a mock ParamValidationError that has the right __name__
@@ -157,7 +159,8 @@ class TestExecuteAwsCall:
 
         mock_client = Mock()
         mock_client.get_paginator.side_effect = param_error
-        mock_boto3.client.return_value = mock_client
+        from src.awsquery import utils
+        utils.boto3.client.return_value = mock_client
 
         # Mock parse function returns error info
         error_info = {
@@ -172,15 +175,15 @@ class TestExecuteAwsCall:
         assert result == {"validation_error": error_info, "original_error": param_error}
         mock_parse.assert_called_once_with(param_error)
 
-    @patch("src.awsquery.core.boto3")
     @patch("src.awsquery.core.parse_validation_error")
     def test_client_error_validation_handling(
-        self, mock_parse, mock_boto3, validation_error_fixtures
+        self, mock_parse, validation_error_fixtures
     ):
         """Test ClientError with validation exception is parsed."""
         mock_client = Mock()
         mock_client.get_paginator.side_effect = validation_error_fixtures["missing_parameter"]
-        mock_boto3.client.return_value = mock_client
+        from src.awsquery import utils
+        utils.boto3.client.return_value = mock_client
 
         error_info = {
             "parameter_name": "clusterName",
@@ -196,8 +199,7 @@ class TestExecuteAwsCall:
             "original_error": validation_error_fixtures["missing_parameter"],
         }
 
-    @patch("src.awsquery.core.boto3")
-    def test_client_error_non_validation_fallback(self, mock_boto3, sample_ec2_response):
+    def test_client_error_non_validation_fallback(self, sample_ec2_response):
         """Test ClientError that's not validation error falls back to direct call."""
         access_denied_error = ClientError(
             error_response={"Error": {"Code": "AccessDenied", "Message": "User is not authorized"}},
@@ -208,17 +210,18 @@ class TestExecuteAwsCall:
         mock_operation = Mock(return_value=sample_ec2_response)
         mock_client.describe_instances = mock_operation
         mock_client.get_paginator.side_effect = access_denied_error
-        mock_boto3.client.return_value = mock_client
+        from src.awsquery import utils
+        utils.boto3.client.return_value = mock_client
 
         result = execute_aws_call("ec2", "describe-instances")
 
         assert result == [sample_ec2_response]
         mock_operation.assert_called_once_with()
 
-    @patch("src.awsquery.core.boto3")
-    def test_generic_client_error_exits(self, mock_boto3, mock_client_error, capsys):
+    def test_generic_client_error_exits(self, mock_client_error, capsys):
         """Test generic ClientError causes system exit."""
-        mock_boto3.client.side_effect = mock_client_error
+        from src.awsquery import utils
+        utils.boto3.client.side_effect = mock_client_error
 
         with pytest.raises(SystemExit, match="1"):
             execute_aws_call("ec2", "describe-instances")
@@ -226,9 +229,8 @@ class TestExecuteAwsCall:
         captured = capsys.readouterr()
         assert "AWS API call failed" in captured.err
 
-    @patch("src.awsquery.core.boto3")
     @patch("src.awsquery.core.parse_validation_error")
-    def test_unparseable_validation_error_exits(self, mock_parse, mock_boto3, capsys):
+    def test_unparseable_validation_error_exits(self, mock_parse, capsys):
         """Test unparseable validation error causes system exit."""
 
         class MockParamValidationError(Exception):
@@ -240,7 +242,8 @@ class TestExecuteAwsCall:
 
         mock_client = Mock()
         mock_client.get_paginator.side_effect = param_error
-        mock_boto3.client.return_value = mock_client
+        from src.awsquery import utils
+        utils.boto3.client.return_value = mock_client
         mock_parse.return_value = None  # Cannot parse
 
         with pytest.raises(SystemExit, match="1"):
@@ -249,10 +252,10 @@ class TestExecuteAwsCall:
         captured = capsys.readouterr()
         assert "Could not parse parameter validation error" in captured.err
 
-    @patch("src.awsquery.core.boto3")
-    def test_unexpected_error_exits(self, mock_boto3, capsys):
+    def test_unexpected_error_exits(self, capsys):
         """Test unexpected error causes system exit."""
-        mock_boto3.client.side_effect = RuntimeError("Unexpected error")
+        from src.awsquery import utils
+        utils.boto3.client.side_effect = RuntimeError("Unexpected error")
 
         with pytest.raises(SystemExit, match="1"):
             execute_aws_call("ec2", "describe-instances")
@@ -270,16 +273,16 @@ class TestExecuteAwsCall:
             ("listClusters", "list_clusters"),
         ],
     )
-    @patch("src.awsquery.core.boto3")
     def test_action_name_normalization(
-        self, mock_boto3, sample_ec2_response, action, expected_normalized
+        self, sample_ec2_response, action, expected_normalized
     ):
         """Test various action name normalization scenarios."""
         mock_client = Mock()
         mock_paginator = Mock()
         mock_paginator.paginate.return_value = [sample_ec2_response]
         mock_client.get_paginator.return_value = mock_paginator
-        mock_boto3.client.return_value = mock_client
+        from src.awsquery import utils
+        utils.boto3.client.return_value = mock_client
 
         execute_aws_call("ec2", action)
 
@@ -307,7 +310,7 @@ class TestExecuteMultiLevelCall:
 
         assert len(result) == 1
         assert result[0]["InstanceId"] == "i-123"
-        mock_execute.assert_called_once_with("ec2", "describe-instances", False)
+        mock_execute.assert_called_once_with("ec2", "describe-instances", False, session=None)
         # Verify the flatten_response was called
         mock_flatten.assert_called_once_with(mock_response)
         # Since we have value_filters, filter_resources should be called
@@ -364,9 +367,9 @@ class TestExecuteMultiLevelCall:
         # Verify call sequence
         calls = mock_execute.call_args_list
         assert len(calls) == 3
-        assert calls[0] == call("eks", "describe-cluster", False)
-        assert calls[1] == call("eks", "list_clusters", False)
-        assert calls[2] == call("eks", "describe-cluster", False, {"ClusterName": "test-cluster"})
+        assert calls[0] == call("eks", "describe-cluster", False, session=None)
+        assert calls[1] == call("eks", "list_clusters", False, session=None)
+        assert calls[2] == call("eks", "describe-cluster", False, {"ClusterName": "test-cluster"}, session=None)
 
     @patch("src.awsquery.core.execute_aws_call")
     @patch("src.awsquery.core.infer_list_operation")
@@ -754,8 +757,7 @@ class TestParameterResolution:
         result = convert_parameter_name(parameter_name)
         assert result == expected
 
-    @patch("src.awsquery.core.boto3")
-    def test_get_correct_parameter_name_exact_match(self, mock_boto3):
+    def test_get_correct_parameter_name_exact_match(self):
         """Test parameter name introspection with exact match."""
         mock_client = Mock()
         mock_service_model = Mock()
@@ -772,8 +774,7 @@ class TestParameterResolution:
         assert result == "ClusterName"
         mock_service_model.operation_model.assert_called_once_with("DescribeCluster")
 
-    @patch("src.awsquery.core.boto3")
-    def test_get_correct_parameter_name_case_insensitive_match(self, mock_boto3):
+    def test_get_correct_parameter_name_case_insensitive_match(self):
         """Test parameter name introspection with case-insensitive match."""
         mock_client = Mock()
         mock_service_model = Mock()
@@ -789,8 +790,7 @@ class TestParameterResolution:
 
         assert result == "ClusterName"
 
-    @patch("src.awsquery.core.boto3")
-    def test_get_correct_parameter_name_pascal_case_match(self, mock_boto3):
+    def test_get_correct_parameter_name_pascal_case_match(self):
         """Test parameter name introspection with PascalCase conversion."""
         mock_client = Mock()
         mock_service_model = Mock()
@@ -806,8 +806,7 @@ class TestParameterResolution:
 
         assert result == "ClusterName"
 
-    @patch("src.awsquery.core.boto3")
-    def test_get_correct_parameter_name_no_match_fallback(self, mock_boto3):
+    def test_get_correct_parameter_name_no_match_fallback(self):
         """Test parameter name introspection fallback when no match found."""
         mock_client = Mock()
         mock_service_model = Mock()
@@ -823,8 +822,7 @@ class TestParameterResolution:
 
         assert result == "nonExistentParam"  # Returns original
 
-    @patch("src.awsquery.core.boto3")
-    def test_get_correct_parameter_name_no_input_shape(self, mock_boto3):
+    def test_get_correct_parameter_name_no_input_shape(self):
         """Test parameter name introspection when operation has no input shape."""
         mock_client = Mock()
         mock_service_model = Mock()
@@ -837,11 +835,11 @@ class TestParameterResolution:
 
         assert result == "someParam"  # Returns original
 
-    @patch("src.awsquery.core.boto3")
     @patch("src.awsquery.core.convert_parameter_name")
-    def test_get_correct_parameter_name_exception_fallback(self, mock_convert, mock_boto3):
+    def test_get_correct_parameter_name_exception_fallback(self, mock_convert):
         """Test parameter name introspection exception handling."""
-        mock_boto3.client.side_effect = Exception("Service model error")
+        from src.awsquery import utils
+        utils.boto3.client.side_effect = Exception("Service model error")
         mock_convert.return_value = "ConvertedParam"
 
         result = get_correct_parameter_name(None, "describe-cluster", "originalParam")

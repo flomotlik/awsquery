@@ -1,11 +1,26 @@
 """Core pytest fixtures for AWS Query Tool testing."""
 
 import json
+import sys
 from unittest.mock import MagicMock, Mock, patch
 
-import boto3
+# Mock boto3 before any other imports
+mock_boto3 = Mock()
+mock_boto3.Session = Mock()
+sys.modules['boto3'] = mock_boto3
+
 import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
+
+
+@pytest.fixture(autouse=True)
+def reset_boto3_mock():
+    """Reset boto3 mock before each test."""
+    mock_boto3.client.reset_mock()
+    mock_boto3.Session.reset_mock()
+    mock_boto3.client.side_effect = None
+    mock_boto3.client.return_value = Mock()
+    yield
 
 
 @pytest.fixture
