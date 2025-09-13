@@ -18,6 +18,29 @@ def detect_aws_tags(obj):
     return False
 
 
+def _transform_aws_tags_list(tags_list):
+    """Transform AWS Tags list to map format."""
+    tag_map = {}
+    for tag in tags_list:
+        if isinstance(tag, dict) and "Key" in tag and "Value" in tag:
+            # Only add tags with non-empty keys
+            tag_key = tag["Key"]
+            if tag_key and tag_key.strip():
+                tag_map[tag_key] = tag["Value"]
+    return tag_map
+
+
+def _is_aws_tags_structure(value):
+    """Check if value looks like AWS Tags structure."""
+    return (
+        isinstance(value, list)
+        and value
+        and isinstance(value[0], dict)
+        and "Key" in value[0]
+        and "Value" in value[0]
+    )
+
+
 def transform_tags_structure(data, visited=None):
     """Transform AWS Tag lists to searchable maps recursively with circular reference protection
 
@@ -36,26 +59,13 @@ def transform_tags_structure(data, visited=None):
         visited.add(id(data))
         result = {}
         for key, value in data.items():
-            if key == "Tags" and isinstance(value, list):
-                # Check if this looks like AWS Tags structure
-                if value and isinstance(value[0], dict) and "Key" in value[0] and "Value" in value[0]:
-                    # Transform Tag list to map
-                    tag_map = {}
-                    for tag in value:
-                        if isinstance(tag, dict) and "Key" in tag and "Value" in tag:
-                            # Only add tags with non-empty keys
-                            tag_key = tag["Key"]
-                            if tag_key and tag_key.strip():
-                                tag_map[tag_key] = tag["Value"]
-
-                    # Use transformed map
-                    result[key] = tag_map
-                    # Preserve original for debugging
-                    result[f"{key}_Original"] = value
-                    debug_print(f"Transformed {len(tag_map)} AWS Tags to map format")
-                else:
-                    # Not AWS Tags structure, keep as is
-                    result[key] = transform_tags_structure(value, visited)
+            if key == "Tags" and _is_aws_tags_structure(value):
+                # Transform Tag list to map
+                tag_map = _transform_aws_tags_list(value)
+                result[key] = tag_map
+                # Preserve original for debugging
+                result[f"{key}_Original"] = value
+                debug_print(f"Transformed {len(tag_map)} AWS Tags to map format")
             else:
                 # Recursively transform nested structures
                 result[key] = transform_tags_structure(value, visited)
@@ -63,9 +73,9 @@ def transform_tags_structure(data, visited=None):
         return result
     elif isinstance(data, list):
         visited.add(id(data))
-        result = [transform_tags_structure(item, visited) for item in data]
+        list_result = [transform_tags_structure(item, visited) for item in data]
         visited.remove(id(data))
-        return result
+        return list_result
     else:
         return data
 

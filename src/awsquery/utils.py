@@ -99,10 +99,10 @@ def create_session(region=None, profile=None):
     debug_print(f"create_session called with region={repr(region)}, profile={repr(profile)}")
     session_kwargs = {}
     if region and region.strip():
-        session_kwargs['region_name'] = region
+        session_kwargs["region_name"] = region
         debug_print(f"Added region_name={region} to session")
     if profile and profile.strip():
-        session_kwargs['profile_name'] = profile
+        session_kwargs["profile_name"] = profile
         debug_print(f"Added profile_name={profile} to session")
     debug_print(f"Creating session with kwargs: {session_kwargs}")
     return boto3.Session(**session_kwargs)

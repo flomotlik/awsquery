@@ -7,12 +7,14 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from .filters import extract_parameter_values, filter_resources
-from .utils import debug_print, normalize_action_name, get_client
+from .utils import debug_print, get_client, normalize_action_name
 
 
 class CallResult:
     """Track successful responses throughout call chain"""
+
     def __init__(self):
+        """Initialize CallResult with tracking lists."""
         self.successful_responses = []
         self.final_success = False
         self.last_successful_response = None
@@ -142,7 +144,9 @@ def execute_multi_level_call_with_tracking(
         response = execute_aws_call(service, action, dry_run, parameters=None, session=session)
 
         if isinstance(response, dict) and "validation_error" in response:
-            call_result.error_messages.append(f"Initial call validation error: {response['validation_error']}")
+            call_result.error_messages.append(
+                f"Initial call validation error: {response['validation_error']}"
+            )
             error_info = response["validation_error"]
             parameter_name = error_info["parameter_name"]
             debug_print(f"Validation error - missing parameter: {parameter_name}")
@@ -154,6 +158,7 @@ def execute_multi_level_call_with_tracking(
             debug_print(f"Tracking: Initial call to {service}.{action} succeeded")
 
             from .formatters import flatten_response
+
             resources = flatten_response(response)
             debug_print(f"Final call returned {len(resources)} resources")
 
@@ -202,7 +207,9 @@ def execute_multi_level_call_with_tracking(
                 continue
 
         if not list_response or not successful_operation:
-            call_result.error_messages.append(f"Could not find working list operation for parameter '{parameter_name}'")
+            call_result.error_messages.append(
+                f"Could not find working list operation for parameter '{parameter_name}'"
+            )
             print(
                 f"ERROR: Could not find a working list operation for parameter '{parameter_name}'",
                 file=sys.stderr,
@@ -224,7 +231,9 @@ def execute_multi_level_call_with_tracking(
         print(f"Found {len(filtered_list_resources)} resources matching filters", file=sys.stderr)
 
         if not filtered_list_resources:
-            call_result.error_messages.append(f"No resources found matching resource filters: {resource_filters}")
+            call_result.error_messages.append(
+                f"No resources found matching resource filters: {resource_filters}"
+            )
             print(
                 f"ERROR: No resources found matching resource filters: {resource_filters}",
                 file=sys.stderr,
@@ -234,7 +243,9 @@ def execute_multi_level_call_with_tracking(
         parameter_values = extract_parameter_values(filtered_list_resources, parameter_name)
 
         if not parameter_values:
-            call_result.error_messages.append(f"Could not extract parameter '{parameter_name}' from filtered results")
+            call_result.error_messages.append(
+                f"Could not extract parameter '{parameter_name}' from filtered results"
+            )
             print(
                 f"ERROR: Could not extract parameter '{parameter_name}' from filtered results",
                 file=sys.stderr,
@@ -289,7 +300,10 @@ def execute_multi_level_call_with_tracking(
             final_response = execute_aws_call(service, action, dry_run, parameters, session)
 
             if isinstance(final_response, dict) and "validation_error" in final_response:
-                call_result.error_messages.append(f"Still getting validation error after parameter resolution: {final_response['validation_error']}")
+                call_result.error_messages.append(
+                    f"Still getting validation error after parameter resolution: "
+                    f"{final_response['validation_error']}"
+                )
                 print(
                     f"ERROR: Still getting validation error after parameter resolution: "
                     f"{final_response['validation_error']}",
@@ -674,7 +688,7 @@ def get_correct_parameter_name(client, action, parameter_name):
 def show_keys_from_result(call_result):
     """Show keys only if final call succeeded"""
     if call_result.final_success and call_result.last_successful_response:
-        from .formatters import flatten_response, extract_and_sort_keys
+        from .formatters import extract_and_sort_keys, flatten_response
 
         resources = flatten_response(call_result.last_successful_response)
         if not resources:

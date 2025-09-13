@@ -7,7 +7,14 @@ import sys
 import argcomplete
 import boto3
 
-from .core import execute_aws_call, execute_multi_level_call, execute_with_tracking, execute_multi_level_call_with_tracking, show_keys_from_result
+from .config import apply_default_filters
+from .core import (
+    execute_aws_call,
+    execute_multi_level_call,
+    execute_multi_level_call_with_tracking,
+    execute_with_tracking,
+    show_keys_from_result,
+)
 from .filters import filter_resources, parse_multi_level_filters_for_mode
 from .formatters import (
     extract_and_sort_keys,
@@ -17,8 +24,7 @@ from .formatters import (
     show_keys,
 )
 from .security import action_to_policy_format, load_security_policy, validate_security
-from .utils import debug_print, get_aws_services, sanitize_input, create_session
-from .config import apply_default_filters
+from .utils import create_session, debug_print, get_aws_services, sanitize_input
 
 
 def service_completer(prefix, parsed_args, **kwargs):
@@ -36,10 +42,13 @@ def determine_column_filters(column_filters, service, action):
 
     # Check for defaults - normalize action name for lookup
     from .utils import normalize_action_name
+
     normalized_action = normalize_action_name(action)
     default_columns = apply_default_filters(service, normalized_action)
     if default_columns:
-        debug_print(f"Applying default column filters for {service}.{normalized_action}: {default_columns}")
+        debug_print(
+            f"Applying default column filters for {service}.{normalized_action}: {default_columns}"
+        )
         return default_columns
 
     debug_print(f"No column filters (user or default) for {service}.{normalized_action}")
@@ -237,7 +246,9 @@ Examples:
                 f"Column: {multi_column_filters}"
             )
             # Apply defaults for multi-level if no user columns specified
-            final_multi_column_filters = determine_column_filters(multi_column_filters, service, action)
+            final_multi_column_filters = determine_column_filters(
+                multi_column_filters, service, action
+            )
             filtered_resources = execute_multi_level_call(
                 service,
                 action,

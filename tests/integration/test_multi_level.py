@@ -85,7 +85,7 @@ class TestCompleteMultiLevelWorkflows:
         # Verify call sequence: initial -> list -> final with resolved parameter
         calls = mock_execute.call_args_list
         assert len(calls) == 3
-        assert calls[0] == call("cloudformation", "describe-stack-events", False)
+        assert calls[0] == call("cloudformation", "describe-stack-events", False, session=None)
         # The actual operation name may vary based on infer_list_operation logic
         assert "cloudformation" in str(calls[1])
         assert calls[2] == call(
@@ -93,6 +93,7 @@ class TestCompleteMultiLevelWorkflows:
             "describe-stack-events",
             False,
             {"StackName": "production-infrastructure"},
+            None,
         )
 
     @patch("src.awsquery.core.execute_aws_call")

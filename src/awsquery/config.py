@@ -14,10 +14,10 @@ def load_default_filters():
     try:
         # Try multiple possible locations for the YAML file
         possible_paths = [
-            os.path.join(os.path.dirname(__file__), 'default_filters.yaml'),
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'default_filters.yaml'),
-            os.path.join('src', 'awsquery', 'default_filters.yaml'),
-            'default_filters.yaml'
+            os.path.join(os.path.dirname(__file__), "default_filters.yaml"),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "default_filters.yaml"),
+            os.path.join("src", "awsquery", "default_filters.yaml"),
+            "default_filters.yaml",
         ]
 
         config_path = None
@@ -30,7 +30,7 @@ def load_default_filters():
             debug_print("Warning: default_filters.yaml not found, no defaults will be applied")
             return {}
 
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             config = yaml.safe_load(f)
             debug_print(f"Loaded default filters configuration from {config_path}")
             return config
@@ -52,7 +52,7 @@ def get_default_columns(service, action):
     service_config = config.get(service.lower(), {})
     action_config = service_config.get(action.lower(), {})
 
-    columns = action_config.get('columns', [])
+    columns = action_config.get("columns", [])
     if columns:
         debug_print(f"Found default columns for {service}.{action}: {columns}")
     else:

@@ -1061,31 +1061,25 @@ class TestTagTransformation:
             "Tags": [
                 {"Key": "Name", "Value": "web-server"},
                 {"Key": "Environment", "Value": "production"},
-            ]
+            ],
         }
         assert detect_aws_tags(obj_with_tags) is True
 
     def test_detect_aws_tags_empty_tags(self):
         """Test detect_aws_tags with empty Tags list."""
-        obj_empty_tags = {
-            "InstanceId": "i-123",
-            "Tags": []
-        }
+        obj_empty_tags = {"InstanceId": "i-123", "Tags": []}
         assert detect_aws_tags(obj_empty_tags) is False
 
     def test_detect_aws_tags_no_tags_field(self):
         """Test detect_aws_tags with no Tags field."""
-        obj_no_tags = {
-            "InstanceId": "i-123",
-            "State": "running"
-        }
+        obj_no_tags = {"InstanceId": "i-123", "State": "running"}
         assert detect_aws_tags(obj_no_tags) is False
 
     def test_detect_aws_tags_invalid_tag_structure(self):
         """Test detect_aws_tags with invalid tag structure."""
         obj_invalid_tags = {
             "InstanceId": "i-123",
-            "Tags": [{"Name": "invalid-structure"}]  # Missing Key/Value
+            "Tags": [{"Name": "invalid-structure"}],  # Missing Key/Value
         }
         assert detect_aws_tags(obj_invalid_tags) is False
 
@@ -1093,7 +1087,7 @@ class TestTagTransformation:
         """Test detect_aws_tags with Tags field not being a list."""
         obj_tags_not_list = {
             "InstanceId": "i-123",
-            "Tags": {"Key": "Name", "Value": "web-server"}  # Dict instead of list
+            "Tags": {"Key": "Name", "Value": "web-server"},  # Dict instead of list
         }
         assert detect_aws_tags(obj_tags_not_list) is False
 
@@ -1104,17 +1098,14 @@ class TestTagTransformation:
             "Tags": [
                 {"Key": "Name", "Value": "web-server"},
                 {"Key": "Environment", "Value": "production"},
-            ]
+            ],
         }
 
         result = transform_tags_structure(input_data)
 
         # Should transform Tags to map format
         assert result["InstanceId"] == "i-123"
-        assert result["Tags"] == {
-            "Name": "web-server",
-            "Environment": "production"
-        }
+        assert result["Tags"] == {"Name": "web-server", "Environment": "production"}
 
         # Should preserve original for debugging
         assert result["Tags_Original"] == input_data["Tags"]
@@ -1128,15 +1119,15 @@ class TestTagTransformation:
                     "Tags": [
                         {"Key": "Name", "Value": "web-server-1"},
                         {"Key": "Environment", "Value": "production"},
-                    ]
+                    ],
                 },
                 {
                     "InstanceId": "i-456",
                     "Tags": [
                         {"Key": "Name", "Value": "web-server-2"},
                         {"Key": "Environment", "Value": "staging"},
-                    ]
-                }
+                    ],
+                },
             ]
         }
 
@@ -1147,27 +1138,19 @@ class TestTagTransformation:
 
         instance1 = result["Instances"][0]
         assert instance1["InstanceId"] == "i-123"
-        assert instance1["Tags"] == {
-            "Name": "web-server-1",
-            "Environment": "production"
-        }
+        assert instance1["Tags"] == {"Name": "web-server-1", "Environment": "production"}
         assert instance1["Tags_Original"] == input_data["Instances"][0]["Tags"]
 
         instance2 = result["Instances"][1]
         assert instance2["InstanceId"] == "i-456"
-        assert instance2["Tags"] == {
-            "Name": "web-server-2",
-            "Environment": "staging"
-        }
+        assert instance2["Tags"] == {"Name": "web-server-2", "Environment": "staging"}
 
     def test_transform_tags_structure_preserve_non_aws_tags(self):
         """Test transform_tags_structure preserves non-AWS Tags structures."""
         input_data = {
             "InstanceId": "i-123",
             "Tags": ["simple", "string", "list"],  # Not AWS Tags structure
-            "CustomTags": [
-                {"Label": "custom", "Data": "value"}  # Different structure
-            ]
+            "CustomTags": [{"Label": "custom", "Data": "value"}],  # Different structure
         }
 
         result = transform_tags_structure(input_data)
@@ -1179,10 +1162,7 @@ class TestTagTransformation:
 
     def test_transform_tags_structure_empty_tags(self):
         """Test transform_tags_structure with empty Tags list."""
-        input_data = {
-            "InstanceId": "i-123",
-            "Tags": []
-        }
+        input_data = {"InstanceId": "i-123", "Tags": []}
 
         result = transform_tags_structure(input_data)
 
@@ -1207,9 +1187,9 @@ class TestTagTransformation:
                             "Tags": [
                                 {"Key": "Name", "Value": "web-server-1"},
                                 {"Key": "Role", "Value": "web"},
-                            ]
+                            ],
                         }
-                    ]
+                    ],
                 }
             ]
         }
@@ -1221,14 +1201,11 @@ class TestTagTransformation:
         assert lb["Tags"] == {
             "Name": "test-load-balancer",
             "Environment": "production",
-            "Team": "infrastructure"
+            "Team": "infrastructure",
         }
 
         instance = lb["Instances"][0]
-        assert instance["Tags"] == {
-            "Name": "web-server-1",
-            "Role": "web"
-        }
+        assert instance["Tags"] == {"Name": "web-server-1", "Role": "web"}
 
     def test_transform_tags_structure_with_duplicate_keys(self):
         """Test transform_tags_structure with duplicate tag keys (last wins)."""
@@ -1238,16 +1215,13 @@ class TestTagTransformation:
                 {"Key": "Environment", "Value": "staging"},
                 {"Key": "Name", "Value": "web-server"},
                 {"Key": "Environment", "Value": "production"},  # Duplicate
-            ]
+            ],
         }
 
         result = transform_tags_structure(input_data)
 
         # Last value should win for duplicate keys
-        assert result["Tags"] == {
-            "Environment": "production",  # Last value
-            "Name": "web-server"
-        }
+        assert result["Tags"] == {"Environment": "production", "Name": "web-server"}  # Last value
 
     def test_transform_tags_structure_with_special_characters(self):
         """Test transform_tags_structure with special characters in tag values."""
@@ -1257,7 +1231,7 @@ class TestTagTransformation:
                 {"Key": "Name", "Value": "web-server-!@#$%"},
                 {"Key": "Description", "Value": "Multi\nline\nstring"},
                 {"Key": "JSON", "Value": '{"nested": "json"}'},
-            ]
+            ],
         }
 
         result = transform_tags_structure(input_data)
@@ -1266,7 +1240,7 @@ class TestTagTransformation:
         assert result["Tags"] == {
             "Name": "web-server-!@#$%",
             "Description": "Multi\nline\nstring",
-            "JSON": '{"nested": "json"}'
+            "JSON": '{"nested": "json"}',
         }
 
     def test_format_table_output_with_transformed_tags(self):
@@ -1277,12 +1251,14 @@ class TestTagTransformation:
                 "Tags": [
                     {"Key": "Name", "Value": "web-server-1"},
                     {"Key": "Environment", "Value": "production"},
-                ]
+                ],
             }
         ]
 
         # Should be able to filter by Tags.Name syntax
-        result = format_table_output(resources, column_filters=["InstanceId", "Tags.Name", "Tags.Environment"])
+        result = format_table_output(
+            resources, column_filters=["InstanceId", "Tags.Name", "Tags.Environment"]
+        )
 
         # Should include the instance ID
         assert "i-123" in result
@@ -1298,7 +1274,7 @@ class TestTagTransformation:
                 "Tags": [
                     {"Key": "Name", "Value": "web-server-1"},
                     {"Key": "Environment", "Value": "production"},
-                ]
+                ],
             }
         ]
 
@@ -1307,10 +1283,7 @@ class TestTagTransformation:
 
         # Should have transformed tags in output
         resource = parsed["results"][0]
-        assert resource["Tags"] == {
-            "Name": "web-server-1",
-            "Environment": "production"
-        }
+        assert resource["Tags"] == {"Name": "web-server-1", "Environment": "production"}
 
         # Should preserve original for debugging
         assert resource["Tags_Original"] == resources[0]["Tags"]
@@ -1323,7 +1296,7 @@ class TestTagTransformation:
                 "Tags": [
                     {"Key": "Name", "Value": "web-server"},
                     {"Key": "Environment", "Value": "production"},
-                ]
+                ],
             }
         ]
 
@@ -1338,10 +1311,7 @@ class TestTagTransformation:
         """Test tag transformation performance with large tag sets."""
         # Create resource with many tags
         large_tags = [{"Key": f"Tag{i}", "Value": f"Value{i}"} for i in range(100)]
-        input_data = {
-            "InstanceId": "i-123",
-            "Tags": large_tags
-        }
+        input_data = {"InstanceId": "i-123", "Tags": large_tags}
 
         result = transform_tags_structure(input_data)
 
@@ -1360,7 +1330,7 @@ class TestTagTransformation:
             "Tags": [
                 {"Key": "Name", "Value": "web-server"},
                 {"Key": "Environment", "Value": "production"},
-            ]
+            ],
         }
         original_tags = original_data["Tags"][:]  # Copy for comparison
 
@@ -1377,30 +1347,18 @@ class TestTagTransformation:
     @pytest.mark.parametrize(
         "tag_input,expected_output",
         [
-            (
-                [{"Key": "Name", "Value": "test"}],
-                {"Name": "test"}
-            ),
+            ([{"Key": "Name", "Value": "test"}], {"Name": "test"}),
             (
                 [{"Key": "Environment", "Value": "prod"}, {"Key": "Team", "Value": "dev"}],
-                {"Environment": "prod", "Team": "dev"}
+                {"Environment": "prod", "Team": "dev"},
             ),
-            (
-                [{"Key": "empty-value", "Value": ""}],
-                {"empty-value": ""}
-            ),
-            (
-                [{"Key": "numeric-value", "Value": "123"}],
-                {"numeric-value": "123"}
-            ),
+            ([{"Key": "empty-value", "Value": ""}], {"empty-value": ""}),
+            ([{"Key": "numeric-value", "Value": "123"}], {"numeric-value": "123"}),
         ],
     )
     def test_transform_tags_structure_parametrized(self, tag_input, expected_output):
         """Test transform_tags_structure with various tag inputs."""
-        input_data = {
-            "ResourceId": "test-resource",
-            "Tags": tag_input
-        }
+        input_data = {"ResourceId": "test-resource", "Tags": tag_input}
 
         result = transform_tags_structure(input_data)
 

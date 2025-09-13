@@ -4,13 +4,13 @@ import json
 import sys
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
+from botocore.exceptions import ClientError, NoCredentialsError
+
 # Mock boto3 before any other imports
 mock_boto3 = Mock()
 mock_boto3.Session = Mock()
-sys.modules['boto3'] = mock_boto3
-
-import pytest
-from botocore.exceptions import ClientError, NoCredentialsError
+sys.modules["boto3"] = mock_boto3
 
 
 @pytest.fixture(autouse=True)
