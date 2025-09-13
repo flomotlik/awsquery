@@ -1,22 +1,23 @@
 """Command-line interface for AWS Query Tool."""
 
 import argparse
-import sys
 import re
-import boto3
-import argcomplete
+import sys
 
-from .utils import debug_print, sanitize_input, get_aws_services
-from .security import load_security_policy, validate_security, action_to_policy_format
+import argcomplete
+import boto3
+
 from .core import execute_aws_call, execute_multi_level_call
 from .filters import filter_resources, parse_multi_level_filters_for_mode
 from .formatters import (
-    format_table_output,
-    format_json_output,
-    show_keys,
     extract_and_sort_keys,
     flatten_response,
+    format_json_output,
+    format_table_output,
+    show_keys,
 )
+from .security import action_to_policy_format, load_security_policy, validate_security
+from .utils import debug_print, get_aws_services, sanitize_input
 
 
 def service_completer(prefix, parsed_args, **kwargs):
@@ -86,10 +87,10 @@ Examples:
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug output")
 
     service_arg = parser.add_argument("service", nargs="?", help="AWS service name")
-    service_arg.completer = service_completer
+    service_arg.completer = service_completer  # type: ignore[attr-defined]
 
     action_arg = parser.add_argument("action", nargs="?", help="Service action name")
-    action_arg.completer = action_completer
+    action_arg.completer = action_completer  # type: ignore[attr-defined]
 
     argcomplete.autocomplete(parser)
 
@@ -105,6 +106,7 @@ Examples:
             cleaned_argv.append(arg)
 
     from . import utils
+
     utils.debug_enabled = debug_mode
 
     base_command, resource_filters, value_filters, column_filters = (
@@ -140,7 +142,8 @@ Examples:
     policy_action = action_to_policy_format(action)
 
     debug_print(
-        f"DEBUG: Checking security for service='{service}', action='{action}', policy_action='{policy_action}'"
+        f"DEBUG: Checking security for service='{service}', "
+        f"action='{action}', policy_action='{policy_action}'"
     )
     debug_print(f"DEBUG: Policy has {len(allowed_actions)} allowed actions")
 
@@ -176,7 +179,9 @@ Examples:
                 parse_multi_level_filters_for_mode(cleaned_argv, mode="multi")
             )
             debug_print(
-                f"Re-parsed filters for multi-level - Resource: {multi_resource_filters}, Value: {multi_value_filters}, Column: {multi_column_filters}"
+                f"Re-parsed filters for multi-level - "
+                f"Resource: {multi_resource_filters}, Value: {multi_value_filters}, "
+                f"Column: {multi_column_filters}"
             )
             filtered_resources = execute_multi_level_call(
                 service,

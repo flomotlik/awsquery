@@ -1,20 +1,21 @@
 """Unit tests for AWS Query Tool core execution functions."""
 
-import pytest
 import sys
-from unittest.mock import Mock, patch, MagicMock, call
-from botocore.exceptions import ClientError, NoCredentialsError
+from unittest.mock import MagicMock, Mock, call, patch
+
 import boto3
+import pytest
+from botocore.exceptions import ClientError, NoCredentialsError
 
 # Import the functions under test
 from src.awsquery.core import (
+    convert_parameter_name,
     execute_aws_call,
     execute_multi_level_call,
-    parse_validation_error,
-    infer_list_operation,
-    convert_parameter_name,
-    parameter_expects_list,
     get_correct_parameter_name,
+    infer_list_operation,
+    parameter_expects_list,
+    parse_validation_error,
 )
 
 

@@ -1,7 +1,7 @@
 """AWS response fixtures for testing scenarios."""
 
-from datetime import datetime, timezone
 import uuid
+from datetime import datetime, timezone
 
 
 def get_paginated_response(
@@ -62,7 +62,10 @@ def get_paginated_response(
                                 "Association": (
                                     {
                                         "PublicIp": f"203.0.{page_num + 1}.{item_num + 10}",
-                                        "PublicDnsName": f"ec2-203-0-{page_num + 1}-{item_num + 10}.compute-1.amazonaws.com",
+                                        "PublicDnsName": (
+                                            f"ec2-203-0-{page_num + 1}-{item_num + 10}."
+                                            "compute-1.amazonaws.com"
+                                        ),
                                     }
                                     if item_num % 2 == 0
                                     else None
@@ -121,7 +124,10 @@ def get_paginated_response(
                 stacks.append(
                     {
                         "StackName": stack_name,
-                        "StackId": f"arn:aws:cloudformation:us-east-1:123456789012:stack/{stack_name}/{uuid.uuid4()}",
+                        "StackId": (
+                            f"arn:aws:cloudformation:us-east-1:123456789012:stack/"
+                            f"{stack_name}/{uuid.uuid4()}"
+                        ),
                         "StackStatus": ["CREATE_COMPLETE", "UPDATE_COMPLETE", "ROLLBACK_COMPLETE"][
                             item_num % 3
                         ],
@@ -307,7 +313,8 @@ def get_validation_error_responses():
         },
         "null_cluster_name": {
             "error_type": "ValidationException",
-            "message": "Value null at 'clusterName' failed to satisfy constraint: Member must not be null",
+            "message": "Value null at 'clusterName' failed to satisfy "
+            "constraint: Member must not be null",
             "parameter": "clusterName",
         },
         "either_parameter": {

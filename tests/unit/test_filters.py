@@ -1,8 +1,9 @@
 """Unit tests for AWS Query Tool filtering functions."""
 
-import pytest
 import sys
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 # Import the functions under test
 from src.awsquery.filters import filter_resources, parse_multi_level_filters_for_mode
@@ -483,7 +484,8 @@ class TestParseMultiLevelFilters:
             parse_multi_level_filters_for_mode(argv, mode="single")
         )
 
-        # First non-flag is service, second is action, args before -- are value filters, after -- are column filters
+        # First non-flag is service, second is action, args before -- are value
+        # filters, after -- are column filters
         assert base_command == ["s3", "list-objects-v2"]
         assert resource_filters == []  # Never contains resource filters - always empty
         assert value_filters == ["bucket-name", "prefix-filter"]  # Args before -- are value filters

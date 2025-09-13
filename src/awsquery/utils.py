@@ -1,6 +1,7 @@
 """Utility functions for AWS Query Tool."""
 
 import sys
+
 import boto3
 
 # Global debug mode flag
@@ -48,7 +49,7 @@ def normalize_action_name(action):
 
 def simplify_key(full_key):
     """Extract the last non-numeric attribute from a flattened key
-    
+
     Examples:
     - "Instances.0.NetworkInterfaces.0.SubnetId" -> "SubnetId"
     - "Buckets.0.Name" -> "Name"

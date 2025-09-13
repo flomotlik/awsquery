@@ -1,10 +1,11 @@
 """Core pytest fixtures for AWS Query Tool testing."""
 
-import pytest
 import json
-from unittest.mock import Mock, patch, MagicMock
-from botocore.exceptions import ClientError, NoCredentialsError
+from unittest.mock import MagicMock, Mock, patch
+
 import boto3
+import pytest
+from botocore.exceptions import ClientError, NoCredentialsError
 
 
 @pytest.fixture
@@ -218,7 +219,8 @@ def validation_error_fixtures():
             error_response={
                 "Error": {
                     "Code": "ValidationException",
-                    "Message": "Value null at 'stackName' failed to satisfy constraint: Member must not be null",
+                    "Message": "Value null at 'stackName' failed to satisfy "
+                    "constraint: Member must not be null",
                 }
             },
             operation_name="DescribeStackResources",
@@ -241,12 +243,43 @@ def validation_error_fixtures():
 
 @pytest.fixture(autouse=True)
 def reset_debug_mode():
+    """Auto-reset debug state for all tests to ensure isolation."""
     from src.awsquery import utils
 
-    original_debug_state = utils.debug_enabled
+    original_debug_state = getattr(utils, "debug_enabled", False)
     utils.debug_enabled = False
 
     yield
+
+    # Ensure state is always restored even if test fails
+    utils.debug_enabled = original_debug_state
+
+
+@pytest.fixture
+def debug_mode():
+    """Fixture to temporarily enable debug mode for specific tests."""
+    from src.awsquery import utils
+
+    original_debug_state = getattr(utils, "debug_enabled", False)
+    utils.debug_enabled = True
+
+    yield
+
+    # Restore original state
+    utils.debug_enabled = original_debug_state
+
+
+@pytest.fixture
+def debug_disabled():
+    """Fixture to explicitly disable debug mode for specific tests."""
+    from src.awsquery import utils
+
+    original_debug_state = getattr(utils, "debug_enabled", False)
+    utils.debug_enabled = False
+
+    yield
+
+    # Restore original state
     utils.debug_enabled = original_debug_state
 
 
@@ -261,7 +294,8 @@ def mock_client_error():
         error_response={
             "Error": {
                 "Code": "AccessDenied",
-                "Message": "User: arn:aws:iam::123456789012:user/test-user is not authorized to perform: ec2:DescribeInstances",
+                "Message": "User: arn:aws:iam::123456789012:user/test-user is not "
+                "authorized to perform: ec2:DescribeInstances",
             }
         },
         operation_name="DescribeInstances",
@@ -361,6 +395,7 @@ def capture_stderr(capsys):
     def _capture():
         captured = capsys.readouterr()
         return captured.err
+
     return _capture
 
 
@@ -369,4 +404,123 @@ def capture_stdout(capsys):
     def _capture():
         captured = capsys.readouterr()
         return captured.out
+
     return _capture
+
+
+@pytest.fixture
+def multi_level_validation_error():
+    """Common validation error for multi-level tests."""
+    return {
+        "parameter_name": "clusterName",
+        "is_required": True,
+        "error_type": "missing_parameter",
+    }
+
+
+@pytest.fixture
+def multi_level_mock_setup():
+    """Factory for setting up common multi-level test mocks."""
+
+    def _setup(validation_error, list_response, final_response):
+        from unittest.mock import Mock
+
+        mock_execute = Mock()
+        mock_get_param = Mock()
+
+        mock_execute.side_effect = [
+            {"validation_error": validation_error, "original_error": Exception()},
+            list_response,
+            final_response,
+        ]
+        mock_get_param.return_value = "ClusterName"
+
+        return mock_execute, mock_get_param
+
+    return _setup
+
+
+@pytest.fixture
+def sample_cluster_list():
+    """Sample cluster list response for testing."""
+    return [
+        {"Name": "production-cluster", "Status": "ACTIVE", "Version": "1.21"},
+        {"Name": "staging-cluster", "Status": "ACTIVE", "Version": "1.20"},
+        {"Name": "development-cluster", "Status": "CREATING", "Version": "1.21"},
+    ]
+
+
+@pytest.fixture
+def sample_function_list():
+    """Sample Lambda function list response for testing."""
+    return [
+        {
+            "FunctionName": "production-api-handler",
+            "Runtime": "python3.9",
+            "Handler": "lambda_function.lambda_handler",
+            "CodeSize": 1024,
+            "Description": "Production API handler",
+        },
+        {
+            "FunctionName": "staging-data-processor",
+            "Runtime": "python3.8",
+            "Handler": "app.handler",
+            "CodeSize": 2048,
+            "Description": "Staging data processor",
+        },
+    ]
+
+
+@pytest.fixture
+def workflow_validator():
+    """Helper for validating common workflow patterns."""
+
+    def _validate_parsing_workflow(argv, expected_base, expected_filters):
+        """Validate command parsing workflow."""
+        from src.awsquery.filters import parse_multi_level_filters_for_mode
+
+        base_cmd, res_filters, val_filters, col_filters = parse_multi_level_filters_for_mode(
+            argv, mode="single"
+        )
+
+        assert base_cmd == expected_base
+        if "resource_filters" in expected_filters:
+            assert res_filters == expected_filters["resource_filters"]
+        if "value_filters" in expected_filters:
+            assert val_filters == expected_filters["value_filters"]
+        if "column_filters" in expected_filters:
+            assert col_filters == expected_filters["column_filters"]
+
+        return base_cmd, res_filters, val_filters, col_filters
+
+    def _validate_security_workflow(service, action, policy):
+        """Validate security workflow."""
+        from src.awsquery.security import validate_security
+        from src.awsquery.utils import normalize_action_name
+
+        normalized = normalize_action_name(action)
+        assert validate_security(service, action.replace("-", "").title().replace(" ", ""), policy)
+        return normalized
+
+    def _validate_formatting_workflow(response, filters, expected_content):
+        """Validate response formatting workflow."""
+        from src.awsquery.formatters import flatten_response, format_table_output
+
+        flattened = flatten_response(response)
+        assert len(flattened) > 0
+
+        table_output = format_table_output(flattened, filters)
+        for content in expected_content:
+            assert content in table_output
+
+        return flattened, table_output
+
+    return type(
+        "WorkflowValidator",
+        (),
+        {
+            "validate_parsing": _validate_parsing_workflow,
+            "validate_security": _validate_security_workflow,
+            "validate_formatting": _validate_formatting_workflow,
+        },
+    )()

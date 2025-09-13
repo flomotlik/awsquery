@@ -12,8 +12,8 @@ NC := \033[0m
 .DEFAULT_GOAL := help
 
 .PHONY: help clean install-dev test test-unit test-integration test-critical test-slow coverage \
-        coverage-report lint format format-check type-check security-check build publish-test \
-        publish pre-commit watch-tests version release all ec2-instances s3-buckets iam-users \
+        coverage-report lint format format-check type-check security-check ci build publish-test \
+        publish watch-tests version release all ec2-instances s3-buckets iam-users \
         iam-roles lambda-functions cloudformation-stacks dynamodb-tables ec2-volumes \
         ec2-security-groups s3-bucket-versioning cloudwatch-alarms route53-zones shell \
         docker-build docker-clean test-in-docker test-awsquery
@@ -34,87 +34,58 @@ help: ## Show this help message
 # =============================================================================
 
 install-dev: ## Install development dependencies
-	@echo "$(BLUE)Installing development dependencies...$(NC)"
-	@if command -v pip3 >/dev/null 2>&1; then \
-		pip3 install --user --break-system-packages -e ".[dev]" || \
-		pip3 install -e ".[dev]"; \
-	else \
-		echo "$(RED)Error: pip3 not found$(NC)"; exit 1; \
-	fi
-	@echo "$(GREEN)Development environment ready!$(NC)"
+	pip3 install --user --break-system-packages -e ".[dev]" || pip3 install -e ".[dev]"
 
 test: ## Run all tests
-	@echo "$(BLUE)Running all tests...$(NC)"
 	python3 -m pytest tests/ -v
 
 test-unit: ## Run unit tests only
-	@echo "$(BLUE)Running unit tests...$(NC)"
 	python3 -m pytest tests/unit/ -v -m "unit"
 
 test-integration: ## Run integration tests only
-	@echo "$(BLUE)Running integration tests...$(NC)"
 	python3 -m pytest tests/integration/ -v -m "integration"
 
 test-slow: ## Run slow tests
-	@echo "$(BLUE)Running slow tests...$(NC)"
 	python3 -m pytest tests/ -v -m "slow"
 
 test-critical: ## Run critical path tests
-	@echo "$(BLUE)Running critical tests...$(NC)"
 	python3 -m pytest tests/ -v -m "critical"
 
 coverage: ## Run tests with coverage report
-	@echo "$(BLUE)Running tests with coverage...$(NC)"
 	python3 -m pytest tests/ --cov=src/awsquery --cov-report=term-missing --cov-report=html
-	@echo "$(GREEN)Coverage report generated in htmlcov/index.html$(NC)"
 
 coverage-report: coverage ## Generate and show coverage report location
 	@echo "$(GREEN)Coverage report available at: htmlcov/index.html$(NC)"
 
 lint: ## Run linting checks
-	@echo "$(BLUE)Running linting checks...$(NC)"
-	@if command -v flake8 >/dev/null 2>&1; then \
-		flake8 src/ tests/ --count --statistics || echo "$(YELLOW)flake8 not available$(NC)"; \
-	fi
-	@if command -v pylint >/dev/null 2>&1; then \
-		pylint src/awsquery --exit-zero || echo "$(YELLOW)pylint not available$(NC)"; \
-	fi
-	@echo "$(GREEN)Linting complete!$(NC)"
+	flake8 src/ tests/ --count --statistics --show-source
+	pylint src/awsquery
 
 format: ## Format code with black and isort
-	@echo "$(BLUE)Formatting code...$(NC)"
-	@if command -v black >/dev/null 2>&1; then \
-		black src/ tests/ || echo "$(YELLOW)black not available$(NC)"; \
-	fi
-	@if command -v isort >/dev/null 2>&1; then \
-		isort src/ tests/ || echo "$(YELLOW)isort not available$(NC)"; \
-	fi
-	@echo "$(GREEN)Code formatted!$(NC)"
+	black src/ tests/
+	isort src/ tests/
 
 format-check: ## Check code formatting without changes
-	@echo "$(BLUE)Checking code format...$(NC)"
-	@if command -v black >/dev/null 2>&1; then \
-		black --check src/ tests/ || echo "$(YELLOW)black not available$(NC)"; \
-	fi
-	@if command -v isort >/dev/null 2>&1; then \
-		isort --check-only src/ tests/ || echo "$(YELLOW)isort not available$(NC)"; \
-	fi
+	black --check --diff src/ tests/
+	isort --check-only --diff src/ tests/
 
 type-check: ## Run mypy type checking
-	@echo "$(BLUE)Running type checks...$(NC)"
-	@if command -v mypy >/dev/null 2>&1; then \
-		mypy src/awsquery --ignore-missing-imports || echo "$(YELLOW)mypy not available$(NC)"; \
-	fi
+	mypy src/awsquery --ignore-missing-imports
 
 security-check: ## Run security checks
-	@echo "$(BLUE)Running security checks...$(NC)"
-	@if command -v bandit >/dev/null 2>&1; then \
-		bandit -r src/ -ll || echo "$(YELLOW)bandit not available$(NC)"; \
-	fi
-	@if command -v safety >/dev/null 2>&1; then \
-		safety check --json || echo "$(YELLOW)safety not available$(NC)"; \
-	fi
-	@echo "$(GREEN)Security checks complete!$(NC)"
+	bandit -r src/ -ll
+
+ci: ## Run all CI checks and tests (format-check, lint, type-check, test)
+	@echo "$(BLUE)Running CI pipeline - all quality checks and tests$(NC)"
+	@echo "$(YELLOW)Step 1/4: Checking code formatting...$(NC)"
+	$(MAKE) format-check
+	@echo "$(YELLOW)Step 2/4: Running lint checks...$(NC)"
+	$(MAKE) lint
+	@echo "$(YELLOW)Step 3/4: Running type checks...$(NC)"
+	$(MAKE) type-check
+	@echo "$(YELLOW)Step 4/4: Running all tests...$(NC)"
+	$(MAKE) test
+	@echo "$(GREEN)✓ All CI checks passed! Code is ready for push.$(NC)"
 
 clean: ## Remove build artifacts and cache files
 	@echo "$(BLUE)Cleaning build artifacts...$(NC)"
@@ -135,54 +106,31 @@ clean: ## Remove build artifacts and cache files
 	@echo "$(GREEN)Cleanup complete!$(NC)"
 
 build: clean ## Build distribution packages
-	@echo "$(BLUE)Building distribution packages...$(NC)"
-	@if command -v python3 >/dev/null 2>&1; then \
-		python3 -m build . 2>/dev/null || echo "$(YELLOW)build module not available, creating basic setup$(NC)"; \
-	fi
-	@echo "$(GREEN)Build complete!$(NC)"
+	python3 -m build .
 
 publish-test: build ## Publish to TestPyPI
-	@echo "$(YELLOW)Publishing to TestPyPI...$(NC)"
-	@if command -v twine >/dev/null 2>&1; then \
-		twine upload --repository testpypi dist/* || echo "$(YELLOW)twine not available$(NC)"; \
-	fi
+	twine upload --repository testpypi dist/*
 
 publish: build ## Publish to PyPI
-	@echo "$(YELLOW)Publishing to PyPI...$(NC)"
 	@echo "$(RED)Are you sure? [y/N]$(NC)" && read ans && [ $${ans:-N} = y ]
-	@if command -v twine >/dev/null 2>&1; then \
-		twine upload dist/* || echo "$(YELLOW)twine not available$(NC)"; \
-	fi
+	twine upload dist/*
 
-pre-commit: ## Run pre-commit hooks on all files
-	@echo "$(BLUE)Running pre-commit hooks...$(NC)"
-	@if command -v pre-commit >/dev/null 2>&1; then \
-		pre-commit run --all-files || echo "$(YELLOW)pre-commit not available$(NC)"; \
-	fi
 
 watch-tests: ## Run tests continuously on file changes
-	@echo "$(BLUE)Watching for file changes...$(NC)"
-	@if command -v ptw >/dev/null 2>&1; then \
-		ptw -- -vv || echo "$(YELLOW)pytest-watch not available$(NC)"; \
-	fi
+	ptw -- -vv
 
 version: ## Show current version
 	@python3 -c "import sys; sys.path.insert(0, 'src'); from awsquery import __version__; print(__version__)" 2>/dev/null || echo "1.0.0"
 
 release: ## Create a new release (requires clean git state)
-	@echo "$(BLUE)Creating new release...$(NC)"
-	@if command -v git >/dev/null 2>&1; then \
-		git status --porcelain | grep -q . && echo "$(RED)Git working directory not clean$(NC)" && exit 1 || true; \
-		echo "Current version: $$(make version)"; \
-		echo "Enter new version: " && read VERSION && \
+	@git status --porcelain | grep -q . && echo "$(RED)Git working directory not clean$(NC)" && exit 1 || true
+	@echo "Current version: $$(make version)"
+	@echo "Enter new version: " && read VERSION && \
 		echo "version = '$$VERSION'" > src/awsquery/__version__.py && \
 		git add src/awsquery/__version__.py && \
 		git commit -m "Bump version to $$VERSION" && \
 		git tag -a "v$$VERSION" -m "Release version $$VERSION" && \
-		echo "$(GREEN)Tagged version $$VERSION. Run 'git push --tags' to push.$(NC)"; \
-	else \
-		echo "$(YELLOW)git not available$(NC)"; \
-	fi
+		echo "$(GREEN)Tagged version $$VERSION. Run 'git push --tags' to push.$(NC)"
 
 # =============================================================================
 # AWS API RESPONSE SAMPLING TARGETS (PRESERVED)

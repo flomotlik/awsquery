@@ -1,8 +1,9 @@
 """Filtering logic for AWS Query Tool."""
 
 import sys
+
+from .formatters import convert_parameter_name, flatten_dict_keys
 from .utils import debug_print, simplify_key
-from .formatters import flatten_dict_keys, convert_parameter_name
 
 
 def filter_resources(resources, value_filters):
@@ -13,7 +14,7 @@ def filter_resources(resources, value_filters):
     for filter_text in value_filters:
         debug_print(f"Applying value filter: {filter_text}")
 
-    filtered = []
+    filtered: list[dict] = []
     for resource in resources:
         flattened = flatten_dict_keys(resource)
 
@@ -36,7 +37,8 @@ def filter_resources(resources, value_filters):
             else:
                 matching_items = [item for item in searchable_items if filter_lower in item]
                 debug_print(
-                    f"Filter '{filter_text}' matched: {matching_items[:3]}{'...' if len(matching_items) > 3 else ''}"
+                    f"Filter '{filter_text}' matched: {matching_items[:3]}"
+                    f"{'...' if len(matching_items) > 3 else ''}"
                 )
 
         if matches_all:
@@ -48,7 +50,7 @@ def filter_resources(resources, value_filters):
 
 def parse_multi_level_filters_for_mode(argv, mode="single"):
     """Parse command line args with -- separators for proper filtering based on mode
-    
+
     Mode behavior:
         single: resource_filters=[], everything else as value/column filters
         multi: proper semantic meaning of separators:
@@ -72,6 +74,7 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
 
     first_segment = segments[0] if segments else []
 
+    third_segment: list[str]
     if len(segments) == 1:
         second_segment = []
         third_segment = []
@@ -100,7 +103,7 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
             extra_args.append(arg)
 
     if mode == "single":
-        resource_filters = []
+        resource_filters: list[str] = []
 
         if len(segments) == 1:
             value_filters = extra_args
@@ -130,7 +133,9 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
         raise ValueError(f"Invalid mode '{mode}'. Must be 'single' or 'multi'.")
 
     debug_print(
-        f"Multi-level parsing (mode={mode}) - Base: {base_command}, Resource: {resource_filters}, Value: {value_filters}, Column: {column_filters}"
+        f"Multi-level parsing (mode={mode}) - Base: {base_command}, "
+        f"Resource: {resource_filters}, Value: {value_filters}, "
+        f"Column: {column_filters}"
     )
 
     return base_command, resource_filters, value_filters, column_filters
@@ -210,11 +215,43 @@ def extract_parameter_values(resources, parameter_name):
         else:
             # Common AWS resource types that typically have a Name field
             resource_types_with_names = [
-                "bucket", "cluster", "instance", "volume", "snapshot", "image", "vpc", "subnet",
-                "queue", "topic", "table", "function", "role", "user", "group", "policy",
-                "stack", "template", "pipeline", "repository", "branch", "commit", "build",
-                "project", "job", "task", "service", "container", "node", "nodegroup",
-                "database", "endpoint", "domain", "certificate", "key", "secret", "parameter",
+                "bucket",
+                "cluster",
+                "instance",
+                "volume",
+                "snapshot",
+                "image",
+                "vpc",
+                "subnet",
+                "queue",
+                "topic",
+                "table",
+                "function",
+                "role",
+                "user",
+                "group",
+                "policy",
+                "stack",
+                "template",
+                "pipeline",
+                "repository",
+                "branch",
+                "commit",
+                "build",
+                "project",
+                "job",
+                "task",
+                "service",
+                "container",
+                "node",
+                "nodegroup",
+                "database",
+                "endpoint",
+                "domain",
+                "certificate",
+                "key",
+                "secret",
+                "parameter",
             ]
 
             if param_lower in resource_types_with_names:
@@ -223,14 +260,16 @@ def extract_parameter_values(resources, parameter_name):
 
         if standard_fields:
             debug_print(
-                f"No specific field found for '{parameter_name}', trying standard fields: {standard_fields}"
+                f"No specific field found for '{parameter_name}', "
+                f"trying standard fields: {standard_fields}"
             )
             for standard_field in standard_fields:
                 if standard_field in flat:
                     value = flat[standard_field]
                     if value:
                         debug_print(
-                            f"Found standard field '{standard_field}' for parameter '{parameter_name}'"
+                            f"Found standard field '{standard_field}' "
+                            f"for parameter '{parameter_name}'"
                         )
                         values.append(str(value))
                         found_value = str(value)
@@ -239,7 +278,8 @@ def extract_parameter_values(resources, parameter_name):
                 for key, value in flat.items():
                     if key.lower() == standard_field.lower() and value:
                         debug_print(
-                            f"Found standard field '{key}' (case-insensitive) for parameter '{parameter_name}'"
+                            f"Found standard field '{key}' (case-insensitive) "
+                            f"for parameter '{parameter_name}'"
                         )
                         values.append(str(value))
                         found_value = str(value)
@@ -249,7 +289,8 @@ def extract_parameter_values(resources, parameter_name):
                     break
 
     debug_print(
-        f"Extracted {len(values)} values for parameter '{parameter_name}': {values[:3]}{'...' if len(values) > 3 else ''}"
+        f"Extracted {len(values)} values for parameter '{parameter_name}': "
+        f"{values[:3]}{'...' if len(values) > 3 else ''}"
     )
 
     return values

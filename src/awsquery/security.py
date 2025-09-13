@@ -1,8 +1,9 @@
 """Security policy validation for AWS Query Tool."""
 
+import fnmatch
 import json
 import sys
-import fnmatch
+
 from .utils import debug_print
 
 
@@ -29,7 +30,8 @@ def load_security_policy():
             effect = statement.get("Effect")
             actions = statement.get("Action", [])
             debug_print(
-                f"DEBUG: Statement {i}: Effect={effect}, Actions count={len(actions) if isinstance(actions, list) else 1}"
+                f"DEBUG: Statement {i}: Effect={effect}, "
+                f"Actions count={len(actions) if isinstance(actions, list) else 1}"
             )
 
             if effect == "Allow":

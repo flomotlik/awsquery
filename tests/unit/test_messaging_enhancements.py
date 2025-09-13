@@ -1,27 +1,23 @@
 """Test suite for messaging enhancements in AWS Query Tool."""
 
-import pytest
-import sys
-import re
-from unittest.mock import Mock, patch, MagicMock, call
-from io import StringIO
 import datetime
+import re
+import sys
+from io import StringIO
+from unittest.mock import MagicMock, Mock, call, patch
+
+import pytest
+
+from src.awsquery.core import execute_multi_level_call
 
 # Import the functions under test
-from src.awsquery.utils import debug_print, debug_enabled
-from src.awsquery.core import execute_multi_level_call
+from src.awsquery.utils import debug_enabled, debug_print
 
 
 @pytest.mark.unit
 @pytest.mark.messaging
 class TestEnhancedDebugPrint:
-
-    def setup_method(self):
-        import src.awsquery.utils
-
-        src.awsquery.utils.debug_enabled = False
-
-    def test_debug_print_disabled_no_output(self, capsys):
+    def test_debug_print_disabled_no_output(self, debug_disabled, capsys):
         debug_print("This should not appear")
 
         captured = capsys.readouterr()
@@ -344,13 +340,11 @@ class TestMultiLevelUserMessages:
         mock_flatten,
         mock_infer,
         mock_execute,
+        debug_disabled,
         capsys,
     ):
         """Test user-friendly messages appear even when debug is disabled."""
-        # Ensure debug is disabled
-        import src.awsquery.utils
-
-        src.awsquery.utils.debug_enabled = False
+        # Debug is disabled via fixture
 
         validation_error = {
             "parameter_name": "clusterName",
@@ -466,12 +460,12 @@ class TestUserMessageIntegration:
         assert found_line < multiple_line, "Messages not in correct order"
         assert multiple_line < using_line, "Messages not in correct order"
 
-    def test_debug_and_user_messages_distinction(self, capsys):
+    def test_debug_and_user_messages_distinction(self, debug_mode, capsys):
         """Test that debug and user messages are clearly distinguished."""
         import src.awsquery.utils
 
-        # Enable debug mode
-        src.awsquery.utils.debug_enabled = True
+        # Debug mode is enabled via fixture
+        assert src.awsquery.utils.debug_enabled
 
         # Test debug message
         debug_print("This is a debug message")

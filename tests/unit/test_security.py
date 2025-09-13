@@ -1,20 +1,21 @@
 """Unit tests for security validation functions."""
 
-import pytest
 import json
-import tempfile
 import os
-from unittest.mock import patch, mock_open, MagicMock
+import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, mock_open, patch
 
-from src.awsquery.security import load_security_policy, validate_security, action_to_policy_format
+import pytest
+
+from src.awsquery.security import action_to_policy_format, load_security_policy, validate_security
 from tests.fixtures.policy_samples import (
-    get_readonly_policy,
-    get_restrictive_policy,
-    get_wildcard_policy,
     get_deny_policy,
     get_legacy_policy_formats,
     get_malformed_policies,
+    get_readonly_policy,
+    get_restrictive_policy,
+    get_wildcard_policy,
 )
 
 
@@ -98,13 +99,7 @@ class TestLoadSecurityPolicy:
 
     @pytest.mark.unit
     def test_load_policy_with_missing_statement(self):
-        policy_content = {
-            "PolicyVersion": {
-                "Document": {
-                    "Version": "2012-10-17"
-                }
-            }
-        }
+        policy_content = {"PolicyVersion": {"Document": {"Version": "2012-10-17"}}}
         policy_json = json.dumps(policy_content)
 
         with patch("builtins.open", mock_open(read_data=policy_json)):

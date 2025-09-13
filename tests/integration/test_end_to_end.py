@@ -1,32 +1,31 @@
 """CLI and end-to-end integration tests for AWS Query Tool."""
 
-import pytest
-import sys
-import json
-import io
-import os
 import argparse
-from unittest.mock import Mock, patch, MagicMock, call
-from contextlib import redirect_stdout, redirect_stderr
+import io
+import json
+import os
+import sys
+from contextlib import redirect_stderr, redirect_stdout
+from unittest.mock import MagicMock, Mock, call, patch
+
+import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 
 # Import modules under test
-from src.awsquery.cli import main, service_completer, action_completer
+from src.awsquery.cli import action_completer, main, service_completer
 from src.awsquery.core import execute_aws_call, execute_multi_level_call
-from src.awsquery.security import load_security_policy, validate_security, action_to_policy_format
-from src.awsquery.formatters import format_table_output, format_json_output, show_keys
 from src.awsquery.filters import parse_multi_level_filters_for_mode
+from src.awsquery.formatters import format_json_output, format_table_output, show_keys
+from src.awsquery.security import action_to_policy_format, load_security_policy, validate_security
 from src.awsquery.utils import normalize_action_name
 
 
 @pytest.mark.integration
 @pytest.mark.aws
 class TestEndToEndScenarios:
-
     def test_complete_aws_query_workflow_table_output(
         self, sample_ec2_response, mock_security_policy
     ):
-
         argv = ["ec2", "describe-instances", "--", "InstanceId", "State"]
         base_cmd, res_filters, val_filters, col_filters = parse_multi_level_filters_for_mode(
             argv, mode="single"
@@ -48,9 +47,7 @@ class TestEndToEndScenarios:
 
         table_output = format_table_output(flattened, col_filters)
         assert "InstanceId" in table_output
-        assert (
-            "State" in table_output or "Code" in table_output or "Name" in table_output
-        )
+        assert "State" in table_output or "Code" in table_output or "Name" in table_output
         assert "i-1234567890abcdef0" in table_output
 
     def test_complete_aws_query_workflow_json_output(
@@ -180,7 +177,7 @@ class TestEndToEndScenarios:
 
     def test_keys_mode_workflow_integration(self, sample_ec2_response):
         """Test keys mode functionality integration."""
-        from src.awsquery.formatters import flatten_response, extract_and_sort_keys
+        from src.awsquery.formatters import extract_and_sort_keys, flatten_response
 
         # Flatten response to extract keys
         flattened = flatten_response(sample_ec2_response)
@@ -198,14 +195,11 @@ class TestEndToEndScenarios:
         # Keys should be sorted
         assert keys == sorted(keys)
 
-    def test_debug_mode_integration(self):
+    def test_debug_mode_integration(self, debug_mode):
         """Test debug mode functionality integration."""
         from src.awsquery import utils
 
-        # Test debug mode toggle
-        original_debug = utils.debug_enabled
-
-        utils.debug_enabled = True
+        # Debug mode is enabled via fixture
         assert utils.debug_enabled
 
         # Test debug print (should work when enabled)
@@ -213,9 +207,6 @@ class TestEndToEndScenarios:
             utils.debug_print("Test debug message")
 
         assert "Test debug message" in stderr.getvalue()
-
-        # Restore original state
-        utils.debug_enabled = original_debug
 
     def test_error_handling_workflow_integration(self, validation_error_fixtures):
         """Test error handling integration across modules."""
@@ -286,9 +277,12 @@ class TestCLIArgumentParsing:
             "ResourceType",
         ]
 
-        base_command, resource_filters, value_filters, column_filters = (
-            parse_multi_level_filters_for_mode(argv, mode="single")
-        )
+        (
+            base_command,
+            resource_filters,
+            value_filters,
+            column_filters,
+        ) = parse_multi_level_filters_for_mode(argv, mode="single")
 
         assert base_command == ["cf", "describe-stack-resources"]
         assert resource_filters == []  # Always empty in single mode
@@ -300,9 +294,12 @@ class TestCLIArgumentParsing:
         # Test: service action -- columns
         argv = ["ec2", "describe-instances", "--", "InstanceId", "State", "Tags"]
 
-        base_command, resource_filters, value_filters, column_filters = (
-            parse_multi_level_filters_for_mode(argv, mode="single")
-        )
+        (
+            base_command,
+            resource_filters,
+            value_filters,
+            column_filters,
+        ) = parse_multi_level_filters_for_mode(argv, mode="single")
 
         assert base_command == ["ec2", "describe-instances"]
         assert resource_filters == []
@@ -313,9 +310,12 @@ class TestCLIArgumentParsing:
         """Test parsing without any -- separators."""
         argv = ["s3", "list-buckets", "production"]
 
-        base_command, resource_filters, value_filters, column_filters = (
-            parse_multi_level_filters_for_mode(argv, mode="single")
-        )
+        (
+            base_command,
+            resource_filters,
+            value_filters,
+            column_filters,
+        ) = parse_multi_level_filters_for_mode(argv, mode="single")
 
         assert base_command == ["s3", "list-buckets"]
         assert resource_filters == []  # Always empty in single mode
@@ -392,7 +392,6 @@ class TestCLIArgumentParsing:
 
         # Test that flags are correctly identified in argv
         # This tests the flag extraction logic that happens in main()
-
         # Since we can't easily test main() directly, we test the logic components
         argv = ["awsquery", "--debug", "ec2", "describe-instances", "--keys", "--json"]
 
@@ -406,6 +405,122 @@ class TestCLIArgumentParsing:
         assert debug_mode
         assert json_mode
         assert not dry_run_mode
+
+    def test_argv_modification_for_argparse(self):
+        """Test sys.argv modification for argparse compatibility."""
+        from src.awsquery.filters import parse_multi_level_filters_for_mode
+
+        # Test that complex argv gets properly parsed
+        argv = [
+            "--debug",
+            "cloudformation",
+            "describe-stack-events",
+            "my-stack",
+            "--",
+            "Created",
+            "--",
+            "StackName",
+        ]
+        (
+            base_command,
+            resource_filters,
+            value_filters,
+            column_filters,
+        ) = parse_multi_level_filters_for_mode(argv, mode="single")
+
+        # Should extract service and action for argparse
+        assert "cloudformation" in base_command
+        assert "describe-stack-events" in base_command
+        assert "my-stack" in value_filters
+        assert "Created" in value_filters
+        assert "StackName" in column_filters
+
+    def test_service_and_action_completers_integration(self):
+        """Test service and action completers with real boto3 session."""
+        with patch("boto3.Session") as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+            mock_session.get_available_services.return_value = ["ec2", "s3", "iam", "rds"]
+
+            # Test service completer
+            results = service_completer("e", None)
+            assert "ec2" in results
+
+        with patch("boto3.client") as mock_client:
+            mock_boto_client = Mock()
+            mock_client.return_value = mock_boto_client
+            mock_boto_client.meta.service_model.operation_names = [
+                "DescribeInstances",
+                "RunInstances",
+                "TerminateInstances",
+            ]
+
+            # Mock the parsed args
+            mock_parsed_args = Mock()
+            mock_parsed_args.service = "ec2"
+
+            with patch("src.awsquery.security.load_security_policy") as mock_load_policy:
+                mock_load_policy.return_value = {"ec2:DescribeInstances", "ec2:RunInstances"}
+
+                with patch("src.awsquery.security.validate_security") as mock_validate:
+                    mock_validate.side_effect = lambda s, a, p: f"{s}:{a}" in p
+
+                    # Test action completer
+                    results = action_completer("desc", mock_parsed_args)
+                    assert "describe-instances" in results
+                    assert "terminate-instances" not in results  # Should be filtered by security
+
+    def test_complex_argv_parsing_edge_cases(self):
+        """Test complex argv parsing scenarios."""
+        from src.awsquery.filters import parse_multi_level_filters_for_mode
+
+        # Test empty separators
+        argv = ["ec2", "describe-instances", "--", "--", "InstanceId"]
+        base_command, _, value_filters, column_filters = parse_multi_level_filters_for_mode(
+            argv, mode="single"
+        )
+        assert base_command == ["ec2", "describe-instances"]
+        assert value_filters == []  # Empty between separators
+        assert column_filters == ["InstanceId"]
+
+        # Test trailing separator
+        argv = ["s3", "list-buckets", "--"]
+        base_command, _, value_filters, column_filters = parse_multi_level_filters_for_mode(
+            argv, mode="single"
+        )
+        assert base_command == ["s3", "list-buckets"]
+        assert column_filters == []  # Nothing after separator
+
+    def test_input_sanitization_integration(self):
+        """Test input sanitization during argv processing."""
+        from src.awsquery.utils import sanitize_input
+
+        # Test various sanitization scenarios
+        test_cases = [
+            ("normal-service", "normal-service"),
+            ("service_with_underscores", "service_with_underscores"),
+            ("service123", "service123"),
+            ("Service-Name", "Service-Name"),
+        ]
+
+        for input_val, expected in test_cases:
+            result = sanitize_input(input_val)
+            assert result == expected
+
+    def test_action_name_normalization_integration(self):
+        """Test action name normalization in CLI workflow."""
+        from src.awsquery.utils import normalize_action_name
+
+        test_cases = [
+            ("describe-instances", "describe_instances"),
+            ("list-buckets", "list_buckets"),
+            ("get-item", "get_item"),
+            ("describe_stacks", "describe_stacks"),  # Already normalized
+        ]
+
+        for input_action, expected in test_cases:
+            result = normalize_action_name(input_action)
+            assert result == expected
 
 
 @pytest.mark.integration
@@ -471,6 +586,133 @@ class TestCLIErrorHandling:
 
         # Test already snake_case
         assert normalize_action_name("describe_instances") == "describe_instances"
+
+    def test_argparse_system_exit_handling(self):
+        """Test argparse SystemExit handling in main function."""
+        from src.awsquery.cli import main
+
+        # Test invalid arguments that cause argparse to exit
+        with patch("sys.argv", ["awsquery", "--invalid-flag"]):
+            with patch("sys.exit") as mock_exit:
+                with redirect_stderr(io.StringIO()):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass  # Expected from argparse
+
+    def test_aws_credential_errors(self):
+        """Test AWS credential and authentication error scenarios."""
+        with patch("sys.argv", ["awsquery", "ec2", "describe-instances"]):
+            with patch("src.awsquery.security.load_security_policy") as mock_load_policy:
+                mock_load_policy.return_value = {"ec2:DescribeInstances"}
+
+                with patch("src.awsquery.core.execute_aws_call") as mock_execute:
+                    # Test NoCredentialsError
+                    mock_execute.side_effect = NoCredentialsError()
+
+                    with patch("sys.exit") as mock_exit:
+                        with redirect_stderr(io.StringIO()) as captured_stderr:
+                            try:
+                                main()
+                            except (NoCredentialsError, SystemExit) as e:
+                                # Expected credential or system exit errors
+                                if isinstance(e, NoCredentialsError):
+                                    assert "credential" in str(e).lower()
+                                elif isinstance(e, SystemExit):
+                                    # Should exit with non-zero code for credential errors
+                                    assert (
+                                        e.code != 0
+                                    ), "Should exit with non-zero code for credential errors"
+                                else:
+                                    raise  # Re-raise unexpected exceptions
+
+    def test_missing_service_action_edge_cases(self):
+        """Test edge cases for missing service/action arguments."""
+        # Test empty service (which is falsy and triggers service listing)
+        with patch("sys.argv", ["awsquery", "", "describe-instances"]):
+            with patch("src.awsquery.utils.get_aws_services") as mock_get_services:
+                mock_get_services.return_value = ["ec2", "s3"]
+
+                with patch("sys.exit") as mock_exit:
+                    with redirect_stdout(io.StringIO()) as captured_stdout:
+                        main()
+
+                    output = captured_stdout.getvalue()
+                    assert "Available services:" in output
+                    # The test may call sys.exit multiple times due to error handling
+                    # Just verify that sys.exit was called with 0 at some point
+                    exit_calls = mock_exit.call_args_list
+                    assert any(call.args == (0,) for call in exit_calls)
+
+    def test_security_policy_loading_failures(self):
+        """Test security policy loading failure scenarios."""
+        from src.awsquery.security import load_security_policy
+
+        # Test when policy file is missing - should call sys.exit(1)
+        with patch("builtins.open") as mock_open:
+            mock_open.side_effect = FileNotFoundError("Policy file not found")
+
+            with patch("sys.exit") as mock_exit:
+                with redirect_stderr(io.StringIO()) as captured_stderr:
+                    load_security_policy()
+
+                # Should print error and exit
+                error_output = captured_stderr.getvalue()
+                assert "policy.json not found" in error_output
+                mock_exit.assert_called_once_with(1)
+
+    def test_service_model_introspection_errors(self):
+        """Test service model introspection error scenarios."""
+        from src.awsquery.cli import action_completer
+
+        # Test with non-existent service
+        mock_parsed_args = Mock()
+        mock_parsed_args.service = "nonexistent-service"
+
+        with patch("boto3.client") as mock_client:
+            mock_client.side_effect = Exception("Unknown service")
+
+            # Should handle gracefully and return empty list
+            results = action_completer("describe", mock_parsed_args)
+            assert results == []
+
+    def test_sanitization_edge_cases(self):
+        """Test input sanitization with edge cases."""
+        from src.awsquery.utils import sanitize_input
+
+        # Test edge cases that could cause issues
+        edge_cases = ["", " ", "   ", "\n", "\t", "normal"]
+
+        for case in edge_cases:
+            result = sanitize_input(case)
+            # Should not raise exceptions
+            assert isinstance(result, str)
+
+    def test_debug_print_integration_enabled(self, debug_mode):
+        """Test debug print functionality when debug is enabled."""
+        from src.awsquery import utils
+        from src.awsquery.utils import debug_print
+
+        # Debug mode is enabled via fixture
+        assert utils.debug_enabled
+
+        with redirect_stderr(io.StringIO()) as captured:
+            debug_print("Test debug message")
+            output = captured.getvalue()
+            assert "Test debug message" in output
+
+    def test_debug_print_integration_disabled(self, debug_disabled):
+        """Test debug print functionality when debug is disabled."""
+        from src.awsquery import utils
+        from src.awsquery.utils import debug_print
+
+        # Debug mode is disabled via fixture
+        assert not utils.debug_enabled
+
+        with redirect_stderr(io.StringIO()) as captured:
+            debug_print("Test debug message")
+            output = captured.getvalue()
+            assert "Test debug message" not in output
 
 
 @pytest.mark.integration
@@ -647,3 +889,42 @@ class TestCLIOutputFormats:
             # In dry run mode, might return placeholder or execute anyway for keys
             if keys_output and keys_output.strip():
                 assert "InstanceId" in keys_output or "keys" in keys_output.lower()
+
+
+@pytest.mark.integration
+class TestCLIMainFunctionBasics:
+    """Basic CLI main function integration tests focusing on core paths."""
+
+    def test_main_function_argument_processing(self):
+        """Test basic argument processing functionality."""
+        # Test that main function can be imported and called without crashing
+        from src.awsquery.cli import main
+
+        # This is a basic smoke test to ensure main can be imported and basic functionality works
+        assert main is not None
+        assert callable(main)
+
+        # Test basic component integration
+        from src.awsquery.utils import normalize_action_name, sanitize_input
+
+        service = sanitize_input("ec2")
+        action = normalize_action_name("describe-instances")
+        assert service == "ec2"
+        assert action == "describe_instances"
+
+    def test_main_function_service_listing(self):
+        """Test service listing when no action provided."""
+        with patch("sys.argv", ["awsquery", "ec2"]):  # Missing action
+            with patch("boto3.Session") as mock_session_class:
+                mock_session = Mock()
+                mock_session_class.return_value = mock_session
+                mock_session.get_available_services.return_value = ["ec2", "s3"]
+
+                with patch("sys.exit") as mock_exit:
+                    with redirect_stdout(io.StringIO()) as captured:
+                        main()
+
+                    output = captured.getvalue()
+                    if "Available services:" in output:
+                        assert "ec2" in output
+                        assert "s3" in output

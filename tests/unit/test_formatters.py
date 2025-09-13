@@ -1,18 +1,19 @@
 """Unit tests for AWS Query Tool formatting functions."""
 
-import pytest
 import json
-from unittest.mock import Mock, patch, call
+from unittest.mock import Mock, call, patch
+
+import pytest
 from tabulate import tabulate
 
 # Import the functions under test
 from src.awsquery.formatters import (
-    format_table_output,
-    format_json_output,
+    extract_and_sort_keys,
+    flatten_dict_keys,
     flatten_response,
     flatten_single_response,
-    flatten_dict_keys,
-    extract_and_sort_keys,
+    format_json_output,
+    format_table_output,
     show_keys,
 )
 from src.awsquery.utils import simplify_key
@@ -77,7 +78,10 @@ class TestFlattenResponse:
 
 @pytest.mark.unit
 class TestFlattenSingleResponse:
-    """Test suite for flatten_single_response() function - extract resources from single response."""
+    """Test suite for flatten_single_response() function.
+
+    Extract resources from single response.
+    """
 
     def test_flatten_single_response_empty_inputs(self):
         """Test flatten_single_response with various empty inputs."""
@@ -182,7 +186,10 @@ class TestFlattenSingleResponse:
 
 @pytest.mark.unit
 class TestFlattenDictKeys:
-    """Test suite for flatten_dict_keys() function - flatten nested dictionaries with dot notation."""
+    """Test suite for flatten_dict_keys() function.
+
+    Flatten nested dictionaries with dot notation.
+    """
 
     def test_flatten_dict_keys_simple_dict(self):
         """Test flatten_dict_keys with simple flat dictionary."""
@@ -923,7 +930,8 @@ class TestComplexScenarios:
         paginated_data = get_paginated_response("ec2", "describe_instances", 2, 3)
         result = flatten_response(paginated_data)
 
-        # Should combine all reservations from all pages (each page has 1 reservation with 3 instances)
+        # Should combine all reservations from all pages
+        # (each page has 1 reservation with 3 instances)
         assert len(result) == 2  # 2 pages * 1 reservation per page
 
         # Verify we have reservations from both pages

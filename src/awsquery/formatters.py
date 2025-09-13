@@ -1,7 +1,9 @@
 """Output formatting for AWS Query Tool."""
 
 import json
+
 from tabulate import tabulate
+
 from .utils import debug_print, simplify_key
 
 
@@ -71,7 +73,8 @@ def flatten_single_response(response):
         list_value = filtered_response[list_key]
         if non_list_keys:
             debug_print(
-                f"Single list key '{list_key}' with {list_length} items, ignoring metadata {non_list_keys} -> EXTRACTING LIST ONLY"
+                f"Single list key '{list_key}' with {list_length} items, "
+                f"ignoring metadata {non_list_keys} -> EXTRACTING LIST ONLY"
             )
         else:
             debug_print(f"Single list key '{list_key}' with {list_length} items -> EXTRACTING LIST")
@@ -81,7 +84,8 @@ def flatten_single_response(response):
         largest_key, largest_length = list_keys[0]
         largest_list = filtered_response[largest_key]
         debug_print(
-            f"Multiple list keys found, using '{largest_key}' with {largest_length} items (largest) -> EXTRACTING LARGEST LIST"
+            f"Multiple list keys found, using '{largest_key}' with {largest_length} "
+            f"items (largest) -> EXTRACTING LARGEST LIST"
         )
         return largest_list
     else:
@@ -138,7 +142,8 @@ def format_table_output(resources, column_filters=None):
             selected_keys.extend(matching_keys)
             if matching_keys:
                 debug_print(
-                    f"Column filter '{filter_word}' matched: {', '.join(matching_keys[:5])}{'...' if len(matching_keys) > 5 else ''}"
+                    f"Column filter '{filter_word}' matched: "
+                    f"{', '.join(matching_keys[:5])}{'...' if len(matching_keys) > 5 else ''}"
                 )
             else:
                 debug_print(f"Column filter '{filter_word}' matched no columns")
@@ -149,7 +154,7 @@ def format_table_output(resources, column_filters=None):
     if not selected_keys:
         return "No matching columns found."
 
-    simplified_to_full_keys = {}
+    simplified_to_full_keys: dict[str, list[str]] = {}
     unique_headers_ordered = []
 
     for key in selected_keys:
@@ -198,7 +203,7 @@ def format_json_output(resources, column_filters=None):
         for resource in resources:
             flat = flatten_dict_keys(resource)
 
-            simplified_groups = {}
+            simplified_groups: dict[str, set[str]] = {}
             for key, value in flat.items():
                 simplified = simplify_key(key)
                 if any(

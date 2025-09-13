@@ -1,11 +1,13 @@
 """Core AWS operations for AWS Query Tool."""
 
-import sys
 import re
+import sys
+
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
+
+from .filters import extract_parameter_values, filter_resources
 from .utils import debug_print, normalize_action_name
-from .filters import filter_resources, extract_parameter_values
 
 
 def execute_aws_call(service, action, dry_run=False, parameters=None):
@@ -27,7 +29,8 @@ def execute_aws_call(service, action, dry_run=False, parameters=None):
             operation = getattr(client, action, None)
             if not operation:
                 raise ValueError(
-                    f"Action {action} (normalized: {normalized_action}) not available for service {service}"
+                    f"Action {action} (normalized: {normalized_action}) "
+                    f"not available for service {service}"
                 )
 
         call_params = parameters or {}
@@ -94,7 +97,8 @@ def execute_multi_level_call(
     """Handle multi-level API calls with automatic parameter resolution"""
     debug_print(f"Starting multi-level call for {service}.{action}")
     debug_print(
-        f"Resource filters: {resource_filters}, Value filters: {value_filters}, Column filters: {column_filters}"
+        f"Resource filters: {resource_filters}, "
+        f"Value filters: {value_filters}, Column filters: {column_filters}"
     )
 
     response = execute_aws_call(service, action, dry_run)
@@ -180,7 +184,8 @@ def execute_multi_level_call(
                 if len(parameter_values) > 10:
                     remaining = len(parameter_values) - 10
                     print(
-                        f"... and {remaining} more (showing first 10 of {len(parameter_values)} total)",
+                        f"... and {remaining} more "
+                        f"(showing first 10 of {len(parameter_values)} total)",
                         file=sys.stderr,
                     )
 
@@ -202,7 +207,8 @@ def execute_multi_level_call(
             debug_print(f"Could not create client for parameter introspection: {e}")
             converted_parameter_name = convert_parameter_name(parameter_name)
             debug_print(
-                f"Fallback parameter name conversion: {parameter_name} -> {converted_parameter_name}"
+                f"Fallback parameter name conversion: "
+                f"{parameter_name} -> {converted_parameter_name}"
             )
 
         parameters = {converted_parameter_name: param_value}
@@ -210,7 +216,8 @@ def execute_multi_level_call(
 
         if isinstance(response, dict) and "validation_error" in response:
             print(
-                f"ERROR: Still getting validation error after parameter resolution: {response['validation_error']}",
+                f"ERROR: Still getting validation error after parameter resolution: "
+                f"{response['validation_error']}",
                 file=sys.stderr,
             )
             sys.exit(1)
@@ -312,7 +319,8 @@ def infer_list_operation(service, parameter_name, action):
         )
 
         debug_print(
-            f"Parameter-based inference: '{parameter_name}' -> '{resource_name}' -> {len(possible_operations)} operations"
+            f"Parameter-based inference: '{parameter_name}' -> '{resource_name}' -> "
+            f"{len(possible_operations)} operations"
         )
     else:
         debug_print(
@@ -351,7 +359,8 @@ def infer_list_operation(service, parameter_name, action):
             possible_operations.append(op)
 
     debug_print(
-        f"Action-based inference: '{action}' -> '{action_resource}' -> added {len(action_operations)} operations"
+        f"Action-based inference: '{action}' -> '{action_resource}' -> "
+        f"added {len(action_operations)} operations"
     )
     debug_print(f"Total possible operations: {possible_operations}")
 
@@ -382,7 +391,10 @@ def convert_parameter_name(parameter_name):
 
 
 def get_correct_parameter_name(client, action, parameter_name):
-    """Get the correct case-sensitive parameter name for an operation by introspecting the service model"""
+    """Get the correct case-sensitive parameter name for an operation.
+
+    By introspecting the service model.
+    """
     try:
         action_words = action.replace("-", "_").replace("_", " ").split()
         pascal_case_action = "".join(word.capitalize() for word in action_words)
