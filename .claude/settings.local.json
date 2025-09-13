@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m pytest tests/ --cov=src/awsquery --cov-report=term-missing -q)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

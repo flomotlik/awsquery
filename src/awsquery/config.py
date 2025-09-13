@@ -1,0 +1,76 @@
+"""Configuration management for AWS Query Tool."""
+
+import os
+from functools import lru_cache
+
+import yaml
+
+from .utils import debug_print
+
+
+@lru_cache(maxsize=1)
+def load_default_filters():
+    """Load default filters with caching and error handling"""
+    try:
+        # Try multiple possible locations for the YAML file
+        possible_paths = [
+            os.path.join(os.path.dirname(__file__), 'default_filters.yaml'),
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), 'default_filters.yaml'),
+            os.path.join('src', 'awsquery', 'default_filters.yaml'),
+            'default_filters.yaml'
+        ]
+
+        config_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                config_path = path
+                break
+
+        if not config_path:
+            debug_print("Warning: default_filters.yaml not found, no defaults will be applied")
+            return {}
+
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+            debug_print(f"Loaded default filters configuration from {config_path}")
+            return config
+    except FileNotFoundError:
+        debug_print("Warning: default_filters.yaml not found, no defaults will be applied")
+        return {}
+    except yaml.YAMLError as e:
+        debug_print(f"Warning: Could not parse default_filters.yaml: {e}")
+        return {}
+    except Exception as e:
+        debug_print(f"Warning: Could not load default filters: {e}")
+        return {}
+
+
+def get_default_columns(service, action):
+    """Get default columns for service.action combination"""
+    config = load_default_filters()
+
+    service_config = config.get(service.lower(), {})
+    action_config = service_config.get(action.lower(), {})
+
+    columns = action_config.get('columns', [])
+    if columns:
+        debug_print(f"Found default columns for {service}.{action}: {columns}")
+    else:
+        debug_print(f"No default columns configured for {service}.{action}")
+
+    return columns
+
+
+def apply_default_filters(service, action, user_columns=None):
+    """Apply default filters if no user columns specified"""
+    if user_columns:
+        debug_print("User specified columns, skipping defaults")
+        return user_columns
+
+    defaults = get_default_columns(service, action)
+    if defaults:
+        debug_print(f"Using default columns for {service}.{action}: {defaults}")
+        return defaults
+
+    debug_print(f"No default columns found for {service}.{action}")
+    return None  # No filtering applied
