@@ -43,6 +43,7 @@ class TestFlagsAfterSeparator:
 
                     # Debug should be enabled
                     from src.awsquery import utils
+
                     assert utils.debug_enabled is True
 
     @patch("src.awsquery.cli.create_session")
@@ -114,20 +115,32 @@ class TestFlagsAfterSeparator:
         """Test mixed flags and column filters after -- separator."""
         mock_validate.return_value = True
         mock_load_policy.return_value = set()
-        mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}]
+        mock_execute.return_value = [
+            {"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}
+        ]
         mock_session.return_value = Mock()
 
         # Complex case: column filters and flags mixed after --
         sys.argv = [
-            "awsquery", "ec2", "describe-instances",
-            "--", "InstanceId", "-d", "State.Name", "-j"
+            "awsquery",
+            "ec2",
+            "describe-instances",
+            "--",
+            "InstanceId",
+            "-d",
+            "State.Name",
+            "-j",
         ]
 
         with patch("src.awsquery.cli.flatten_response") as mock_flatten:
             with patch("src.awsquery.cli.filter_resources") as mock_filter:
                 with patch("src.awsquery.cli.format_json_output") as mock_json:
-                    mock_flatten.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
-                    mock_filter.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
+                    mock_flatten.return_value = [
+                        {"InstanceId": "i-123", "State": {"Name": "running"}}
+                    ]
+                    mock_filter.return_value = [
+                        {"InstanceId": "i-123", "State": {"Name": "running"}}
+                    ]
                     mock_json.return_value = '{"InstanceId": "i-123"}'
 
                     try:
@@ -137,6 +150,7 @@ class TestFlagsAfterSeparator:
 
                     # All flags should work
                     from src.awsquery import utils
+
                     assert utils.debug_enabled is True
                     mock_json.assert_called_once()
 
@@ -160,8 +174,16 @@ class TestFlagsAfterSeparator:
         mock_session.return_value = Mock()
 
         sys.argv = [
-            "awsquery", "ec2", "describe-instances",
-            "--", "-j", "-d", "--region", "us-west-2", "--profile", "prod"
+            "awsquery",
+            "ec2",
+            "describe-instances",
+            "--",
+            "-j",
+            "-d",
+            "--region",
+            "us-west-2",
+            "--profile",
+            "prod",
         ]
 
         with patch("src.awsquery.cli.flatten_response") as mock_flatten:
@@ -178,6 +200,7 @@ class TestFlagsAfterSeparator:
 
                     # All flags should be recognized
                     from src.awsquery import utils
+
                     assert utils.debug_enabled is True
                     mock_json.assert_called_once()
                     mock_session.assert_called_once_with(region="us-west-2", profile="prod")
@@ -192,20 +215,32 @@ class TestFlagsAfterSeparator:
         """Test value filters before -- and flags after."""
         mock_validate.return_value = True
         mock_load_policy.return_value = set()
-        mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}]
+        mock_execute.return_value = [
+            {"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}
+        ]
         mock_session.return_value = Mock()
 
         sys.argv = [
-            "awsquery", "ec2", "describe-instances",
-            "prod", "running",  # value filters
-            "--", "InstanceId", "-d", "State.Name"  # column filters and flag
+            "awsquery",
+            "ec2",
+            "describe-instances",
+            "prod",
+            "running",  # value filters
+            "--",
+            "InstanceId",
+            "-d",
+            "State.Name",  # column filters and flag
         ]
 
         with patch("src.awsquery.cli.flatten_response") as mock_flatten:
             with patch("src.awsquery.cli.filter_resources") as mock_filter:
                 with patch("src.awsquery.cli.format_table_output") as mock_format:
-                    mock_flatten.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
-                    mock_filter.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
+                    mock_flatten.return_value = [
+                        {"InstanceId": "i-123", "State": {"Name": "running"}}
+                    ]
+                    mock_filter.return_value = [
+                        {"InstanceId": "i-123", "State": {"Name": "running"}}
+                    ]
                     mock_format.return_value = ""
 
                     try:
@@ -215,6 +250,7 @@ class TestFlagsAfterSeparator:
 
                     # Debug should be enabled
                     from src.awsquery import utils
+
                     assert utils.debug_enabled is True
 
                     # Value filters should be recognized

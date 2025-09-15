@@ -137,9 +137,9 @@ Examples:
         i = 0
         while i < len(remaining):
             arg = remaining[i]
-            if arg in ['-d', '--debug', '-j', '--json', '-k', '--keys']:
+            if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
                 flags.append(arg)
-            elif arg in ['--region', '--profile']:
+            elif arg in ["--region", "--profile"]:
                 # These flags take a value
                 flags.append(arg)
                 if i + 1 < len(remaining):
@@ -151,13 +151,13 @@ Examples:
 
         # Add original flags from sys.argv that were already parsed
         for arg in sys.argv[1:]:
-            if arg in ['-d', '--debug', '-j', '--json', '-k', '--keys']:
+            if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
                 if arg not in flags:
                     reordered_argv.append(arg)
-            elif arg == '--region' and args.region:
-                reordered_argv.extend(['--region', args.region])
-            elif arg == '--profile' and args.profile:
-                reordered_argv.extend(['--profile', args.profile])
+            elif arg == "--region" and args.region:
+                reordered_argv.extend(["--region", args.region])
+            elif arg == "--profile" and args.profile:
+                reordered_argv.extend(["--profile", args.profile])
 
         # Add newly found flags
         reordered_argv.extend(flags)
@@ -176,6 +176,7 @@ Examples:
 
     # Set debug mode globally
     from . import utils
+
     utils.debug_enabled = args.debug
 
     # Build the argv for filter parsing (service, action, and remaining arguments)

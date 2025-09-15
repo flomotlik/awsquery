@@ -23,7 +23,8 @@ class TestParserRegressionBugs:
     """Tests to prevent specific parser bugs from reoccurring."""
 
     def test_issue_double_dash_name_filter(self):
-        """
+        """Test double dash with Name filter doesn't cause parser error.
+
         Regression test for the specific issue:
         'awsquery ec2 describe-instances -- Name'
         was failing with 'error: unrecognized arguments: Name'
@@ -40,8 +41,8 @@ class TestParserRegressionBugs:
 
         # Verify correct parsing
         assert base_cmd == ["ec2", "describe-instances"]
-        assert resource_filters == []
-        assert value_filters == []
+        assert not resource_filters
+        assert not value_filters
         assert column_filters == ["Name"]
 
     @patch("src.awsquery.cli.create_session")
@@ -51,7 +52,8 @@ class TestParserRegressionBugs:
     def test_main_does_not_fail_with_unrecognized_arguments(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
-        """
+        """Test main() doesn't raise 'unrecognized arguments' error.
+
         Test that main() never raises 'unrecognized arguments' error
         when column filters are provided after --
         """
@@ -100,14 +102,17 @@ class TestParserRegressionBugs:
                             )
 
     def test_subprocess_execution_does_not_fail(self):
-        """
+        """Test that actual command line execution would work.
+
         Test that the actual command line execution would work
         (simulated via subprocess with a mock script)
         """
         # Create a test script that imports and uses the parser
-        test_script = '''
+        test_script = """
 import sys
-sys.path.insert(0, '/workspaces/awsquery')
+import os
+# Use current directory instead of hardcoded path
+sys.path.insert(0, os.getcwd())
 
 # Mock AWS to avoid credential issues
 from unittest.mock import Mock, patch
@@ -132,20 +137,23 @@ with patch("boto3.Session"):
                         sys.exit(1)
                     else:
                         print("SUCCESS: No parser error")
-'''
+"""
 
-        # Run the test script
+        # Run the test script from current directory
+        import os
+
         result = subprocess.run(
             [sys.executable, "-c", test_script],
             capture_output=True,
             text=True,
-            cwd="/workspaces/awsquery"
+            cwd=os.getcwd(),
+            check=False,  # Explicitly set check=False to handle errors ourselves
         )
 
         # Check output
-        assert "SUCCESS" in result.stdout, (
-            f"Parser test failed. stdout: {result.stdout}, stderr: {result.stderr}"
-        )
+        assert (
+            "SUCCESS" in result.stdout
+        ), f"Parser test failed. stdout: {result.stdout}, stderr: {result.stderr}"
         assert result.returncode == 0, "Script exited with error"
 
 
@@ -166,7 +174,9 @@ class TestParserFiltersArePropagated:
 
         mock_validate.return_value = True
         mock_load_policy.return_value = set()
-        mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}]
+        mock_execute.return_value = [
+            {"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}
+        ]
         mock_session.return_value = None
         mock_format.return_value = "formatted output"
 

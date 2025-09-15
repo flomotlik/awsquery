@@ -19,13 +19,11 @@ class TestConfigFileLoading:
         """Test that policy.json is loaded from the package directory, not cwd."""
         # Get the expected path
         import src.awsquery.security
-        expected_path = os.path.join(
-            os.path.dirname(src.awsquery.security.__file__),
-            "policy.json"
-        )
+
+        expected_path = os.path.join(os.path.dirname(src.awsquery.security.__file__), "policy.json")
 
         # Mock the file open to track what path is used
-        mock_policy_content = '''
+        mock_policy_content = """
         {
             "Statement": [
                 {
@@ -34,7 +32,7 @@ class TestConfigFileLoading:
                 }
             ]
         }
-        '''
+        """
 
         with patch("builtins.open", mock_open(read_data=mock_policy_content)) as mock_file:
             with patch("os.path.exists", return_value=True):
@@ -56,7 +54,7 @@ class TestConfigFileLoading:
                 os.chdir(tmpdir)
 
                 # Mock successful file read
-                mock_policy_content = '''
+                mock_policy_content = """
                 {
                     "Statement": [
                         {
@@ -65,7 +63,7 @@ class TestConfigFileLoading:
                         }
                     ]
                 }
-                '''
+                """
 
                 with patch("builtins.open", mock_open(read_data=mock_policy_content)):
                     result = load_security_policy()
@@ -80,9 +78,9 @@ class TestConfigFileLoading:
         """Test that default_filters.yaml is loaded from the package directory."""
         # Get the expected path
         import src.awsquery.config
+
         expected_path = os.path.join(
-            os.path.dirname(src.awsquery.config.__file__),
-            "default_filters.yaml"
+            os.path.dirname(src.awsquery.config.__file__), "default_filters.yaml"
         )
 
         # Clear the cache first
@@ -99,11 +97,7 @@ class TestConfigFileLoading:
         with patch("builtins.open", mock_open(read_data=mock_yaml_content)) as mock_file:
             with patch("yaml.safe_load") as mock_yaml:
                 mock_yaml.return_value = {
-                    "ec2": {
-                        "describe_instances": {
-                            "columns": ["InstanceId", "State.Name"]
-                        }
-                    }
+                    "ec2": {"describe_instances": {"columns": ["InstanceId", "State.Name"]}}
                 }
 
                 result = load_default_filters()
@@ -113,7 +107,10 @@ class TestConfigFileLoading:
 
                 # Verify the config was loaded
                 assert "ec2" in result
-                assert result["ec2"]["describe_instances"]["columns"] == ["InstanceId", "State.Name"]
+                assert result["ec2"]["describe_instances"]["columns"] == [
+                    "InstanceId",
+                    "State.Name",
+                ]
 
     def test_default_filters_not_affected_by_cwd(self):
         """Test that changing cwd doesn't affect default_filters.yaml loading."""
@@ -142,9 +139,9 @@ class TestConfigFileLoading:
                 """
 
                 import src.awsquery.config
+
                 package_path = os.path.join(
-                    os.path.dirname(src.awsquery.config.__file__),
-                    "default_filters.yaml"
+                    os.path.dirname(src.awsquery.config.__file__), "default_filters.yaml"
                 )
 
                 def mock_open_func(path, mode):
@@ -156,11 +153,7 @@ class TestConfigFileLoading:
                 with patch("builtins.open", side_effect=mock_open_func):
                     with patch("yaml.safe_load") as mock_yaml:
                         mock_yaml.return_value = {
-                            "s3": {
-                                "list_buckets": {
-                                    "columns": ["Name", "CreationDate"]
-                                }
-                            }
+                            "s3": {"list_buckets": {"columns": ["Name", "CreationDate"]}}
                         }
 
                         result = load_default_filters()
@@ -177,10 +170,8 @@ class TestConfigFileLoading:
     def test_policy_json_missing_handles_gracefully(self):
         """Test that missing policy.json is handled with proper error message."""
         import src.awsquery.security
-        expected_path = os.path.join(
-            os.path.dirname(src.awsquery.security.__file__),
-            "policy.json"
-        )
+
+        expected_path = os.path.join(os.path.dirname(src.awsquery.security.__file__), "policy.json")
 
         with patch("builtins.open", side_effect=FileNotFoundError()):
             with pytest.raises(SystemExit) as exc_info:
@@ -247,13 +238,13 @@ class TestConfigFileLoading:
 
     def test_policy_json_invalid_structure(self):
         """Test handling of invalid policy structure."""
-        invalid_policy = '''
+        invalid_policy = """
         {
             "NotStatement": [
                 {"Something": "else"}
             ]
         }
-        '''
+        """
 
         with patch("builtins.open", mock_open(read_data=invalid_policy)):
             result = load_security_policy()
@@ -262,7 +253,7 @@ class TestConfigFileLoading:
 
     def test_policy_json_with_deny_statements(self):
         """Test that Deny statements are ignored."""
-        policy_with_deny = '''
+        policy_with_deny = """
         {
             "Statement": [
                 {
@@ -275,7 +266,7 @@ class TestConfigFileLoading:
                 }
             ]
         }
-        '''
+        """
 
         with patch("builtins.open", mock_open(read_data=policy_with_deny)):
             result = load_security_policy()
@@ -285,7 +276,7 @@ class TestConfigFileLoading:
 
     def test_policy_json_with_string_action(self):
         """Test handling of single string action instead of array."""
-        policy_string_action = '''
+        policy_string_action = """
         {
             "Statement": [
                 {
@@ -294,7 +285,7 @@ class TestConfigFileLoading:
                 }
             ]
         }
-        '''
+        """
 
         with patch("builtins.open", mock_open(read_data=policy_string_action)):
             result = load_security_policy()
@@ -340,7 +331,7 @@ class TestConfigFileLoading:
 
     def test_policy_json_with_policy_version_structure(self):
         """Test loading policy with PolicyVersion structure."""
-        policy_with_version = '''
+        policy_with_version = """
         {
             "PolicyVersion": {
                 "Document": {
@@ -353,7 +344,7 @@ class TestConfigFileLoading:
                 }
             }
         }
-        '''
+        """
 
         with patch("builtins.open", mock_open(read_data=policy_with_version)):
             result = load_security_policy()
@@ -365,13 +356,7 @@ class TestConfigFileLoading:
 
         load_default_filters.cache_clear()
 
-        mock_config = {
-            "ec2": {
-                "describe_instances": {
-                    "columns": ["InstanceId", "State.Name"]
-                }
-            }
-        }
+        mock_config = {"ec2": {"describe_instances": {"columns": ["InstanceId", "State.Name"]}}}
 
         with patch("src.awsquery.config.load_default_filters", return_value=mock_config):
             # Test exact match

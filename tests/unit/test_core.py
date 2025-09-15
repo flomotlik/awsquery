@@ -363,9 +363,7 @@ class TestExecuteMultiLevelCall:
         # Second call fetches list of clusters (no parameters, session=None)
         assert calls[1] == call("eks", "list_clusters", session=None)
         # Third call with resolved parameter
-        assert calls[2] == call(
-            "eks", "describe-cluster", {"ClusterName": "test-cluster"}, None
-        )
+        assert calls[2] == call("eks", "describe-cluster", {"ClusterName": "test-cluster"}, None)
 
     @patch("src.awsquery.core.execute_aws_call")
     @patch("src.awsquery.core.infer_list_operation")
@@ -505,9 +503,7 @@ class TestExecuteMultiLevelCall:
 
         # Should use first value
         final_call = mock_execute.call_args_list[-1]
-        assert final_call == call(
-            "eks", "describe-cluster", {"ClusterName": "cluster1"}, None
-        )
+        assert final_call == call("eks", "describe-cluster", {"ClusterName": "cluster1"}, None)
 
     def test_list_parameter_handling_logic(self):
         """Test the logic for determining if a parameter expects a list."""

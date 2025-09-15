@@ -47,7 +47,15 @@ class TestCLIParserSeparator:
 
     def test_parse_multi_level_with_double_separators(self):
         """Test multi-level parsing with multiple -- separators."""
-        argv = ["cloudformation", "describe-stack-events", "prod", "--", "Created", "--", "StackName"]
+        argv = [
+            "cloudformation",
+            "describe-stack-events",
+            "prod",
+            "--",
+            "Created",
+            "--",
+            "StackName",
+        ]
         base_cmd, resource_filters, value_filters, column_filters = (
             parse_multi_level_filters_for_mode(argv, mode="multi")
         )
@@ -105,9 +113,13 @@ class TestCLIParserSeparator:
         # Simulate command with --region flag and column filters
         sys.argv = [
             "awsquery",
-            "--region", "us-west-2",
-            "ec2", "describe-instances",
-            "--", "Name", "State"
+            "--region",
+            "us-west-2",
+            "ec2",
+            "describe-instances",
+            "--",
+            "Name",
+            "State",
         ]
 
         with patch("src.awsquery.cli.flatten_response") as mock_flatten:
@@ -138,12 +150,7 @@ class TestCLIParserSeparator:
         mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
         mock_session.return_value = Mock()
 
-        sys.argv = [
-            "awsquery",
-            "-j",
-            "ec2", "describe-instances",
-            "--", "InstanceId"
-        ]
+        sys.argv = ["awsquery", "-j", "ec2", "describe-instances", "--", "InstanceId"]
 
         with patch("src.awsquery.cli.flatten_response") as mock_flatten:
             with patch("src.awsquery.cli.filter_resources") as mock_filter:
@@ -211,12 +218,19 @@ class TestCLIParserEdgeCases:
         sys.argv = [
             "awsquery",
             "--debug",
-            "--region", "eu-west-1",
-            "--profile", "production",
+            "--region",
+            "eu-west-1",
+            "--profile",
+            "production",
             "-j",
-            "ec2", "describe-instances",
-            "prod", "web",  # value filters
-            "--", "Name", "State", "InstanceId"  # column filters
+            "ec2",
+            "describe-instances",
+            "prod",
+            "web",  # value filters
+            "--",
+            "Name",
+            "State",
+            "InstanceId",  # column filters
         ]
 
         with patch("src.awsquery.cli.flatten_response") as mock_flatten:
@@ -234,11 +248,11 @@ class TestCLIParserEdgeCases:
 
                         # Verify session was created with correct params
                         mock_session.assert_called_once_with(
-                            region="eu-west-1",
-                            profile="production"
+                            region="eu-west-1", profile="production"
                         )
                         # Debug should have been enabled
                         from src.awsquery import utils
+
                         assert utils.debug_enabled is True
 
 
@@ -253,7 +267,7 @@ class TestCLIParserRegression:
     def test_parser_does_not_fail_on_column_filters(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
-        """Regression test: Parser should not fail with 'unrecognized arguments' for column filters."""
+        """Test parser doesn't fail with 'unrecognized arguments' for column filters."""
         mock_validate.return_value = True
         mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Buckets": []}]
@@ -284,11 +298,15 @@ class TestCLIParserRegression:
         test_cases = [
             (
                 ["ec2", "describe-instances", "--", "Name"],
-                {"base": ["ec2", "describe-instances"], "column": ["Name"]}
+                {"base": ["ec2", "describe-instances"], "column": ["Name"]},
             ),
             (
                 ["s3", "list-buckets", "backup", "--", "Name", "CreationDate"],
-                {"base": ["s3", "list-buckets"], "value": ["backup"], "column": ["Name", "CreationDate"]}
+                {
+                    "base": ["s3", "list-buckets"],
+                    "value": ["backup"],
+                    "column": ["Name", "CreationDate"],
+                },
             ),
             (
                 ["cloudformation", "describe-stacks", "prod", "--", "Status", "--", "StackName"],
@@ -298,8 +316,8 @@ class TestCLIParserRegression:
                     "column_single": ["StackName"],
                     "resource_multi": ["prod"],  # In multi mode
                     "value_multi": ["Status"],
-                    "column_multi": ["StackName"]
-                }
+                    "column_multi": ["StackName"],
+                },
             ),
         ]
 

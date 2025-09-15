@@ -225,7 +225,6 @@ class TestEndToEndScenarios:
         assert isinstance(result, bool)  # Should return a boolean
 
 
-
 @pytest.mark.integration
 @pytest.mark.aws
 class TestCLIArgumentParsing:

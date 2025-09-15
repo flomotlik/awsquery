@@ -28,9 +28,7 @@ class TestFlagPositioning:
     @patch("src.awsquery.cli.execute_aws_call")
     @patch("src.awsquery.cli.load_security_policy")
     @patch("src.awsquery.cli.validate_security")
-    def test_debug_flag_at_end(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    def test_debug_flag_at_end(self, mock_validate, mock_load_policy, mock_execute, mock_session):
         """Test that -d flag works when placed at the end of the command."""
         mock_validate.return_value = True
         mock_load_policy.return_value = set()
@@ -50,6 +48,7 @@ class TestFlagPositioning:
 
                     # Debug should be enabled
                     from src.awsquery import utils
+
                     assert utils.debug_enabled is True
 
     @patch("src.awsquery.cli.create_session")
@@ -78,15 +77,14 @@ class TestFlagPositioning:
 
                     # Debug should be enabled
                     from src.awsquery import utils
+
                     assert utils.debug_enabled is True
 
     @patch("src.awsquery.cli.create_session")
     @patch("src.awsquery.cli.execute_aws_call")
     @patch("src.awsquery.cli.load_security_policy")
     @patch("src.awsquery.cli.validate_security")
-    def test_json_flag_at_end(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    def test_json_flag_at_end(self, mock_validate, mock_load_policy, mock_execute, mock_session):
         """Test that -j flag works when placed at the end."""
         mock_validate.return_value = True
         mock_load_policy.return_value = set()
@@ -114,9 +112,7 @@ class TestFlagPositioning:
     @patch("src.awsquery.cli.execute_aws_call")
     @patch("src.awsquery.cli.load_security_policy")
     @patch("src.awsquery.cli.validate_security")
-    def test_keys_flag_at_end(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    def test_keys_flag_at_end(self, mock_validate, mock_load_policy, mock_execute, mock_session):
         """Test that -k flag works when placed at the end."""
         mock_validate.return_value = True
         mock_load_policy.return_value = set()
@@ -126,6 +122,7 @@ class TestFlagPositioning:
 
         with patch("src.awsquery.cli.execute_with_tracking") as mock_tracking:
             from src.awsquery.core import CallResult
+
             result = CallResult()
             result.final_success = True
             result.last_successful_response = [{"Instances": [{"InstanceId": "i-123"}]}]
@@ -145,9 +142,7 @@ class TestFlagPositioning:
     @patch("src.awsquery.cli.execute_aws_call")
     @patch("src.awsquery.cli.load_security_policy")
     @patch("src.awsquery.cli.validate_security")
-    def test_region_flag_at_end(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    def test_region_flag_at_end(self, mock_validate, mock_load_policy, mock_execute, mock_session):
         """Test that --region flag works when placed at the end."""
         mock_validate.return_value = True
         mock_load_policy.return_value = set()
@@ -180,10 +175,7 @@ class TestFlagPositioning:
         mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
         mock_session.return_value = Mock()
 
-        sys.argv = [
-            "awsquery", "ec2", "describe-instances",
-            "--region", "eu-west-1", "-j", "-d"
-        ]
+        sys.argv = ["awsquery", "ec2", "describe-instances", "--region", "eu-west-1", "-j", "-d"]
 
         with patch("src.awsquery.cli.flatten_response") as mock_flatten:
             with patch("src.awsquery.cli.filter_resources") as mock_filter:
@@ -201,6 +193,7 @@ class TestFlagPositioning:
                     mock_session.assert_called_once_with(region="eu-west-1", profile=None)
                     mock_json.assert_called_once()
                     from src.awsquery import utils
+
                     assert utils.debug_enabled is True
 
     @patch("src.awsquery.cli.create_session")
@@ -213,20 +206,23 @@ class TestFlagPositioning:
         """Test flags mixed with value and column filters."""
         mock_validate.return_value = True
         mock_load_policy.return_value = set()
-        mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}]
+        mock_execute.return_value = [
+            {"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}
+        ]
         mock_session.return_value = Mock()
 
         # Complex command with flags before the -- separator
-        sys.argv = [
-            "awsquery", "ec2", "describe-instances",
-            "prod", "-d", "-j", "--", "InstanceId"
-        ]
+        sys.argv = ["awsquery", "ec2", "describe-instances", "prod", "-d", "-j", "--", "InstanceId"]
 
         with patch("src.awsquery.cli.flatten_response") as mock_flatten:
             with patch("src.awsquery.cli.filter_resources") as mock_filter:
                 with patch("src.awsquery.cli.format_json_output") as mock_json:
-                    mock_flatten.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
-                    mock_filter.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
+                    mock_flatten.return_value = [
+                        {"InstanceId": "i-123", "State": {"Name": "running"}}
+                    ]
+                    mock_filter.return_value = [
+                        {"InstanceId": "i-123", "State": {"Name": "running"}}
+                    ]
                     mock_json.return_value = '{"InstanceId": "i-123"}'
 
                     try:
@@ -236,6 +232,7 @@ class TestFlagPositioning:
 
                     # Verify flags were recognized
                     from src.awsquery import utils
+
                     assert utils.debug_enabled is True
                     mock_json.assert_called_once()
 

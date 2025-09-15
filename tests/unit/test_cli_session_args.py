@@ -242,14 +242,10 @@ class TestSessionIntegration:
         with patch("src.awsquery.core.execute_aws_call") as mock_execute:
             mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
 
-            execute_multi_level_call(
-                "ec2", "describe-instances", [], [], [], session=mock_session
-            )
+            execute_multi_level_call("ec2", "describe-instances", [], [], [], session=mock_session)
 
             # Verify session was passed to execute_aws_call
-            mock_execute.assert_called_once_with(
-                "ec2", "describe-instances", session=mock_session
-            )
+            mock_execute.assert_called_once_with("ec2", "describe-instances", session=mock_session)
 
 
 @pytest.mark.unit

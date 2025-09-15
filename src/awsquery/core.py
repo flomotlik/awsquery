@@ -50,7 +50,6 @@ def execute_aws_call(service, action, parameters=None, session=None):
     """Execute AWS API call with pagination support and optional parameters"""
     normalized_action = normalize_action_name(action)
 
-
     try:
         client = get_client(service, session)
         operation = getattr(client, normalized_action, None)

@@ -124,9 +124,7 @@ class TestExecuteWithTracking:
         mock_execute.return_value = mock_response
         params = {"InstanceIds": ["i-123"]}
 
-        result = execute_with_tracking(
-            "ec2", "describe-instances", parameters=params
-        )
+        result = execute_with_tracking("ec2", "describe-instances", parameters=params)
 
         mock_execute.assert_called_once_with("ec2", "describe-instances", params, None)
         assert result.final_success is True
