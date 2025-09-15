@@ -8,6 +8,7 @@ on:
     branches: [main]
   schedule:
     - cron: '0 0 * * 0'  # Weekly on Sunday
+  workflow_call:  # Allow this workflow to be called by other workflows
 
 jobs:
   test:
