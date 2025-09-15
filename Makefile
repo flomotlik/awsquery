@@ -13,7 +13,7 @@ NC := \033[0m
 
 .PHONY: help clean install-dev test test-unit test-integration test-critical test-slow coverage \
         coverage-report lint format format-check type-check security-check ci build publish-test \
-        publish watch-tests version release all ec2-instances s3-buckets iam-users \
+        publish watch-tests version release update-policy validate-policy all ec2-instances s3-buckets iam-users \
         iam-roles lambda-functions cloudformation-stacks dynamodb-tables ec2-volumes \
         ec2-security-groups s3-bucket-versioning cloudwatch-alarms route53-zones shell \
         docker-build docker-clean test-in-docker test-awsquery
@@ -132,6 +132,30 @@ release: ## Create a new release (requires clean git state)
 		git tag -a "v$$VERSION" -m "Release version $$VERSION" && \
 		echo "$(GREEN)Tagged version $$VERSION. Run 'git push --tags' to push.$(NC)"
 
+update-policy: ## Update policy.json with latest AWS ReadOnly managed policy
+	@echo "$(BLUE)Fetching latest AWS ReadOnly managed policy...$(NC)"
+	@aws iam get-policy --policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess --query 'Policy.DefaultVersionId' --output text | \
+		xargs -I {} aws iam get-policy-version \
+			--policy-arn arn:aws:iam::aws:policy/ReadOnlyAccess \
+			--version-id {} \
+			--query 'PolicyVersion.Document' \
+			--output json > src/awsquery/policy.json.tmp && \
+		python3 -c "import json, sys; \
+			data = json.load(open('src/awsquery/policy.json.tmp')); \
+			print(json.dumps(data, indent=2, sort_keys=True))" > src/awsquery/policy.json && \
+		rm -f src/awsquery/policy.json.tmp && \
+		echo "$(GREEN)✓ Updated src/awsquery/policy.json with latest AWS ReadOnly policy$(NC)" || \
+		(rm -f src/awsquery/policy.json.tmp && echo "$(RED)✗ Failed to update policy.json$(NC)" && exit 1)
+
+validate-policy: ## Validate that policy.json is a valid AWS policy document
+	@echo "$(BLUE)Validating policy.json...$(NC)"
+	@python3 -c "import json; \
+		policy = json.load(open('src/awsquery/policy.json')); \
+		assert 'Statement' in policy or 'PolicyVersion' in policy, 'Invalid policy structure'; \
+		print('✓ policy.json is valid')" && \
+		echo "$(GREEN)✓ policy.json validation passed$(NC)" || \
+		echo "$(RED)✗ policy.json validation failed$(NC)"
+
 # =============================================================================
 # AWS API RESPONSE SAMPLING TARGETS (PRESERVED)
 # =============================================================================
@@ -208,7 +232,7 @@ test-in-docker: docker-build ## Test awsquery in Docker container (AWS)
 	-docker-compose run --rm awsquery-dev aws sts get-caller-identity
 	@echo ""
 	@echo "Testing awsquery command..."
-	-docker-compose run --rm awsquery-dev python awsquery.py --dry-run ec2 describe_instances
+	-docker-compose run --rm awsquery-dev python awsquery.py ec2 describe_instances
 	@echo ""
 	@echo "Running tests in Docker..."
 	-docker-compose run --rm awsquery-dev make test
@@ -217,8 +241,8 @@ test-in-docker-prod: docker-build-prod ## Test production Docker container (AWS)
 	@echo "Testing production awsquery in Docker container..."
 	docker-compose run --rm awsquery-prod --help
 	@echo ""
-	@echo "Testing production dry-run..."
-	-docker-compose run --rm awsquery-prod ec2 describe-instances --dry-run
+	@echo "Testing production command..."
+	-docker-compose run --rm awsquery-prod ec2 describe-instances
 
 # Comprehensive awsquery testing target
 test-awsquery: ## Run comprehensive awsquery functional tests (AWS)

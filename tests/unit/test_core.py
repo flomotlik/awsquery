@@ -23,22 +23,6 @@ from src.awsquery.core import (
 @pytest.mark.critical
 class TestExecuteAwsCall:
 
-    def test_dry_run_mode_success(self, capsys):
-        result = execute_aws_call("ec2", "describe-instances", dry_run=True)
-
-        assert result == []
-        captured = capsys.readouterr()
-        assert "DRY RUN: Would execute ec2.describe_instances()" in captured.err
-
-    def test_dry_run_mode_with_parameters(self, capsys):
-        params = {"InstanceIds": ["i-123"]}
-        result = execute_aws_call("ec2", "describe-instances", dry_run=True, parameters=params)
-
-        assert result == []
-        captured = capsys.readouterr()
-        assert "DRY RUN: Would execute ec2.describe_instances() with parameters" in captured.err
-        assert "InstanceIds" in captured.err
-
     def test_successful_paginated_call(self, sample_ec2_response):
         from src.awsquery import utils
 
@@ -317,7 +301,7 @@ class TestExecuteMultiLevelCall:
 
         assert len(result) == 1
         assert result[0]["InstanceId"] == "i-123"
-        mock_execute.assert_called_once_with("ec2", "describe-instances", False, session=None)
+        mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
         # Verify the flatten_response was called
         mock_flatten.assert_called_once_with(mock_response)
         # Since we have value_filters, filter_resources should be called
@@ -375,12 +359,12 @@ class TestExecuteMultiLevelCall:
         calls = mock_execute.call_args_list
         assert len(calls) == 3
         # First call attempts describe-cluster without parameters (no parameters, session=None)
-        assert calls[0] == call("eks", "describe-cluster", False, session=None)
+        assert calls[0] == call("eks", "describe-cluster", session=None)
         # Second call fetches list of clusters (no parameters, session=None)
-        assert calls[1] == call("eks", "list_clusters", False, session=None)
-        # Third call with resolved parameter (parameters as 4th arg, session as 5th)
+        assert calls[1] == call("eks", "list_clusters", session=None)
+        # Third call with resolved parameter
         assert calls[2] == call(
-            "eks", "describe-cluster", False, {"ClusterName": "test-cluster"}, None
+            "eks", "describe-cluster", {"ClusterName": "test-cluster"}, None
         )
 
     @patch("src.awsquery.core.execute_aws_call")
@@ -522,7 +506,7 @@ class TestExecuteMultiLevelCall:
         # Should use first value
         final_call = mock_execute.call_args_list[-1]
         assert final_call == call(
-            "eks", "describe-cluster", False, {"ClusterName": "cluster1"}, None
+            "eks", "describe-cluster", {"ClusterName": "cluster1"}, None
         )
 
     def test_list_parameter_handling_logic(self):

@@ -224,7 +224,7 @@ class TestSessionIntegration:
         # Mock pagination to fall back to direct call
         mock_client.get_paginator.side_effect = Exception("Not pageable")
 
-        execute_aws_call("ec2", "describe-instances", dry_run=False, session=mock_session)
+        execute_aws_call("ec2", "describe-instances", session=mock_session)
 
         mock_get_client.assert_called_once_with("ec2", mock_session)
 
@@ -243,12 +243,12 @@ class TestSessionIntegration:
             mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
 
             execute_multi_level_call(
-                "ec2", "describe-instances", [], [], [], dry_run=False, session=mock_session
+                "ec2", "describe-instances", [], [], [], session=mock_session
             )
 
             # Verify session was passed to execute_aws_call
             mock_execute.assert_called_once_with(
-                "ec2", "describe-instances", False, session=mock_session
+                "ec2", "describe-instances", session=mock_session
             )
 
 

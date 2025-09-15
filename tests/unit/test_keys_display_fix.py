@@ -64,7 +64,7 @@ class TestExecuteWithTracking:
         mock_response = [{"Instances": [{"InstanceId": "i-123"}]}]
         mock_execute.return_value = mock_response
 
-        result = execute_with_tracking("ec2", "describe-instances", dry_run=False)
+        result = execute_with_tracking("ec2", "describe-instances")
 
         assert result.final_success is True
         assert result.last_successful_response == mock_response
@@ -84,7 +84,7 @@ class TestExecuteWithTracking:
         }
         mock_execute.return_value = validation_response
 
-        result = execute_with_tracking("eks", "describe-cluster", dry_run=False)
+        result = execute_with_tracking("eks", "describe-cluster")
 
         assert result.final_success is False
         assert result.last_successful_response is None
@@ -97,7 +97,7 @@ class TestExecuteWithTracking:
         """Test tracking when execute_aws_call raises exception."""
         mock_execute.side_effect = Exception("AWS API error")
 
-        result = execute_with_tracking("ec2", "describe-instances", dry_run=False)
+        result = execute_with_tracking("ec2", "describe-instances")
 
         assert result.final_success is False
         assert result.last_successful_response is None
@@ -112,9 +112,9 @@ class TestExecuteWithTracking:
         mock_execute.return_value = mock_response
         mock_session = Mock()
 
-        result = execute_with_tracking("s3", "list-buckets", dry_run=False, session=mock_session)
+        result = execute_with_tracking("s3", "list-buckets", session=mock_session)
 
-        mock_execute.assert_called_once_with("s3", "list-buckets", False, None, mock_session)
+        mock_execute.assert_called_once_with("s3", "list-buckets", None, mock_session)
         assert result.final_success is True
 
     @patch("src.awsquery.core.execute_aws_call")
@@ -125,10 +125,10 @@ class TestExecuteWithTracking:
         params = {"InstanceIds": ["i-123"]}
 
         result = execute_with_tracking(
-            "ec2", "describe-instances", dry_run=False, parameters=params
+            "ec2", "describe-instances", parameters=params
         )
 
-        mock_execute.assert_called_once_with("ec2", "describe-instances", False, params, None)
+        mock_execute.assert_called_once_with("ec2", "describe-instances", params, None)
         assert result.final_success is True
 
 

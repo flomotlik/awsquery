@@ -2,6 +2,7 @@
 
 import fnmatch
 import json
+import os
 import sys
 
 from .utils import debug_print
@@ -9,8 +10,11 @@ from .utils import debug_print
 
 def load_security_policy():
     """Load and parse AWS ReadOnly policy from policy.json"""
+    # Load policy.json from the package directory, not current directory
+    policy_path = os.path.join(os.path.dirname(__file__), "policy.json")
+
     try:
-        with open("policy.json", "r") as f:
+        with open(policy_path, "r") as f:
             policy = json.load(f)
 
         debug_print(f"DEBUG: Loaded policy with keys: {list(policy.keys())}")
@@ -47,13 +51,13 @@ def load_security_policy():
         return allowed_actions
     except FileNotFoundError:
         print(
-            "ERROR: policy.json not found. This file is required for security validation.",
+            f"ERROR: {policy_path} not found. This file is required for security validation.",
             file=sys.stderr,
         )
         sys.exit(1)
     except json.JSONDecodeError:
         print(
-            "ERROR: Invalid JSON in policy.json. This file is required for security validation.",
+            f"ERROR: Invalid JSON in {policy_path}. This file is required for security validation.",
             file=sys.stderr,
         )
         sys.exit(1)

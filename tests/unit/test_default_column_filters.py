@@ -43,9 +43,10 @@ class TestLoadDefaultFilters:
             config = load_default_filters()
 
             assert config == {}
-            mock_debug.assert_called_with(
-                "Warning: default_filters.yaml not found, no defaults will be applied"
-            )
+            # Check that the warning message contains the expected text
+            mock_debug.assert_called_once()
+            call_args = mock_debug.call_args[0][0]
+            assert "not found, no defaults will be applied" in call_args
 
     @patch("src.awsquery.config.yaml.safe_load")
     @patch("builtins.open")
@@ -60,9 +61,11 @@ class TestLoadDefaultFilters:
             config = load_default_filters()
 
             assert config == {}
-            mock_debug.assert_called_with(
-                "Warning: Could not load default filters: YAML parse error"
-            )
+            # Check that the warning message contains the expected text
+            mock_debug.assert_called_once()
+            call_args = mock_debug.call_args[0][0]
+            assert "Could not load default filters" in call_args
+            assert "YAML parse error" in call_args
 
     def test_caching_behavior(self):
         """Test that the function uses caching correctly."""

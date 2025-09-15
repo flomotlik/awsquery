@@ -762,15 +762,6 @@ class TestUtilityFunctions:
         assert result == expected_keys
 
     @patch("src.awsquery.core.execute_aws_call")
-    def test_show_keys_dry_run(self, mock_execute):
-        """Test show_keys with dry_run=True."""
-        mock_execute.return_value = []  # execute_aws_call returns empty list for dry run
-
-        result = show_keys("ec2", "describe-instances", dry_run=True)
-        assert result == "DRY RUN: Would show keys for this response."
-        mock_execute.assert_called_once_with("ec2", "describe-instances", True, session=None)
-
-    @patch("src.awsquery.core.execute_aws_call")
     def test_show_keys_no_data(self, mock_execute):
         """Test show_keys when no data is available."""
         mock_execute.return_value = {"ResponseMetadata": {"RequestId": "test"}}
@@ -778,7 +769,7 @@ class TestUtilityFunctions:
         result = show_keys("ec2", "describe-instances")
 
         assert result == "No data to extract keys from."
-        mock_execute.assert_called_once_with("ec2", "describe-instances", False, session=None)
+        mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
 
     @patch("src.awsquery.core.execute_aws_call")
     def test_show_keys_with_data(self, mock_execute):
@@ -819,7 +810,7 @@ class TestUtilityFunctions:
         assert "InstanceId" in lines
         assert "Status" in lines
 
-        mock_execute.assert_called_once_with("ec2", "describe-instances", False, session=None)
+        mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
 
 
 @pytest.mark.unit

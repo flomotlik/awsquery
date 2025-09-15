@@ -224,21 +224,6 @@ class TestEndToEndScenarios:
         result = validate_security("ec2", "DescribeInstances", empty_policy)
         assert isinstance(result, bool)  # Should return a boolean
 
-    def test_dry_run_mode_integration(self, mock_security_policy):
-        """Test dry-run mode integration."""
-        # Test that dry-run mode doesn't execute actual AWS calls
-
-        # Security validation should still work in dry-run
-        assert validate_security("ec2", "DescribeInstances", mock_security_policy)
-
-        # Action formatting should work in dry-run
-        assert action_to_policy_format("describe-instances") == "DescribeInstances"
-
-        # Argument parsing should work in dry-run
-        argv = ["ec2", "describe-instances", "--dry-run"]
-        base_cmd, _, _, _ = parse_multi_level_filters_for_mode(argv, mode="single")
-        assert "ec2" in base_cmd
-        assert "describe-instances" in base_cmd
 
 
 @pytest.mark.integration
@@ -882,7 +867,7 @@ class TestCLIOutputFormats:
             mock_execute.return_value = sample_ec2_response
 
             # Test show_keys function
-            keys_output = show_keys("ec2", "DescribeInstances", dry_run=True)
+            keys_output = show_keys("ec2", "DescribeInstances")
 
             # Should be a string containing available keys
             assert isinstance(keys_output, str)

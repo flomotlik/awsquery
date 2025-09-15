@@ -85,13 +85,12 @@ class TestCompleteMultiLevelWorkflows:
         # Verify call sequence: initial -> list -> final with resolved parameter
         calls = mock_execute.call_args_list
         assert len(calls) == 3
-        assert calls[0] == call("cloudformation", "describe-stack-events", False, session=None)
+        assert calls[0] == call("cloudformation", "describe-stack-events", session=None)
         # The actual operation name may vary based on infer_list_operation logic
         assert "cloudformation" in str(calls[1])
         assert calls[2] == call(
             "cloudformation",
             "describe-stack-events",
-            False,
             {"StackName": "production-infrastructure"},
             None,
         )
@@ -719,7 +718,7 @@ class TestErrorScenariosIntegration:
             mock_client.describe_instances.return_value = {}  # Empty response
             mock_client.get_paginator.side_effect = Exception("OperationNotPageableError")
 
-            result = execute_aws_call("ec2", "describe_instances", dry_run=False)
+            result = execute_aws_call("ec2", "describe_instances")
             # Should return a list (non-pageable response)
             assert isinstance(result, list)
             assert len(result) == 1
@@ -809,7 +808,7 @@ class TestEdgeCasesIntegration:
         assert len(result) == 1
         # Should use the only valid stack name
         final_call = mock_execute.call_args_list[-1]
-        assert final_call[0][3]["StackName"] == "valid-stack"
+        assert final_call[0][2]["StackName"] == "valid-stack"
 
     @patch("src.awsquery.core.execute_aws_call")
     @patch("src.awsquery.core.get_correct_parameter_name")
@@ -1604,7 +1603,7 @@ class TestCoreErrorScenariosBasic:
             mock_client.describe_instances.return_value = {"Reservations": []}
             mock_client.get_paginator.side_effect = Exception("OperationNotPageableError")
 
-            result = execute_aws_call("ec2", "describe_instances", dry_run=False)
+            result = execute_aws_call("ec2", "describe_instances")
             assert isinstance(result, list)  # Returns list when not pageable
             assert len(result) == 1
             assert "Reservations" in result[0]

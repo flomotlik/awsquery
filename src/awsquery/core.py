@@ -21,12 +21,12 @@ class CallResult:
         self.error_messages = []
 
 
-def execute_with_tracking(service, action, dry_run=False, parameters=None, session=None):
+def execute_with_tracking(service, action, parameters=None, session=None):
     """Execute AWS call with tracking for keys mode"""
     result = CallResult()
 
     try:
-        response = execute_aws_call(service, action, dry_run, parameters, session)
+        response = execute_aws_call(service, action, parameters, session)
 
         # Check if response indicates a validation error (for multi-level calls)
         if isinstance(response, dict) and "validation_error" in response:
@@ -46,16 +46,10 @@ def execute_with_tracking(service, action, dry_run=False, parameters=None, sessi
     return result
 
 
-def execute_aws_call(service, action, dry_run=False, parameters=None, session=None):
+def execute_aws_call(service, action, parameters=None, session=None):
     """Execute AWS API call with pagination support and optional parameters"""
     normalized_action = normalize_action_name(action)
 
-    if dry_run:
-        params_str = f" with parameters {parameters}" if parameters else ""
-        print(
-            f"DRY RUN: Would execute {service}.{normalized_action}(){params_str}", file=sys.stderr
-        )
-        return []
 
     try:
         client = get_client(service, session)
@@ -128,7 +122,7 @@ def execute_aws_call(service, action, dry_run=False, parameters=None, session=No
 
 
 def execute_multi_level_call_with_tracking(
-    service, action, resource_filters, value_filters, column_filters, dry_run=False, session=None
+    service, action, resource_filters, value_filters, column_filters, session=None
 ):
     """Handle multi-level API calls with automatic parameter resolution and tracking"""
     debug_print(f"Starting multi-level call with tracking for {service}.{action}")
@@ -141,7 +135,7 @@ def execute_multi_level_call_with_tracking(
 
     # First attempt - main call
     try:
-        response = execute_aws_call(service, action, dry_run, parameters=None, session=session)
+        response = execute_aws_call(service, action, parameters=None, session=session)
 
         if isinstance(response, dict) and "validation_error" in response:
             call_result.error_messages.append(
@@ -193,7 +187,7 @@ def execute_multi_level_call_with_tracking(
                 debug_print(f"Trying list operation: {operation}")
                 print(f"Calling {operation} to find available resources...", file=sys.stderr)
 
-                list_response = execute_aws_call(service, operation, dry_run, session=session)
+                list_response = execute_aws_call(service, operation, session=session)
 
                 if isinstance(list_response, list) and list_response:
                     successful_operation = operation
@@ -297,7 +291,7 @@ def execute_multi_level_call_with_tracking(
 
         # Final call with resolved parameters
         try:
-            final_response = execute_aws_call(service, action, dry_run, parameters, session)
+            final_response = execute_aws_call(service, action, parameters, session)
 
             if isinstance(final_response, dict) and "validation_error" in final_response:
                 call_result.error_messages.append(
@@ -340,7 +334,7 @@ def execute_multi_level_call_with_tracking(
 
 
 def execute_multi_level_call(
-    service, action, resource_filters, value_filters, column_filters, dry_run=False, session=None
+    service, action, resource_filters, value_filters, column_filters, session=None
 ):
     """Handle multi-level API calls with automatic parameter resolution"""
     debug_print(f"Starting multi-level call for {service}.{action}")
@@ -349,7 +343,7 @@ def execute_multi_level_call(
         f"Value filters: {value_filters}, Column filters: {column_filters}"
     )
 
-    response = execute_aws_call(service, action, dry_run, session=session)
+    response = execute_aws_call(service, action, session=session)
 
     if isinstance(response, dict) and "validation_error" in response:
         error_info = response["validation_error"]
@@ -370,7 +364,7 @@ def execute_multi_level_call(
 
                 print(f"Calling {operation} to find available resources...", file=sys.stderr)
 
-                list_response = execute_aws_call(service, operation, dry_run, session=session)
+                list_response = execute_aws_call(service, operation, session=session)
 
                 if isinstance(list_response, list) and list_response:
                     successful_operation = operation
@@ -460,7 +454,7 @@ def execute_multi_level_call(
             )
 
         parameters = {converted_parameter_name: param_value}
-        response = execute_aws_call(service, action, dry_run, parameters, session)
+        response = execute_aws_call(service, action, parameters, session)
 
         if isinstance(response, dict) and "validation_error" in response:
             print(

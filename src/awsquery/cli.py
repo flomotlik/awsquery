@@ -92,7 +92,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  awsquery ec2 describe_instances prod web -- Name State InstanceId
+  awsquery ec2 describe_instances prod web -- Tags.Name State InstanceId
   awsquery s3 list_buckets backup
   awsquery ec2 describe_instances  (shows available keys)
   awsquery cloudformation describe-stack-events prod -- Created -- StackName (multi-level)
@@ -103,9 +103,6 @@ Examples:
         """,
     )
 
-    parser.add_argument(
-        "--dry-run", action="store_true", help="Show what would be executed without running"
-    )
     parser.add_argument(
         "-j", "--json", action="store_true", help="Output results in JSON format instead of table"
     )
@@ -124,44 +121,75 @@ Examples:
 
     argcomplete.autocomplete(parser)
 
-    keys_mode = False
-    debug_mode = False
-    cleaned_argv = []
-    skip_next = False
-    for i, arg in enumerate(sys.argv[1:]):
-        if skip_next:
-            skip_next = False
-            continue
-        if arg in ["--keys", "-k"]:
-            keys_mode = True
-        elif arg in ["--debug", "-d"]:
-            debug_mode = True
-        elif arg in ["--region", "--profile"]:
-            # Skip this argument and the next one (its value)
-            skip_next = True
-        else:
-            cleaned_argv.append(arg)
+    # First pass: parse known args to get service and action
+    args, remaining = parser.parse_known_args()
 
+    # If there are remaining args, check if any are flags that should be parsed
+    # This handles cases where flags appear after service/action or after --
+    if remaining:
+        # Re-parse with the full argument list to catch all flags
+        # We need to build a new argv that puts flags before positional args
+        reordered_argv = [sys.argv[0]]  # Program name
+        flags = []
+        non_flags = []
+
+        # Separate flags from non-flags in remaining args
+        i = 0
+        while i < len(remaining):
+            arg = remaining[i]
+            if arg in ['-d', '--debug', '-j', '--json', '-k', '--keys']:
+                flags.append(arg)
+            elif arg in ['--region', '--profile']:
+                # These flags take a value
+                flags.append(arg)
+                if i + 1 < len(remaining):
+                    flags.append(remaining[i + 1])
+                    i += 1
+            else:
+                non_flags.append(arg)
+            i += 1
+
+        # Add original flags from sys.argv that were already parsed
+        for arg in sys.argv[1:]:
+            if arg in ['-d', '--debug', '-j', '--json', '-k', '--keys']:
+                if arg not in flags:
+                    reordered_argv.append(arg)
+            elif arg == '--region' and args.region:
+                reordered_argv.extend(['--region', args.region])
+            elif arg == '--profile' and args.profile:
+                reordered_argv.extend(['--profile', args.profile])
+
+        # Add newly found flags
+        reordered_argv.extend(flags)
+
+        # Add service and action
+        if args.service:
+            reordered_argv.append(args.service)
+        if args.action:
+            reordered_argv.append(args.action)
+
+        # Re-parse with reordered arguments
+        args, remaining = parser.parse_known_args(reordered_argv[1:])
+
+        # Remaining should now only be non-flag arguments
+        remaining = non_flags
+
+    # Set debug mode globally
     from . import utils
+    utils.debug_enabled = args.debug
 
-    utils.debug_enabled = debug_mode
+    # Build the argv for filter parsing (service, action, and remaining arguments)
+    filter_argv = []
+    if args.service:
+        filter_argv.append(args.service)
+    if args.action:
+        filter_argv.append(args.action)
+    # Add the remaining arguments (filters, --, column names, etc.)
+    filter_argv.extend(remaining)
 
     base_command, resource_filters, value_filters, column_filters = (
-        parse_multi_level_filters_for_mode(cleaned_argv, mode="single")
+        parse_multi_level_filters_for_mode(filter_argv, mode="single")
     )
-
-    modified_argv = ["awsquery"] + base_command
-
-    original_argv = sys.argv[:]
-    sys.argv = modified_argv
-
-    try:
-        args = parser.parse_args(original_argv[1:])
-    except SystemExit:
-        sys.argv = original_argv
-        raise
-
-    sys.argv = original_argv
 
     if not args.service or not args.action:
         services = get_aws_services()
@@ -197,20 +225,18 @@ Examples:
     # Determine final column filters (user-specified or defaults)
     final_column_filters = determine_column_filters(column_filters, service, action)
 
-    is_multi_level = False
-
-    if keys_mode:
+    if args.keys:
         print(f"Showing all available keys for {service}.{action}:", file=sys.stderr)
 
         try:
             # Use tracking to get keys from the last successful request
-            call_result = execute_with_tracking(service, action, args.dry_run, session=session)
+            call_result = execute_with_tracking(service, action, session=session)
 
             # If the initial call failed, try multi-level resolution
             if not call_result.final_success:
                 debug_print("Keys mode: Initial call failed, trying multi-level resolution")
                 _, multi_resource_filters, multi_value_filters, multi_column_filters = (
-                    parse_multi_level_filters_for_mode(cleaned_argv, mode="multi")
+                    parse_multi_level_filters_for_mode(filter_argv, mode="multi")
                 )
                 call_result, _ = execute_multi_level_call_with_tracking(
                     service,
@@ -218,7 +244,6 @@ Examples:
                     multi_resource_filters,
                     multi_value_filters,
                     multi_column_filters,
-                    args.dry_run,
                 )
 
             result = show_keys_from_result(call_result)
@@ -230,15 +255,12 @@ Examples:
 
     try:
         debug_print(f"Using single-level execution first")
-        response = execute_aws_call(service, action, args.dry_run, session=session)
-
-        if args.dry_run:
-            return
+        response = execute_aws_call(service, action, session=session)
 
         if isinstance(response, dict) and "validation_error" in response:
             debug_print(f"ValidationError detected in single-level call, switching to multi-level")
             _, multi_resource_filters, multi_value_filters, multi_column_filters = (
-                parse_multi_level_filters_for_mode(cleaned_argv, mode="multi")
+                parse_multi_level_filters_for_mode(filter_argv, mode="multi")
             )
             debug_print(
                 f"Re-parsed filters for multi-level - "
@@ -255,7 +277,6 @@ Examples:
                 multi_resource_filters,
                 multi_value_filters,
                 final_multi_column_filters,
-                args.dry_run,
                 session,
             )
             debug_print(f"Multi-level call completed with {len(filtered_resources)} resources")
@@ -269,7 +290,7 @@ Examples:
             for filter_word in final_column_filters:
                 debug_print(f"Applying column filter: {filter_word}")
 
-        if keys_mode:
+        if args.keys:
             sorted_keys = extract_and_sort_keys(filtered_resources)
             output = "\n".join(f"  {key}" for key in sorted_keys)
             print(f"All available keys:", file=sys.stderr)

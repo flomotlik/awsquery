@@ -11,37 +11,22 @@ from .utils import debug_print
 @lru_cache(maxsize=1)
 def load_default_filters():
     """Load default filters with caching and error handling"""
+    # Load default_filters.yaml from the package directory only
+    config_path = os.path.join(os.path.dirname(__file__), "default_filters.yaml")
+
     try:
-        # Try multiple possible locations for the YAML file
-        possible_paths = [
-            os.path.join(os.path.dirname(__file__), "default_filters.yaml"),
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "default_filters.yaml"),
-            os.path.join("src", "awsquery", "default_filters.yaml"),
-            "default_filters.yaml",
-        ]
-
-        config_path = None
-        for path in possible_paths:
-            if os.path.exists(path):
-                config_path = path
-                break
-
-        if not config_path:
-            debug_print("Warning: default_filters.yaml not found, no defaults will be applied")
-            return {}
-
         with open(config_path, "r") as f:
             config = yaml.safe_load(f)
             debug_print(f"Loaded default filters configuration from {config_path}")
             return config
     except FileNotFoundError:
-        debug_print("Warning: default_filters.yaml not found, no defaults will be applied")
+        debug_print(f"Warning: {config_path} not found, no defaults will be applied")
         return {}
     except yaml.YAMLError as e:
-        debug_print(f"Warning: Could not parse default_filters.yaml: {e}")
+        debug_print(f"Warning: Could not parse {config_path}: {e}")
         return {}
     except Exception as e:
-        debug_print(f"Warning: Could not load default filters: {e}")
+        debug_print(f"Warning: Could not load default filters from {config_path}: {e}")
         return {}
 
 

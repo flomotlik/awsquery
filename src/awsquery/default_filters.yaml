@@ -72,6 +72,5 @@ cloudformation:
       - "StackName"
       - "StackStatus"
       - "CreationTime"
-      - "Tags.Environment"
-      - "Description"
+      - "LastUpdated"
     description: "Default columns for CloudFormation stack listing"
