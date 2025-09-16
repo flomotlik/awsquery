@@ -159,6 +159,12 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
+# mutmut
+.mutmut-cache
+.mutmutrc
+html/
+mutants
+
 # Pyre type checker
 .pyre/
 

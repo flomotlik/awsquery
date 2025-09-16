@@ -57,6 +57,22 @@ coverage: ## Run tests with coverage report
 coverage-report: coverage ## Generate and show coverage report location
 	@echo "$(GREEN)Coverage report available at: htmlcov/index.html$(NC)"
 
+mutmut: ## Run mutation testing on the codebase
+	@echo "$(BLUE)Running mutation testing with mutmut$(NC)"
+	mutmut run
+
+mutmut-results: ## Show mutation testing results
+	@echo "$(BLUE)Mutation testing results:$(NC)"
+	mutmut results
+
+mutmut-html: ## Generate HTML report for mutation testing
+	mutmut html
+	@echo "$(GREEN)Mutation testing report available at: html/index.html$(NC)"
+
+mutmut-clean: ## Clean mutation testing cache
+	rm -f .mutmut-cache
+	@echo "$(GREEN)Mutation testing cache cleaned$(NC)"
+
 lint: ## Run linting checks
 	flake8 src/ tests/ --count --statistics --show-source
 	pylint src/awsquery
