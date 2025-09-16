@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from src.awsquery.cli import determine_column_filters
-from src.awsquery.config import apply_default_filters, get_default_columns, load_default_filters
+from awsquery.cli import determine_column_filters
+from awsquery.config import apply_default_filters, get_default_columns, load_default_filters
 
 
 @pytest.fixture(autouse=True)
@@ -31,7 +31,7 @@ class TestLoadDefaultFilters:
         assert "describe_instances" in config["ec2"]
         assert "columns" in config["ec2"]["describe_instances"]
 
-    @patch("src.awsquery.config.open")
+    @patch("awsquery.config.open")
     def test_file_not_found_returns_empty_dict(self, mock_open):
         """Test that missing YAML file returns empty dict."""
         mock_open.side_effect = FileNotFoundError("File not found")
@@ -39,7 +39,7 @@ class TestLoadDefaultFilters:
         # Clear cache first
         load_default_filters.cache_clear()
 
-        with patch("src.awsquery.config.debug_print") as mock_debug:
+        with patch("awsquery.config.debug_print") as mock_debug:
             config = load_default_filters()
 
             assert config == {}
@@ -48,7 +48,7 @@ class TestLoadDefaultFilters:
             call_args = mock_debug.call_args[0][0]
             assert "not found, no defaults will be applied" in call_args
 
-    @patch("src.awsquery.config.yaml.safe_load")
+    @patch("awsquery.config.yaml.safe_load")
     @patch("builtins.open")
     def test_yaml_parse_error_returns_empty_dict(self, mock_open, mock_yaml):
         """Test that YAML parse error returns empty dict."""
@@ -57,7 +57,7 @@ class TestLoadDefaultFilters:
         # Clear cache first
         load_default_filters.cache_clear()
 
-        with patch("src.awsquery.config.debug_print") as mock_debug:
+        with patch("awsquery.config.debug_print") as mock_debug:
             config = load_default_filters()
 
             assert config == {}

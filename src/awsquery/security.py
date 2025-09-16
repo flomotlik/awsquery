@@ -17,18 +17,21 @@ def load_security_policy():
         with open(policy_path, "r") as f:
             policy = json.load(f)
 
-        debug_print(f"DEBUG: Loaded policy with keys: {list(policy.keys())}")
+        debug_print(f"DEBUG: Loaded policy with keys: {list(policy.keys())}")  # pragma: no mutate
 
         allowed_actions = set()
 
         if "PolicyVersion" in policy:
-            debug_print(f"DEBUG: Found PolicyVersion structure")
+            debug_print(f"DEBUG: Found PolicyVersion structure")  # pragma: no mutate
             policy_doc = policy["PolicyVersion"].get("Document", {})
+            # Fix: Handle None Document gracefully
+            if policy_doc is None:
+                policy_doc = {}
             statements = policy_doc.get("Statement", [])
         else:
             statements = policy.get("Statement", [])
 
-        debug_print(f"DEBUG: Found {len(statements)} statements in policy")
+        debug_print(f"DEBUG: Found {len(statements)} statements in policy")  # pragma: no mutate
 
         for i, statement in enumerate(statements):
             effect = statement.get("Effect")
@@ -36,17 +39,21 @@ def load_security_policy():
             debug_print(
                 f"DEBUG: Statement {i}: Effect={effect}, "
                 f"Actions count={len(actions) if isinstance(actions, list) else 1}"
-            )
+            )  # pragma: no mutate
 
             if effect == "Allow":
                 if isinstance(actions, str):
                     actions = [actions]
                 allowed_actions.update(actions)
-                debug_print(f"DEBUG: Added {len(actions)} actions from statement {i}")
+                debug_print(
+                    f"DEBUG: Added {len(actions)} actions from statement {i}"
+                )  # pragma: no mutate
 
-        debug_print(f"DEBUG: Total allowed actions loaded: {len(allowed_actions)}")
+        debug_print(
+            f"DEBUG: Total allowed actions loaded: {len(allowed_actions)}"
+        )  # pragma: no mutate
         if len(allowed_actions) < 10:
-            debug_print(f"DEBUG: Sample actions: {list(allowed_actions)[:5]}")
+            debug_print(f"DEBUG: Sample actions: {list(allowed_actions)[:5]}")  # pragma: no mutate
 
         return allowed_actions
     except FileNotFoundError:
@@ -68,21 +75,27 @@ def validate_security(service, action, allowed_actions):
     service_action = f"{service}:{action}"
 
     if not allowed_actions:
-        debug_print(f"DEBUG: No allowed_actions provided, allowing {service_action} by default")
+        debug_print(
+            f"DEBUG: No allowed_actions provided, allowing {service_action} by default"
+        )  # pragma: no mutate
         return True
 
-    debug_print(f"DEBUG: Validating {service_action} against {len(allowed_actions)} policy rules")
+    debug_print(
+        f"DEBUG: Validating {service_action} against {len(allowed_actions)} policy rules"
+    )  # pragma: no mutate
 
     if service_action in allowed_actions:
-        debug_print(f"DEBUG: Direct match found for {service_action}")
+        debug_print(f"DEBUG: Direct match found for {service_action}")  # pragma: no mutate
         return True
 
     for allowed in allowed_actions:
         if fnmatch.fnmatch(service_action, allowed):
-            debug_print(f"DEBUG: Wildcard match: {service_action} matches {allowed}")
+            debug_print(
+                f"DEBUG: Wildcard match: {service_action} matches {allowed}"
+            )  # pragma: no mutate
             return True
 
-    debug_print(f"DEBUG: No match found for {service_action}")
+    debug_print(f"DEBUG: No match found for {service_action}")  # pragma: no mutate
     return False
 
 

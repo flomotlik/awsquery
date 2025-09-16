@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from src.awsquery.security import action_to_policy_format, load_security_policy, validate_security
+from awsquery.security import action_to_policy_format, load_security_policy, validate_security
 from tests.fixtures.policy_samples import (
     get_deny_policy,
     get_legacy_policy_formats,
@@ -162,7 +162,7 @@ class TestLoadSecurityPolicy:
     def test_load_policy_debug_output(self, capsys):
         """Test debug output during policy loading."""
         # Enable debug mode
-        with patch("src.awsquery.utils.debug_enabled", True):
+        with patch("awsquery.utils.debug_enabled", True):
             policy_content = get_restrictive_policy()
             policy_json = json.dumps(policy_content)
 
@@ -286,7 +286,7 @@ class TestValidateSecurity:
 
     def test_validate_security_debug_output(self, mock_security_policy, capsys):
         """Test debug output during security validation."""
-        with patch("src.awsquery.utils.debug_enabled", True):
+        with patch("awsquery.utils.debug_enabled", True):
             # Test successful validation
             validate_security("ec2", "DescribeInstances", mock_security_policy)
 
@@ -459,7 +459,7 @@ class TestSecurityIntegration:
         policy_file.write_text(json.dumps(policy_content))
 
         # Mock the file path
-        with patch("src.awsquery.security.open", mock_open(read_data=json.dumps(policy_content))):
+        with patch("awsquery.security.open", mock_open(read_data=json.dumps(policy_content))):
             # Load the policy
             allowed_actions = load_security_policy()
 

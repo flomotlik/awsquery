@@ -7,7 +7,7 @@ import pytest
 from tabulate import tabulate
 
 # Import the functions under test
-from src.awsquery.formatters import (
+from awsquery.formatters import (
     detect_aws_tags,
     extract_and_sort_keys,
     flatten_dict_keys,
@@ -18,7 +18,7 @@ from src.awsquery.formatters import (
     show_keys,
     transform_tags_structure,
 )
-from src.awsquery.utils import simplify_key
+from awsquery.utils import simplify_key
 
 
 class TestFlattenResponse:
@@ -754,7 +754,7 @@ class TestUtilityFunctions:
         )
         assert result == expected_keys
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_show_keys_no_data(self, mock_execute):
         """Test show_keys when no data is available."""
         mock_execute.return_value = {"ResponseMetadata": {"RequestId": "test"}}
@@ -764,7 +764,7 @@ class TestUtilityFunctions:
         assert result == "No data to extract keys from."
         mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_show_keys_with_data(self, mock_execute):
         """Test show_keys with actual data."""
         mock_execute.return_value = {
@@ -791,7 +791,7 @@ class TestUtilityFunctions:
         assert "Key" in content  # From Tags.0.Key
         assert "Value" in content  # From Tags.0.Value
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_show_keys_integration(self, mock_execute):
         """Test show_keys integration with extract_and_sort_keys."""
         mock_execute.return_value = {"Instances": [{"InstanceId": "i-123", "Status": "running"}]}

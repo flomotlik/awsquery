@@ -10,16 +10,16 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.awsquery.cli import main
+from awsquery.cli import main
 
 
 class TestCLIFlagHandling:
     """Test that CLI flags work in all positions."""
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_debug_flag_positions(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -38,13 +38,13 @@ class TestCLIFlagHandling:
             ["awsquery", "ec2", "describe-instances", "--", "-d", "Name"],  # Right after separator
         ]
 
-        with patch("src.awsquery.cli.flatten_response", return_value=[]):
-            with patch("src.awsquery.cli.filter_resources", return_value=[]):
-                with patch("src.awsquery.cli.format_table_output", return_value=""):
+        with patch("awsquery.cli.flatten_response", return_value=[]):
+            with patch("awsquery.cli.filter_resources", return_value=[]):
+                with patch("awsquery.cli.format_table_output", return_value=""):
                     for argv in test_cases:
                         sys.argv = argv
                         # Reset debug mode
-                        from src.awsquery import utils
+                        from awsquery import utils
 
                         utils.debug_enabled = False
 
@@ -55,10 +55,10 @@ class TestCLIFlagHandling:
 
                         assert utils.debug_enabled is True, f"Debug not enabled for: {argv}"
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_json_flag_positions(self, mock_validate, mock_load_policy, mock_execute, mock_session):
         """Test -j flag works in various positions."""
         mock_validate.return_value = True
@@ -72,9 +72,9 @@ class TestCLIFlagHandling:
             ["awsquery", "ec2", "describe-instances", "--", "InstanceId", "-j"],
         ]
 
-        with patch("src.awsquery.cli.flatten_response") as mock_flatten:
-            with patch("src.awsquery.cli.filter_resources") as mock_filter:
-                with patch("src.awsquery.cli.format_json_output") as mock_json:
+        with patch("awsquery.cli.flatten_response") as mock_flatten:
+            with patch("awsquery.cli.filter_resources") as mock_filter:
+                with patch("awsquery.cli.format_json_output") as mock_json:
                     mock_flatten.return_value = [{"InstanceId": "i-123"}]
                     mock_filter.return_value = [{"InstanceId": "i-123"}]
                     mock_json.return_value = '{"InstanceId": "i-123"}'
@@ -90,10 +90,10 @@ class TestCLIFlagHandling:
 
                         mock_json.assert_called_once()
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_keys_flag_positions(self, mock_validate, mock_load_policy, mock_execute, mock_session):
         """Test -k flag works in various positions."""
         mock_validate.return_value = True
@@ -106,15 +106,15 @@ class TestCLIFlagHandling:
             ["awsquery", "ec2", "describe-instances", "--", "Name", "-k"],
         ]
 
-        with patch("src.awsquery.cli.execute_with_tracking") as mock_tracking:
-            from src.awsquery.core import CallResult
+        with patch("awsquery.cli.execute_with_tracking") as mock_tracking:
+            from awsquery.core import CallResult
 
             result = CallResult()
             result.final_success = True
             result.last_successful_response = [{"Instances": [{"InstanceId": "i-123"}]}]
             mock_tracking.return_value = result
 
-            with patch("src.awsquery.cli.show_keys_from_result", return_value="  InstanceId"):
+            with patch("awsquery.cli.show_keys_from_result", return_value="  InstanceId"):
                 with patch("builtins.print"):
                     for argv in test_cases:
                         sys.argv = argv
@@ -127,10 +127,10 @@ class TestCLIFlagHandling:
 
                         mock_tracking.assert_called_once()
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_region_profile_flags(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -171,9 +171,9 @@ class TestCLIFlagHandling:
             ),
         ]
 
-        with patch("src.awsquery.cli.flatten_response", return_value=[]):
-            with patch("src.awsquery.cli.filter_resources", return_value=[]):
-                with patch("src.awsquery.cli.format_table_output", return_value=""):
+        with patch("awsquery.cli.flatten_response", return_value=[]):
+            with patch("awsquery.cli.filter_resources", return_value=[]):
+                with patch("awsquery.cli.format_table_output", return_value=""):
                     for argv, expected in test_cases:
                         sys.argv = argv
                         mock_session.reset_mock()
@@ -187,10 +187,10 @@ class TestCLIFlagHandling:
                             region=expected["region"], profile=expected["profile"]
                         )
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_multiple_flags_after_separator(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -215,9 +215,9 @@ class TestCLIFlagHandling:
             "InstanceId",  # Column filter mixed with flags
         ]
 
-        with patch("src.awsquery.cli.flatten_response") as mock_flatten:
-            with patch("src.awsquery.cli.filter_resources") as mock_filter:
-                with patch("src.awsquery.cli.format_json_output") as mock_json:
+        with patch("awsquery.cli.flatten_response") as mock_flatten:
+            with patch("awsquery.cli.filter_resources") as mock_filter:
+                with patch("awsquery.cli.format_json_output") as mock_json:
                     mock_flatten.return_value = [{"InstanceId": "i-123"}]
                     mock_filter.return_value = [{"InstanceId": "i-123"}]
                     mock_json.return_value = '{"InstanceId": "i-123"}'
@@ -228,7 +228,7 @@ class TestCLIFlagHandling:
                         pass
 
                     # All flags should be recognized
-                    from src.awsquery import utils
+                    from awsquery import utils
 
                     assert utils.debug_enabled is True
                     mock_json.assert_called_once()
@@ -238,10 +238,10 @@ class TestCLIFlagHandling:
                     json_args = mock_json.call_args[0]
                     assert "InstanceId" in json_args[1]
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_flags_with_value_and_column_filters(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -266,9 +266,9 @@ class TestCLIFlagHandling:
             "-j",  # flag after column filters
         ]
 
-        with patch("src.awsquery.cli.flatten_response") as mock_flatten:
-            with patch("src.awsquery.cli.filter_resources") as mock_filter:
-                with patch("src.awsquery.cli.format_json_output") as mock_json:
+        with patch("awsquery.cli.flatten_response") as mock_flatten:
+            with patch("awsquery.cli.filter_resources") as mock_filter:
+                with patch("awsquery.cli.format_json_output") as mock_json:
                     mock_flatten.return_value = [
                         {"InstanceId": "i-123", "State": {"Name": "running"}}
                     ]
@@ -293,7 +293,7 @@ class TestCLIFlagHandling:
                     assert "State.Name" in json_args[1]
 
                     # Verify flags
-                    from src.awsquery import utils
+                    from awsquery import utils
 
                     assert utils.debug_enabled is True
                     mock_json.assert_called_once()

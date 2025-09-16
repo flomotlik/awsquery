@@ -7,20 +7,20 @@ import pytest
 from botocore.exceptions import ClientError
 
 # Import modules under test
-from src.awsquery.core import execute_aws_call, execute_multi_level_call
-from src.awsquery.filters import (
+from awsquery.core import execute_aws_call, execute_multi_level_call
+from awsquery.filters import (
     extract_parameter_values,
     filter_resources,
     parse_multi_level_filters_for_mode,
 )
-from src.awsquery.formatters import flatten_response, format_json_output, format_table_output
-from src.awsquery.security import load_security_policy, validate_security
-from src.awsquery.utils import debug_print, normalize_action_name
+from awsquery.formatters import flatten_response, format_json_output, format_table_output
+from awsquery.security import load_security_policy, validate_security
+from awsquery.utils import debug_print, normalize_action_name
 
 
 class TestCompleteMultiLevelWorkflows:
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_cloudformation_stack_events_complete_workflow(self, mock_get_param, mock_execute):
         validation_error = {
             "parameter_name": "stackName",
@@ -93,8 +93,8 @@ class TestCompleteMultiLevelWorkflows:
             None,
         )
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_eks_nodegroup_operations_complete_workflow(self, mock_get_param, mock_execute):
         """Test complete EKS nodegroup operations workflow with cluster parameter resolution."""
         validation_error = {
@@ -148,8 +148,8 @@ class TestCompleteMultiLevelWorkflows:
         assert result[0]["NodegroupName"] == "production-workers"
         assert result[0]["ClusterName"] == "production-cluster"
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_s3_bucket_operations_complete_workflow(self, mock_get_param, mock_execute):
         """Test complete S3 bucket operations workflow with bucket parameter resolution."""
         validation_error = {
@@ -203,8 +203,8 @@ class TestCompleteMultiLevelWorkflows:
         assert len(result) == 1
         assert "AllowLogAccess" in str(result[0])
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_lambda_function_operations_complete_workflow(self, mock_get_param, mock_execute):
         """Test complete Lambda function operations workflow with function parameter resolution."""
         validation_error = {
@@ -272,9 +272,9 @@ class TestCompleteMultiLevelWorkflows:
 class TestParameterResolutionChain:
     """Test parameter resolution chain across modules."""
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_parameter_resolution_chain_with_filtering(
         self, mock_get_param, mock_infer, mock_execute
     ):
@@ -309,7 +309,7 @@ class TestParameterResolutionChain:
         # mock_get_param may or may not be called depending on the execution path
         # The important thing is that the resolution workflow completed successfully
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_multiple_parameter_values_user_selection(self, mock_execute, capsys):
         """Test handling of multiple parameter values with user notification."""
         validation_error = {
@@ -339,7 +339,7 @@ class TestParameterResolutionChain:
         assert "prod-db" in captured.err
         assert "Using first match: prod-app" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_parameter_resolution_with_case_sensitivity(self, mock_execute):
         """Test parameter resolution handles case sensitivity correctly."""
         validation_error = {
@@ -365,7 +365,7 @@ class TestParameterResolutionChain:
         assert len(result) == 1
         # Should successfully extract bucket name despite mixed case in field names
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_fallback_parameter_name_conversion(self, mock_execute):
         """Test fallback parameter name conversion when service model introspection fails."""
         validation_error = {
@@ -377,7 +377,7 @@ class TestParameterResolutionChain:
         instance_list = [{"InstanceId": "i-1234567890abcdef0"}]
 
         # Mock service model introspection failure
-        with patch("src.awsquery.core.get_correct_parameter_name") as mock_get_param:
+        with patch("awsquery.core.get_correct_parameter_name") as mock_get_param:
             mock_get_param.side_effect = Exception("Service model introspection failed")
 
             mock_execute.side_effect = [
@@ -395,8 +395,8 @@ class TestParameterResolutionChain:
 class TestMultiLevelWithMultipleFilters:
     """Test multi-level operations with complex filter combinations."""
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_resource_and_value_filters_integration(self, mock_get_param, mock_execute):
         """Test integration of resource filters and value filters."""
         validation_error = {
@@ -435,8 +435,8 @@ class TestMultiLevelWithMultipleFilters:
         assert "production-web" in result[0]["ClusterName"]
         assert "web" in result[0]["NodegroupName"]
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_complex_filter_combinations(self, mock_get_param, mock_execute):
         """Test complex combinations of all filter types."""
         validation_error = {
@@ -485,7 +485,7 @@ class TestMultiLevelWithMultipleFilters:
         assert len(result) == 1
         assert "WebServerInstance" in result[0]["LogicalResourceId"]
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_empty_filter_results_at_different_stages(self, mock_execute):
         """Test empty filter results at different stages of the workflow."""
         validation_error = {
@@ -509,8 +509,8 @@ class TestMultiLevelWithMultipleFilters:
         with pytest.raises(SystemExit, match="1"):
             execute_multi_level_call("eks", "describe-cluster", ["nonexistent"], [], [])
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_value_filters_with_nested_data(self, mock_get_param, mock_execute):
         """Test value filters working with deeply nested response data."""
         validation_error = {
@@ -563,7 +563,7 @@ class TestMultiLevelWithMultipleFilters:
 class TestErrorScenariosIntegration:
     """Test error scenarios across module boundaries."""
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_no_list_operation_found(self, mock_execute, capsys):
         """Test system behavior when no list operation can be found for parameter."""
         validation_error = {
@@ -585,8 +585,8 @@ class TestErrorScenariosIntegration:
         captured = capsys.readouterr()
         assert "Could not find a working list operation" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_list_operation_fails(self, mock_get_param, mock_execute, capsys):
         """Test system behavior when list operation fails."""
         validation_error = {
@@ -612,8 +612,8 @@ class TestErrorScenariosIntegration:
         captured = capsys.readouterr()
         assert "Could not find a working list operation" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_no_parameter_values_extracted(self, mock_get_param, mock_execute, capsys):
         """Test system behavior when no parameter values can be extracted."""
         validation_error = {
@@ -636,8 +636,8 @@ class TestErrorScenariosIntegration:
         captured = capsys.readouterr()
         assert "Could not extract parameter" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_multiple_validation_errors(self, mock_get_param, mock_execute, capsys):
         """Test handling of multiple validation errors in sequence."""
         first_validation_error = {
@@ -670,7 +670,7 @@ class TestErrorScenariosIntegration:
         captured = capsys.readouterr()
         assert "Still getting validation error after parameter resolution" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_service_model_introspection_failures(self, mock_execute):
         """Test robust behavior when service model introspection fails."""
         validation_error = {
@@ -683,7 +683,7 @@ class TestErrorScenariosIntegration:
         final_response = [{"Cluster": {"Name": "test-cluster"}}]
 
         # Mock introspection failure but successful fallback
-        with patch("src.awsquery.core.get_correct_parameter_name") as mock_get_param:
+        with patch("awsquery.core.get_correct_parameter_name") as mock_get_param:
             mock_get_param.side_effect = Exception("Service model error")
 
             mock_execute.side_effect = [
@@ -701,7 +701,7 @@ class TestErrorScenariosIntegration:
 
     def test_aws_error_handling_scenarios(self):
         """Test basic AWS error handling scenarios."""
-        from src.awsquery.core import execute_aws_call
+        from awsquery.core import execute_aws_call
 
         # Test basic error response handling
         with patch("boto3.client") as mock_boto_client:
@@ -720,8 +720,8 @@ class TestErrorScenariosIntegration:
 class TestEdgeCasesIntegration:
     """Test edge cases in multi-level operations."""
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_parameter_expects_list_vs_single_value(self, mock_get_param, mock_execute):
         """Test parameter handling for operations expecting lists vs single values."""
         validation_error = {
@@ -758,7 +758,7 @@ class TestEdgeCasesIntegration:
         # This test expects the parameter to be treated as plural (list)
         # But the extract_parameter_values logic may not find instanceIds as a field
         # Let's modify the test to handle the realistic scenario
-        with patch("src.awsquery.core.parameter_expects_list") as mock_expects_list:
+        with patch("awsquery.core.parameter_expects_list") as mock_expects_list:
             mock_expects_list.return_value = True  # Force it to expect a list
 
             # The test will likely fail at parameter extraction since instanceIds is not
@@ -768,8 +768,8 @@ class TestEdgeCasesIntegration:
             with pytest.raises(SystemExit):
                 execute_multi_level_call("ec2", "describe-instances", [], [], [])
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_empty_filter_results_edge_cases(self, mock_get_param, mock_execute):
         """Test various empty filter result scenarios."""
         validation_error = {
@@ -800,8 +800,8 @@ class TestEdgeCasesIntegration:
         final_call = mock_execute.call_args_list[-1]
         assert final_call[0][2]["StackName"] == "valid-stack"
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_case_sensitivity_parameter_resolution(self, mock_get_param, mock_execute):
         """Test case sensitivity handling in parameter resolution."""
         validation_error = {
@@ -831,7 +831,7 @@ class TestEdgeCasesIntegration:
         assert len(result) == 1
         # Should successfully extract at least one bucket name despite case variations
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_fallback_parameter_name_conversion_edge_cases(self, mock_execute):
         """Test edge cases in fallback parameter name conversion."""
         validation_errors = [
@@ -862,9 +862,9 @@ class TestEdgeCasesIntegration:
 class TestModuleInteractions:
     """Test interactions between core, filters, formatters, security, and utils modules."""
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.security.validate_security")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.security.validate_security")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_core_and_security_integration(self, mock_get_param, mock_validate, mock_execute):
         """Test integration between core execution and security validation."""
         validation_error = {
@@ -889,8 +889,8 @@ class TestModuleInteractions:
         # Security validation would be called by CLI layer, not core directly
         # This test ensures core works correctly when security is in place
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_core_formatters_and_filters_integration(self, mock_get_param, mock_execute):
         """Test integration between core, formatters, and filters modules."""
         validation_error = {
@@ -950,8 +950,8 @@ class TestModuleInteractions:
         # The important thing is that the workflow completed without errors
         assert isinstance(result, list)  # Should return a list, may be empty due to filtering
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_core_and_utils_debug_integration(
         self, mock_get_param, mock_execute, debug_mode, capsys
     ):
@@ -1042,8 +1042,8 @@ class TestModuleInteractions:
 class TestRealisticUsagePatterns:
     """Test realistic AWS usage patterns and scenarios."""
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_cloudformation_stack_debugging_scenario(self, mock_get_param, mock_execute):
         """Test realistic CloudFormation stack debugging scenario."""
         # Scenario: Find all failed resources in production stacks
@@ -1096,8 +1096,8 @@ class TestRealisticUsagePatterns:
         # The result may be empty due to complex filtering, but workflow should complete
         assert isinstance(result, list)
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_eks_cluster_capacity_analysis_scenario(self, mock_get_param, mock_execute):
         """Test realistic EKS cluster capacity analysis scenario."""
         validation_error = {
@@ -1143,8 +1143,8 @@ class TestRealisticUsagePatterns:
         assert any("production" in r["ClusterName"] for r in result)
         assert any("large" in str(r) for r in result)
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_s3_security_audit_scenario(self, mock_get_param, mock_execute):
         """Test realistic S3 security audit scenario."""
         validation_error = {
@@ -1193,8 +1193,8 @@ class TestRealisticUsagePatterns:
         assert len(result) >= 1
         assert any("AllUsers" in str(r) for r in result)
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_lambda_performance_monitoring_scenario(self, mock_get_param, mock_execute):
         """Test realistic Lambda performance monitoring scenario."""
         validation_error = {
@@ -1256,8 +1256,8 @@ class TestMultiLevelCallIssues:
 
     def test_single_argument_before_separator_should_not_trigger_multi_level(self):
         """Test that single arguments are correctly treated as value filters."""
-        from src.awsquery.cli import main
-        from src.awsquery.filters import parse_multi_level_filters_for_mode
+        from awsquery.cli import main
+        from awsquery.filters import parse_multi_level_filters_for_mode
 
         # Test the filter parsing logic directly
         argv = ["ec2", "describe-instances", "1-31", "--", "InstanceId"]
@@ -1288,7 +1288,7 @@ class TestMultiLevelCallIssues:
         # - value_filters contains ['1-31'] and column_filters contains ['InstanceId']
         # - is_multi_level is True because we have 2 non-empty filter lists
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_simple_value_filter_correctly_triggers_multi_level_execution(self, mock_execute):
         """Test that value filters with column filters correctly trigger multi-level execution."""
         # Mock a successful single-level response
@@ -1309,9 +1309,9 @@ class TestMultiLevelCallIssues:
         ]
         mock_execute.return_value = mock_response
 
-        with patch("src.awsquery.core.execute_multi_level_call") as mock_multi_level:
+        with patch("awsquery.core.execute_multi_level_call") as mock_multi_level:
             # Set up the command with correct filter parsing
-            from src.awsquery.filters import parse_multi_level_filters_for_mode
+            from awsquery.filters import parse_multi_level_filters_for_mode
 
             argv = ["ec2", "describe-instances", "1-31", "--", "InstanceId"]
             (
@@ -1329,7 +1329,7 @@ class TestMultiLevelCallIssues:
 
             # Fixed: Now triggers multi-level with correct filter placement
             if is_multi_level:
-                from src.awsquery.core import execute_multi_level_call
+                from awsquery.core import execute_multi_level_call
 
                 execute_multi_level_call(
                     "ec2", "describe-instances", resource_filters, value_filters, column_filters
@@ -1348,14 +1348,14 @@ class TestMultiLevelCallIssues:
                     False
                 ), "Multi-level should be triggered when multiple filter types are present"
 
-    @patch("src.awsquery.core.execute_multi_level_call")
+    @patch("awsquery.core.execute_multi_level_call")
     def test_debug_message_formatting_requirements(self, mock_multi_level, debug_mode, capsys):
         """Test debug message formatting requirements and clarity."""
         mock_multi_level.return_value = [{"InstanceId": "i-123", "State": "running"}]
 
         # Debug mode is enabled via fixture
-        from src.awsquery import utils
-        from src.awsquery.core import execute_multi_level_call
+        from awsquery import utils
+        from awsquery.core import execute_multi_level_call
 
         execute_multi_level_call("ec2", "describe-instances", ["test"], [], [])
 
@@ -1377,7 +1377,7 @@ class TestMultiLevelCallIssues:
                 prefix_ratio >= 0.5
             ), f"Too few debug messages have DEBUG: prefix (only {prefix_ratio:.1%})"
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_multi_level_operations_lack_user_friendly_messaging(self, mock_execute, capsys):
         """Test that multi-level operations provide clear user messaging."""
         # Mock validation error to trigger multi-level
@@ -1396,7 +1396,7 @@ class TestMultiLevelCallIssues:
             final_response,
         ]
 
-        from src.awsquery.core import execute_multi_level_call
+        from awsquery.core import execute_multi_level_call
 
         result = execute_multi_level_call("eks", "describe-cluster", ["prod"], [], [])
 
@@ -1427,7 +1427,7 @@ class TestMultiLevelCallIssues:
 
     def test_command_line_parsing_edge_cases(self):
         """Test edge cases in command line parsing that affect multi-level detection."""
-        from src.awsquery.filters import parse_multi_level_filters_for_mode
+        from awsquery.filters import parse_multi_level_filters_for_mode
 
         test_cases = [
             # Simple case that should NOT trigger multi-level
@@ -1481,7 +1481,7 @@ class TestMultiLevelCallIssues:
                 f"got {is_multi_level}"
             )
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_resource_count_messaging_missing_for_multi_level(self, mock_execute, capsys):
         """Test that multi-level operations don't show resource count to users."""
         validation_error = {
@@ -1504,7 +1504,7 @@ class TestMultiLevelCallIssues:
             [{"StackResources": [{"LogicalResourceId": "Resource1"}]}],
         ]
 
-        from src.awsquery.core import execute_multi_level_call
+        from awsquery.core import execute_multi_level_call
 
         result = execute_multi_level_call(
             "cloudformation", "describe-stack-resources", ["prod"], [], []
@@ -1524,7 +1524,7 @@ class TestMultiLevelCallIssues:
 
     def test_multi_level_detection_boundary_conditions(self):
         """Test boundary conditions in multi-level detection logic."""
-        from src.awsquery.filters import parse_multi_level_filters_for_mode
+        from awsquery.filters import parse_multi_level_filters_for_mode
 
         # Test empty filter lists
         (
@@ -1576,7 +1576,7 @@ class TestCoreErrorScenariosBasic:
 
     def test_core_module_basic_functionality(self):
         """Test basic core module functionality."""
-        from src.awsquery.core import execute_aws_call
+        from awsquery.core import execute_aws_call
 
         # Test basic execute_aws_call functionality
         with patch("boto3.client") as mock_boto_client:
@@ -1592,7 +1592,7 @@ class TestCoreErrorScenariosBasic:
 
     def test_parameter_utility_functions(self):
         """Test parameter utility functions."""
-        from src.awsquery.core import convert_parameter_name, parameter_expects_list
+        from awsquery.core import convert_parameter_name, parameter_expects_list
 
         # Test parameter_expects_list
         assert parameter_expects_list("InstanceIds") is True
@@ -1612,7 +1612,7 @@ class TestUtilsIntegration:
     @patch("boto3.Session")
     def test_get_aws_services_integration(self, mock_session_class):
         """Test AWS service discovery with real boto3 session patterns."""
-        from src.awsquery.utils import get_aws_services
+        from awsquery.utils import get_aws_services
 
         # Mock session with realistic service list
         mock_session = Mock()
@@ -1643,7 +1643,7 @@ class TestUtilsIntegration:
     @patch("boto3.Session")
     def test_get_aws_services_session_failure(self, mock_session_class):
         """Test AWS service discovery when session creation fails."""
-        from src.awsquery.utils import get_aws_services
+        from awsquery.utils import get_aws_services
 
         # Simulate session creation failure
         mock_session_class.side_effect = Exception("AWS credentials not configured")
@@ -1656,7 +1656,7 @@ class TestUtilsIntegration:
     @patch("boto3.client")
     def test_get_service_actions_integration(self, mock_boto_client):
         """Test service action discovery with realistic boto3 client."""
-        from src.awsquery.utils import get_service_actions
+        from awsquery.utils import get_service_actions
 
         # Mock client with realistic operation names
         mock_client = Mock()
@@ -1682,7 +1682,7 @@ class TestUtilsIntegration:
     @patch("boto3.client")
     def test_get_service_actions_client_failure(self, mock_boto_client):
         """Test service action discovery when client creation fails."""
-        from src.awsquery.utils import get_service_actions
+        from awsquery.utils import get_service_actions
 
         # Simulate client creation failure
         mock_boto_client.side_effect = Exception("Unknown service: nonexistent")
@@ -1697,8 +1697,8 @@ class TestUtilsIntegration:
         import io
         from contextlib import redirect_stderr
 
-        from src.awsquery import utils
-        from src.awsquery.utils import debug_print
+        from awsquery import utils
+        from awsquery.utils import debug_print
 
         # Debug mode enabled via fixture
         assert utils.debug_enabled
@@ -1716,8 +1716,8 @@ class TestUtilsIntegration:
         import io
         from contextlib import redirect_stderr
 
-        from src.awsquery import utils
-        from src.awsquery.utils import debug_print
+        from awsquery import utils
+        from awsquery.utils import debug_print
 
         # Debug mode disabled via fixture
         assert not utils.debug_enabled
@@ -1730,7 +1730,7 @@ class TestUtilsIntegration:
 
     def test_sanitize_input_comprehensive(self):
         """Test input sanitization with comprehensive real-world scenarios."""
-        from src.awsquery.utils import sanitize_input
+        from awsquery.utils import sanitize_input
 
         test_cases = [
             # Normal cases
@@ -1760,7 +1760,7 @@ class TestUtilsIntegration:
 
     def test_simplify_key_realistic_scenarios(self):
         """Test key simplification with realistic AWS response keys."""
-        from src.awsquery.utils import simplify_key
+        from awsquery.utils import simplify_key
 
         test_cases = [
             # Based on actual simplify_key behavior: returns last non-numeric part
@@ -1790,7 +1790,7 @@ class TestUtilsIntegration:
 
     def test_normalize_action_name_comprehensive(self):
         """Test action name normalization with comprehensive AWS action patterns."""
-        from src.awsquery.utils import normalize_action_name
+        from awsquery.utils import normalize_action_name
 
         test_cases = [
             # Standard patterns
@@ -1829,8 +1829,8 @@ class TestUtilsIntegration:
         import io
         from contextlib import redirect_stderr
 
-        from src.awsquery import utils
-        from src.awsquery.utils import debug_print, normalize_action_name, sanitize_input
+        from awsquery import utils
+        from awsquery.utils import debug_print, normalize_action_name, sanitize_input
 
         # Simulate CLI argument processing
         raw_service = "  cloudformation  "  # With spaces
@@ -1855,7 +1855,7 @@ class TestUtilsIntegration:
 
     def test_error_resilience_in_utils(self):
         """Test error resilience in utils functions."""
-        from src.awsquery.utils import normalize_action_name, sanitize_input, simplify_key
+        from awsquery.utils import normalize_action_name, sanitize_input, simplify_key
 
         # Test functions with None values
         try:

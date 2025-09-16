@@ -8,10 +8,10 @@ from unittest.mock import MagicMock, Mock, call, patch
 
 import pytest
 
-from src.awsquery.core import execute_multi_level_call
+from awsquery.core import execute_multi_level_call
 
 # Import the functions under test
-from src.awsquery.utils import debug_enabled, debug_print
+from awsquery.utils import debug_enabled, debug_print
 
 
 class TestEnhancedDebugPrint:
@@ -22,7 +22,7 @@ class TestEnhancedDebugPrint:
         assert captured.err == ""
         assert captured.out == ""
 
-    @patch("src.awsquery.utils.debug_enabled", True)
+    @patch("awsquery.utils.debug_enabled", True)
     def test_debug_print_enabled_has_debug_prefix(self, capsys):
         debug_print("Test message")
 
@@ -30,7 +30,7 @@ class TestEnhancedDebugPrint:
         assert "[DEBUG]" in captured.err
         assert "Test message" in captured.err
 
-    @patch("src.awsquery.utils.debug_enabled", True)
+    @patch("awsquery.utils.debug_enabled", True)
     def test_debug_print_enabled_has_timestamp(self, capsys):
         """Test debug_print includes timestamp when enabled."""
         debug_print("Test message")
@@ -40,7 +40,7 @@ class TestEnhancedDebugPrint:
         timestamp_pattern = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
         assert re.search(timestamp_pattern, captured.err)
 
-    @patch("src.awsquery.utils.debug_enabled", True)
+    @patch("awsquery.utils.debug_enabled", True)
     def test_debug_print_format_order(self, capsys):
         """Test debug_print output format: [DEBUG] TIMESTAMP MESSAGE."""
         debug_print("Test message")
@@ -50,7 +50,7 @@ class TestEnhancedDebugPrint:
         expected_pattern = r"\[DEBUG\] \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} Test message"
         assert re.search(expected_pattern, captured.err)
 
-    @patch("src.awsquery.utils.debug_enabled", True)
+    @patch("awsquery.utils.debug_enabled", True)
     def test_debug_print_multiple_args(self, capsys):
         """Test debug_print handles multiple arguments correctly."""
         debug_print("Message", 123, {"key": "value"})
@@ -61,7 +61,7 @@ class TestEnhancedDebugPrint:
         assert "123" in captured.err
         assert "{'key': 'value'}" in captured.err
 
-    @patch("src.awsquery.utils.debug_enabled", True)
+    @patch("awsquery.utils.debug_enabled", True)
     def test_debug_print_kwargs_preserved(self, capsys):
         """Test debug_print preserves keyword arguments like sep."""
         debug_print("A", "B", "C", sep="-")
@@ -74,9 +74,9 @@ class TestEnhancedDebugPrint:
 class TestMultiLevelUserMessages:
     """Test suite for user-friendly messages in multi-level operations."""
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
     def test_no_multi_level_messages_for_successful_direct_call(
         self, mock_filter, mock_flatten, mock_execute, capsys
     ):
@@ -92,12 +92,12 @@ class TestMultiLevelUserMessages:
         assert "Resolving required parameter" not in captured.err
         assert "Calling" not in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_parameter_resolution_start_message(
         self,
         mock_get_param,
@@ -132,12 +132,12 @@ class TestMultiLevelUserMessages:
         captured = capsys.readouterr()
         assert "Resolving required parameter 'clusterName'" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_list_operation_call_message(
         self,
         mock_get_param,
@@ -171,12 +171,12 @@ class TestMultiLevelUserMessages:
         captured = capsys.readouterr()
         assert "Calling list_clusters to find available resources..." in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_resources_found_count_message(
         self,
         mock_get_param,
@@ -217,13 +217,13 @@ class TestMultiLevelUserMessages:
         captured = capsys.readouterr()
         assert "Found 5 resources matching filters" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.parameter_expects_list")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.parameter_expects_list")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_single_resource_using_message(
         self,
         mock_get_param,
@@ -259,13 +259,13 @@ class TestMultiLevelUserMessages:
         captured = capsys.readouterr()
         assert "Using: test-cluster" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.parameter_expects_list")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.parameter_expects_list")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_multiple_resources_limited_to_10_items(
         self,
         mock_get_param,
@@ -320,13 +320,13 @@ class TestMultiLevelUserMessages:
         assert "15" in captured.err
         assert "(showing first 10)" in captured.err or "... and 5 more" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.parameter_expects_list")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.parameter_expects_list")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_user_messages_not_debug_only(
         self,
         mock_get_param,
@@ -376,13 +376,13 @@ class TestMultiLevelUserMessages:
 class TestUserMessageIntegration:
     """Integration tests for user messaging system."""
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.parameter_expects_list")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.parameter_expects_list")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_complete_multi_level_message_sequence(
         self,
         mock_get_param,
@@ -456,10 +456,10 @@ class TestUserMessageIntegration:
 
     def test_debug_and_user_messages_distinction(self, debug_mode, capsys):
         """Test that debug and user messages are clearly distinguished."""
-        import src.awsquery.utils
+        import awsquery.utils
 
         # Debug mode is enabled via fixture
-        assert src.awsquery.utils.debug_enabled
+        assert awsquery.utils.debug_enabled
 
         # Test debug message
         debug_print("This is a debug message")

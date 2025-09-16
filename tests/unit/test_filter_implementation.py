@@ -6,7 +6,7 @@ data transformations rather than mock behavior.
 
 import pytest
 
-from src.awsquery.filters import (
+from awsquery.filters import (
     extract_parameter_values,
     filter_resources,
     matches_pattern,

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 # Import the functions under test
-from src.awsquery.filters import filter_resources, parse_multi_level_filters_for_mode
+from awsquery.filters import filter_resources, parse_multi_level_filters_for_mode
 
 
 class TestFilterResources:
@@ -275,7 +275,7 @@ class TestFilterResources:
         assert len(result) == 1
         assert result[0]["StackName"] == "staging-webapp"
 
-    @patch("src.awsquery.utils.debug_enabled", True)
+    @patch("awsquery.utils.debug_enabled", True)
     def test_debug_output_validation(self, capsys):
         """Test that debug output is generated when debug mode is enabled."""
         resources = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
@@ -608,7 +608,7 @@ class TestParseMultiLevelFilters:
         ]  # All non-column args are value filters
         assert column_filters == ["name", "status", "version"]
 
-    @patch("src.awsquery.utils.debug_enabled", True)
+    @patch("awsquery.utils.debug_enabled", True)
     def test_debug_output_for_parsing(self, capsys):
         """Test that debug output is generated during parsing."""
         argv = ["ec2", "describe-instances", "web", "--", "running", "--", "instanceid"]

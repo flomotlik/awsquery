@@ -2,12 +2,12 @@
 
 import pytest
 
-from src.awsquery.filters import (
+from awsquery.filters import (
     filter_resources,
     matches_pattern,
     parse_filter_pattern,
 )
-from src.awsquery.formatters import filter_columns
+from awsquery.formatters import filter_columns
 
 
 class TestParseFilterPattern:

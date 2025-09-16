@@ -4,7 +4,7 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from src.awsquery.core import (
+from awsquery.core import (
     CallResult,
     execute_multi_level_call_with_tracking,
     execute_with_tracking,
@@ -56,7 +56,7 @@ class TestCallResult:
 class TestExecuteWithTracking:
     """Test execute_with_tracking function."""
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_successful_call_tracking(self, mock_execute):
         """Test tracking of successful AWS call."""
         mock_response = [{"Instances": [{"InstanceId": "i-123"}]}]
@@ -70,7 +70,7 @@ class TestExecuteWithTracking:
         assert result.successful_responses[0] == mock_response
         assert len(result.error_messages) == 0
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_validation_error_tracking(self, mock_execute):
         """Test tracking of validation error response."""
         validation_response = {
@@ -90,7 +90,7 @@ class TestExecuteWithTracking:
         assert len(result.error_messages) == 1
         assert "Validation error" in result.error_messages[0]
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_exception_tracking(self, mock_execute):
         """Test tracking when execute_aws_call raises exception."""
         mock_execute.side_effect = Exception("AWS API error")
@@ -103,7 +103,7 @@ class TestExecuteWithTracking:
         assert len(result.error_messages) == 1
         assert "Call failed: AWS API error" in result.error_messages[0]
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_tracking_with_session(self, mock_execute):
         """Test that session is passed through to execute_aws_call."""
         mock_response = [{"Buckets": []}]
@@ -115,7 +115,7 @@ class TestExecuteWithTracking:
         mock_execute.assert_called_once_with("s3", "list-buckets", None, mock_session)
         assert result.final_success is True
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_tracking_with_parameters(self, mock_execute):
         """Test that parameters are passed through to execute_aws_call."""
         mock_response = [{"Instances": []}]
@@ -131,8 +131,8 @@ class TestExecuteWithTracking:
 class TestShowKeysFromResult:
     """Test show_keys_from_result function."""
 
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.formatters.extract_and_sort_keys")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.formatters.extract_and_sort_keys")
     def test_show_keys_successful_result(self, mock_extract_keys, mock_flatten):
         """Test showing keys from successful call result."""
         result = CallResult()
@@ -171,7 +171,7 @@ class TestShowKeysFromResult:
 
         assert output == "Error: No successful response to show keys from"
 
-    @patch("src.awsquery.formatters.flatten_response")
+    @patch("awsquery.formatters.flatten_response")
     def test_show_keys_empty_resources(self, mock_flatten):
         """Test showing keys when successful response has no resources."""
         result = CallResult()
@@ -188,9 +188,9 @@ class TestShowKeysFromResult:
 class TestMultiLevelCallWithTracking:
     """Test execute_multi_level_call_with_tracking function."""
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
     def test_successful_initial_call_tracking(self, mock_filter, mock_flatten, mock_execute):
         """Test tracking when initial call succeeds."""
         mock_response = [{"Instances": [{"InstanceId": "i-123"}]}]
@@ -208,12 +208,12 @@ class TestMultiLevelCallWithTracking:
         assert len(resources) == 1
         assert resources[0]["InstanceId"] == "i-123"
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_multi_level_resolution_tracking(
         self, mock_get_param, mock_extract, mock_filter, mock_flatten, mock_infer, mock_execute
     ):
@@ -256,8 +256,8 @@ class TestMultiLevelCallWithTracking:
         assert call_result.successful_responses[1] == final_response
         assert len(resources) == 1
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
     def test_failed_list_operation_tracking(self, mock_infer, mock_execute):
         """Test tracking when list operation fails."""
         validation_error = {
@@ -287,11 +287,11 @@ class TestMultiLevelCallWithTracking:
         )
         assert len(resources) == 0
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
     def test_no_parameter_values_tracking(
         self, mock_extract, mock_filter, mock_flatten, mock_infer, mock_execute
     ):
@@ -322,12 +322,12 @@ class TestMultiLevelCallWithTracking:
         assert any("Could not extract parameter" in msg for msg in call_result.error_messages)
         assert len(resources) == 0
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_final_call_failure_tracking(
         self, mock_get_param, mock_extract, mock_filter, mock_flatten, mock_infer, mock_execute
     ):
@@ -367,11 +367,11 @@ class TestMultiLevelCallWithTracking:
 class TestKeysModeBehavior:
     """Test keys mode behavior with tracking."""
 
-    @patch("src.awsquery.cli.execute_with_tracking")
-    @patch("src.awsquery.cli.execute_multi_level_call_with_tracking")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_with_tracking")
+    @patch("awsquery.cli.execute_multi_level_call_with_tracking")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_keys_mode_successful_initial_call(
         self, mock_create_session, mock_services, mock_policy, mock_multi_level, mock_tracking
     ):
@@ -392,12 +392,12 @@ class TestKeysModeBehavior:
         test_args = ["awsquery", "--keys", "ec2", "describe-instances"]
 
         with patch("sys.argv", test_args), patch(
-            "src.awsquery.cli.show_keys_from_result"
+            "awsquery.cli.show_keys_from_result"
         ) as mock_show_keys:
 
             mock_show_keys.return_value = "  InstanceId\n  State"
 
-            from src.awsquery.cli import main
+            from awsquery.cli import main
 
             try:
                 main()
@@ -409,11 +409,11 @@ class TestKeysModeBehavior:
             # Multi-level should not be called since initial call succeeded
             mock_multi_level.assert_not_called()
 
-    @patch("src.awsquery.cli.execute_with_tracking")
-    @patch("src.awsquery.cli.execute_multi_level_call_with_tracking")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_with_tracking")
+    @patch("awsquery.cli.execute_multi_level_call_with_tracking")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_keys_mode_fallback_to_multi_level(
         self, mock_create_session, mock_services, mock_policy, mock_multi_level, mock_tracking
     ):
@@ -440,12 +440,12 @@ class TestKeysModeBehavior:
         test_args = ["awsquery", "--keys", "eks", "describe-cluster"]
 
         with patch("sys.argv", test_args), patch(
-            "src.awsquery.cli.show_keys_from_result"
+            "awsquery.cli.show_keys_from_result"
         ) as mock_show_keys:
 
             mock_show_keys.return_value = "  ClusterName\n  Status"
 
-            from src.awsquery.cli import main
+            from awsquery.cli import main
 
             try:
                 main()
@@ -469,8 +469,8 @@ class TestKeysModeBehavior:
         result.last_successful_response = second_response  # This should be used for keys
         result.final_success = True
 
-        with patch("src.awsquery.formatters.flatten_response") as mock_flatten, patch(
-            "src.awsquery.formatters.extract_and_sort_keys"
+        with patch("awsquery.formatters.flatten_response") as mock_flatten, patch(
+            "awsquery.formatters.extract_and_sort_keys"
         ) as mock_extract:
 
             mock_flatten.return_value = [{"Name": "bucket1", "CreationDate": "2023-01-01"}]
@@ -487,10 +487,10 @@ class TestKeysModeBehavior:
 class TestTrackingDebugOutput:
     """Test debug output for tracking functionality."""
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_tracking_debug_output(self, mock_execute, capsys):
         """Test that tracking produces appropriate debug output."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         # Enable debug mode
         original_debug = utils.debug_enabled
@@ -509,10 +509,10 @@ class TestTrackingDebugOutput:
         finally:
             utils.debug_enabled = original_debug
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_tracking_debug_failure(self, mock_execute, capsys):
         """Test debug output for tracking failures."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         original_debug = utils.debug_enabled
         utils.debug_enabled = True

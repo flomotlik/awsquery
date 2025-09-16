@@ -77,7 +77,7 @@ def filter_resources(resources, value_filters):
     for filter_text in value_filters:
         pattern, mode = parse_filter_pattern(filter_text)
         parsed_filters.append((pattern, mode))
-        debug_print(f"Applying value filter: {filter_text} (mode: {mode})")
+        debug_print(f"Applying value filter: {filter_text} (mode: {mode})")  # pragma: no mutate
 
     # Apply tag transformation before filtering
     transformed_resources = []
@@ -95,8 +95,8 @@ def filter_resources(resources, value_filters):
         searchable_items.extend([str(value) for value in flattened.values()])
 
         if len(filtered) + len([r for r in resources if r != resource]) < 3:
-            debug_print(f"Sample flattened keys: {list(flattened.keys())[:5]}")
-            debug_print(f"Sample searchable items: {searchable_items[:10]}")
+            debug_print(f"Sample flattened keys: {list(flattened.keys())[:5]}")  # pragma: no mutate
+            debug_print(f"Sample searchable items: {searchable_items[:10]}")  # pragma: no mutate
 
         matches_all = True
         for pattern, mode in parsed_filters:
@@ -114,7 +114,7 @@ def filter_resources(resources, value_filters):
                     debug_print(
                         f"Filter '{pattern}' (mode: {mode}) matched: {matching_items[:3]}"
                         f"{'...' if len(matching_items) > 3 else ''}"
-                    )
+                    )  # pragma: no mutate
                     break
 
             if not matched:
@@ -124,7 +124,9 @@ def filter_resources(resources, value_filters):
         if matches_all:
             filtered.append(resource)
 
-    debug_print(f"Found {len(filtered)} resources matching filters (out of {len(resources)} total)")
+    debug_print(
+        f"Found {len(filtered)} resources matching filters (out of {len(resources)} total)"
+    )  # pragma: no mutate
     return filtered
 
 
@@ -216,7 +218,7 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
         f"Multi-level parsing (mode={mode}) - Base: {base_command}, "
         f"Resource: {resource_filters}, Value: {value_filters}, "
         f"Column: {column_filters}"
-    )
+    )  # pragma: no mutate
 
     return base_command, resource_filters, value_filters, column_filters
 
@@ -231,7 +233,7 @@ def extract_parameter_values(resources, parameter_name):
     if resources and isinstance(resources[0], str):
         debug_print(
             f"Resources are simple strings, using them directly for parameter '{parameter_name}'"
-        )
+        )  # pragma: no mutate
         return resources
 
     # Apply tag transformation before parameter extraction
@@ -243,7 +245,7 @@ def extract_parameter_values(resources, parameter_name):
     pascal_case_name = convert_parameter_name(parameter_name)
     search_names = [parameter_name, pascal_case_name]
 
-    debug_print(f"Looking for parameter values using names: {search_names}")
+    debug_print(f"Looking for parameter values using names: {search_names}")  # pragma: no mutate
 
     for resource in transformed_resources:
         flat = flatten_dict_keys(resource)
@@ -342,13 +344,15 @@ def extract_parameter_values(resources, parameter_name):
 
             if param_lower in resource_types_with_names:
                 standard_fields.append("Name")
-                debug_print(f"Parameter '{parameter_name}' is a resource type, will try Name field")
+                debug_print(
+                    f"Parameter '{parameter_name}' is a resource type, will try Name field"
+                )  # pragma: no mutate
 
         if standard_fields:
             debug_print(
                 f"No specific field found for '{parameter_name}', "
                 f"trying standard fields: {standard_fields}"
-            )
+            )  # pragma: no mutate
             for standard_field in standard_fields:
                 if standard_field in flat:
                     value = flat[standard_field]
@@ -356,7 +360,7 @@ def extract_parameter_values(resources, parameter_name):
                         debug_print(
                             f"Found standard field '{standard_field}' "
                             f"for parameter '{parameter_name}'"
-                        )
+                        )  # pragma: no mutate
                         values.append(str(value))
                         found_value = str(value)
                         break
@@ -366,7 +370,7 @@ def extract_parameter_values(resources, parameter_name):
                         debug_print(
                             f"Found standard field '{key}' (case-insensitive) "
                             f"for parameter '{parameter_name}'"
-                        )
+                        )  # pragma: no mutate
                         values.append(str(value))
                         found_value = str(value)
                         break
@@ -377,6 +381,6 @@ def extract_parameter_values(resources, parameter_name):
     debug_print(
         f"Extracted {len(values)} values for parameter '{parameter_name}': "
         f"{values[:3]}{'...' if len(values) > 3 else ''}"
-    )
+    )  # pragma: no mutate
 
     return values

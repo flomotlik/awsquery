@@ -5,7 +5,7 @@ from argparse import Namespace
 
 import pytest
 
-from src.awsquery.cli import action_completer, service_completer
+from awsquery.cli import action_completer, service_completer
 
 
 class TestAutocompleteWithoutCredentials:

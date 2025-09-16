@@ -5,8 +5,8 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from src.awsquery.cli import main
-from src.awsquery.core import (
+from awsquery.cli import main
+from awsquery.core import (
     CallResult,
     execute_multi_level_call_with_tracking,
     execute_with_tracking,
@@ -17,10 +17,10 @@ from src.awsquery.core import (
 class TestKeysModeMultiLevelIntegration:
     """Integration tests for keys mode with multi-level call scenarios."""
 
-    @patch("src.awsquery.cli.execute_with_tracking")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_with_tracking")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_keys_mode_successful_initial_call(
         self, mock_create_session, mock_services, mock_policy, mock_tracking
     ):
@@ -58,8 +58,8 @@ class TestKeysModeMultiLevelIntegration:
         test_args = ["awsquery", "--keys", "ec2", "describe-instances"]
 
         with patch.object(sys, "argv", test_args), patch(
-            "src.awsquery.cli.execute_multi_level_call_with_tracking"
-        ) as mock_multi_level, patch("src.awsquery.cli.show_keys_from_result") as mock_show_keys:
+            "awsquery.cli.execute_multi_level_call_with_tracking"
+        ) as mock_multi_level, patch("awsquery.cli.show_keys_from_result") as mock_show_keys:
 
             mock_show_keys.return_value = (
                 "  InstanceId\n  InstanceType\n  State.Name\n"
@@ -80,11 +80,11 @@ class TestKeysModeMultiLevelIntegration:
         # Keys should be shown from the successful result
         mock_show_keys.assert_called_once_with(successful_result)
 
-    @patch("src.awsquery.cli.execute_with_tracking")
-    @patch("src.awsquery.cli.execute_multi_level_call_with_tracking")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_with_tracking")
+    @patch("awsquery.cli.execute_multi_level_call_with_tracking")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_keys_mode_fallback_to_multi_level(
         self, mock_create_session, mock_services, mock_policy, mock_multi_level, mock_tracking
     ):
@@ -119,7 +119,7 @@ class TestKeysModeMultiLevelIntegration:
         test_args = ["awsquery", "--keys", "eks", "describe-cluster"]
 
         with patch.object(sys, "argv", test_args), patch(
-            "src.awsquery.cli.show_keys_from_result"
+            "awsquery.cli.show_keys_from_result"
         ) as mock_show_keys:
 
             mock_show_keys.return_value = (
@@ -192,9 +192,9 @@ class TestKeysModeMultiLevelIntegration:
             }
         ]
 
-        with patch("src.awsquery.core.execute_aws_call") as mock_execute, patch(
-            "src.awsquery.core.infer_list_operation"
-        ) as mock_infer, patch("src.awsquery.core.get_correct_parameter_name") as mock_get_param:
+        with patch("awsquery.core.execute_aws_call") as mock_execute, patch(
+            "awsquery.core.infer_list_operation"
+        ) as mock_infer, patch("awsquery.core.get_correct_parameter_name") as mock_get_param:
 
             mock_execute.side_effect = [
                 validation_error,  # Initial call fails
@@ -236,8 +236,8 @@ class TestKeysModeMultiLevelIntegration:
             }
         }
 
-        with patch("src.awsquery.core.execute_aws_call") as mock_execute, patch(
-            "src.awsquery.core.infer_list_operation"
+        with patch("awsquery.core.execute_aws_call") as mock_execute, patch(
+            "awsquery.core.infer_list_operation"
         ) as mock_infer:
 
             mock_execute.side_effect = [
@@ -304,9 +304,9 @@ class TestKeysModeWithFilteredMultiLevel:
             }
         ]
 
-        with patch("src.awsquery.core.execute_aws_call") as mock_execute, patch(
-            "src.awsquery.core.infer_list_operation"
-        ) as mock_infer, patch("src.awsquery.core.get_correct_parameter_name") as mock_get_param:
+        with patch("awsquery.core.execute_aws_call") as mock_execute, patch(
+            "awsquery.core.infer_list_operation"
+        ) as mock_infer, patch("awsquery.core.get_correct_parameter_name") as mock_get_param:
 
             mock_execute.side_effect = [validation_error, list_response, final_response]
             mock_infer.return_value = ["list_clusters"]
@@ -391,9 +391,9 @@ class TestKeysModeWithFilteredMultiLevel:
             }
         ]
 
-        with patch("src.awsquery.core.execute_aws_call") as mock_execute, patch(
-            "src.awsquery.core.infer_list_operation"
-        ) as mock_infer, patch("src.awsquery.core.get_correct_parameter_name") as mock_get_param:
+        with patch("awsquery.core.execute_aws_call") as mock_execute, patch(
+            "awsquery.core.infer_list_operation"
+        ) as mock_infer, patch("awsquery.core.get_correct_parameter_name") as mock_get_param:
 
             mock_execute.side_effect = [validation_error, list_response, final_response]
             mock_infer.return_value = ["list_stacks"]
@@ -423,11 +423,11 @@ class TestKeysModeWithFilteredMultiLevel:
 class TestKeysModeRealWorldScenarios:
     """Integration tests for keys mode in real-world usage scenarios."""
 
-    @patch("src.awsquery.cli.execute_with_tracking")
-    @patch("src.awsquery.cli.execute_multi_level_call_with_tracking")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_with_tracking")
+    @patch("awsquery.cli.execute_multi_level_call_with_tracking")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_keys_mode_with_region_and_filters(
         self, mock_create_session, mock_services, mock_policy, mock_multi_level, mock_tracking
     ):
@@ -476,7 +476,7 @@ class TestKeysModeRealWorldScenarios:
         test_args = ["awsquery", "--keys", "--region", "us-west-2", "ec2", "describe-instances"]
 
         with patch.object(sys, "argv", test_args), patch(
-            "src.awsquery.cli.show_keys_from_result"
+            "awsquery.cli.show_keys_from_result"
         ) as mock_show_keys:
 
             mock_show_keys.return_value = (
@@ -531,9 +531,9 @@ class TestKeysModeRealWorldScenarios:
             }
         ]
 
-        with patch("src.awsquery.core.execute_aws_call") as mock_execute, patch(
-            "src.awsquery.core.infer_list_operation"
-        ) as mock_infer, patch("src.awsquery.core.get_correct_parameter_name") as mock_get_param:
+        with patch("awsquery.core.execute_aws_call") as mock_execute, patch(
+            "awsquery.core.infer_list_operation"
+        ) as mock_infer, patch("awsquery.core.get_correct_parameter_name") as mock_get_param:
 
             mock_execute.side_effect = [
                 validation_error,  # Initial call fails
@@ -561,15 +561,15 @@ class TestKeysModeRealWorldScenarios:
 class TestKeysModeDebugIntegration:
     """Integration tests for keys mode debug output."""
 
-    @patch("src.awsquery.cli.execute_with_tracking")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_with_tracking")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_keys_mode_debug_output(
         self, mock_create_session, mock_services, mock_policy, mock_tracking
     ):
         """Test that keys mode produces appropriate debug output."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         mock_services.return_value = ["s3"]
         mock_policy.return_value = {"s3:ListBuckets"}
@@ -586,8 +586,8 @@ class TestKeysModeDebugIntegration:
         test_args = ["awsquery", "--keys", "--debug", "s3", "list-buckets"]
 
         with patch.object(sys, "argv", test_args), patch(
-            "src.awsquery.cli.show_keys_from_result"
-        ) as mock_show_keys, patch("src.awsquery.utils.debug_print") as mock_debug:
+            "awsquery.cli.show_keys_from_result"
+        ) as mock_show_keys, patch("awsquery.utils.debug_print") as mock_debug:
 
             mock_show_keys.return_value = "  Name\n  CreationDate"
 

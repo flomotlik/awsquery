@@ -12,8 +12,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.awsquery.cli import main
-from src.awsquery.filters import parse_multi_level_filters_for_mode
+from awsquery.cli import main
+from awsquery.filters import parse_multi_level_filters_for_mode
 
 
 class TestCLIParserSeparator:
@@ -63,10 +63,10 @@ class TestCLIParserSeparator:
         assert value_filters == ["Created"]
         assert column_filters == ["StackName"]
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_main_with_column_filters(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -79,9 +79,9 @@ class TestCLIParserSeparator:
         # Simulate command line with -- separator
         sys.argv = ["awsquery", "ec2", "describe-instances", "--", "Name"]
 
-        with patch("src.awsquery.cli.flatten_response") as mock_flatten:
-            with patch("src.awsquery.cli.filter_resources") as mock_filter:
-                with patch("src.awsquery.cli.format_table_output") as mock_format:
+        with patch("awsquery.cli.flatten_response") as mock_flatten:
+            with patch("awsquery.cli.filter_resources") as mock_filter:
+                with patch("awsquery.cli.format_table_output") as mock_format:
                     mock_flatten.return_value = []
                     mock_filter.return_value = []
                     mock_format.return_value = ""
@@ -95,10 +95,10 @@ class TestCLIParserSeparator:
                     # Verify the AWS call was made (meaning parsing succeeded)
                     mock_execute.assert_called_once()
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_main_with_flags_and_filters(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -120,9 +120,9 @@ class TestCLIParserSeparator:
             "State",
         ]
 
-        with patch("src.awsquery.cli.flatten_response") as mock_flatten:
-            with patch("src.awsquery.cli.filter_resources") as mock_filter:
-                with patch("src.awsquery.cli.format_table_output") as mock_format:
+        with patch("awsquery.cli.flatten_response") as mock_flatten:
+            with patch("awsquery.cli.filter_resources") as mock_filter:
+                with patch("awsquery.cli.format_table_output") as mock_format:
                     mock_flatten.return_value = []
                     mock_filter.return_value = []
                     mock_format.return_value = ""
@@ -135,10 +135,10 @@ class TestCLIParserSeparator:
                     # Verify session was created with correct region
                     mock_session.assert_called_once_with(region="us-west-2", profile=None)
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_main_with_json_flag_and_filters(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -150,9 +150,9 @@ class TestCLIParserSeparator:
 
         sys.argv = ["awsquery", "-j", "ec2", "describe-instances", "--", "InstanceId"]
 
-        with patch("src.awsquery.cli.flatten_response") as mock_flatten:
-            with patch("src.awsquery.cli.filter_resources") as mock_filter:
-                with patch("src.awsquery.cli.format_json_output") as mock_json:
+        with patch("awsquery.cli.flatten_response") as mock_flatten:
+            with patch("awsquery.cli.filter_resources") as mock_filter:
+                with patch("awsquery.cli.format_json_output") as mock_json:
                     mock_flatten.return_value = [{"InstanceId": "i-123"}]
                     mock_filter.return_value = [{"InstanceId": "i-123"}]
                     mock_json.return_value = '{"InstanceId": "i-123"}'
@@ -199,10 +199,10 @@ class TestCLIParserEdgeCases:
 
         assert column_filters == ["Tags.Name", "State.Name", "InstanceId"]
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_main_with_all_flags_combined(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -230,10 +230,10 @@ class TestCLIParserEdgeCases:
             "InstanceId",  # column filters
         ]
 
-        with patch("src.awsquery.cli.flatten_response") as mock_flatten:
-            with patch("src.awsquery.cli.filter_resources") as mock_filter:
-                with patch("src.awsquery.cli.format_json_output") as mock_json:
-                    with patch("src.awsquery.utils.debug_print") as mock_debug:
+        with patch("awsquery.cli.flatten_response") as mock_flatten:
+            with patch("awsquery.cli.filter_resources") as mock_filter:
+                with patch("awsquery.cli.format_json_output") as mock_json:
+                    with patch("awsquery.utils.debug_print") as mock_debug:
                         mock_flatten.return_value = []
                         mock_filter.return_value = []
                         mock_json.return_value = "[]"
@@ -248,7 +248,7 @@ class TestCLIParserEdgeCases:
                             region="eu-west-1", profile="production"
                         )
                         # Debug should have been enabled
-                        from src.awsquery import utils
+                        from awsquery import utils
 
                         assert utils.debug_enabled is True
 
@@ -271,10 +271,10 @@ class TestParserRegressionPrevention:
         assert not value_filters
         assert column_filters == ["Name"]
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_main_never_fails_with_unrecognized_arguments(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -292,10 +292,10 @@ class TestParserRegressionPrevention:
             ["awsquery", "-j", "ec2", "describe-instances", "--", "Name", "State"],
         ]
 
-        with patch("src.awsquery.cli.flatten_response", return_value=[]):
-            with patch("src.awsquery.cli.filter_resources", return_value=[]):
-                with patch("src.awsquery.cli.format_table_output", return_value=""):
-                    with patch("src.awsquery.cli.format_json_output", return_value="[]"):
+        with patch("awsquery.cli.flatten_response", return_value=[]):
+            with patch("awsquery.cli.filter_resources", return_value=[]):
+                with patch("awsquery.cli.format_table_output", return_value=""):
+                    with patch("awsquery.cli.format_json_output", return_value="[]"):
                         for cmd in test_commands:
                             sys.argv = cmd
                             error_occurred = False
@@ -315,11 +315,11 @@ class TestParserRegressionPrevention:
                                 not error_occurred
                             ), f"Command {' '.join(cmd)} failed with 'unrecognized arguments'"
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
-    @patch("src.awsquery.cli.format_table_output")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
+    @patch("awsquery.cli.format_table_output")
     def test_column_filters_propagate_to_formatter(
         self, mock_format, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -334,8 +334,8 @@ class TestParserRegressionPrevention:
 
         sys.argv = ["awsquery", "ec2", "describe-instances", "--", "InstanceId", "State.Name"]
 
-        with patch("src.awsquery.cli.flatten_response") as mock_flatten:
-            with patch("src.awsquery.cli.filter_resources") as mock_filter:
+        with patch("awsquery.cli.flatten_response") as mock_flatten:
+            with patch("awsquery.cli.filter_resources") as mock_filter:
                 mock_flatten.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
                 mock_filter.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
 
@@ -354,10 +354,10 @@ class TestParserRegressionPrevention:
 class TestCLIParserRegression:
     """Regression tests to prevent parser issues from reoccurring."""
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.validate_security")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.validate_security")
     def test_parser_does_not_fail_on_column_filters(
         self, mock_validate, mock_load_policy, mock_execute, mock_session
     ):
@@ -370,9 +370,9 @@ class TestCLIParserRegression:
         # This exact command was failing before the fix
         sys.argv = ["awsquery", "s3", "list-buckets", "--", "Name"]
 
-        with patch("src.awsquery.cli.flatten_response", return_value=[]):
-            with patch("src.awsquery.cli.filter_resources", return_value=[]):
-                with patch("src.awsquery.cli.format_table_output", return_value=""):
+        with patch("awsquery.cli.flatten_response", return_value=[]):
+            with patch("awsquery.cli.filter_resources", return_value=[]):
+                with patch("awsquery.cli.format_table_output", return_value=""):
                     # Should not raise argparse error about unrecognized arguments
                     try:
                         main()

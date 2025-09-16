@@ -160,7 +160,7 @@ disable = [
 [tool.mutmut]
 paths_to_mutate = ["src/awsquery/"]
 runner = "python -m pytest -x --no-cov -q"
-use_coverage = true
+src_root = "src"
 
 [tool.pytest.ini_options]
 minversion = "7.0"

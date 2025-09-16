@@ -37,11 +37,11 @@ def execute_with_tracking(service, action, parameters=None, session=None):
             result.successful_responses.append(response)
             result.last_successful_response = response
             result.final_success = True
-            debug_print(f"Tracking: Successful call to {service}.{action}")
+            debug_print(f"Tracking: Successful call to {service}.{action}")  # pragma: no mutate
     except Exception as e:
         result.final_success = False
         result.error_messages.append(f"Call failed: {str(e)}")
-        debug_print(f"Tracking: Failed call to {service}.{action}: {e}")
+        debug_print(f"Tracking: Failed call to {service}.{action}: {e}")  # pragma: no mutate
 
     return result
 
@@ -72,28 +72,36 @@ def execute_aws_call(service, action, parameters=None, session=None):
             return results
         except Exception as e:
             exception_name = type(e).__name__
-            debug_print(f"Pagination exception type: {exception_name}, message: {e}")
+            debug_print(
+                f"Pagination exception type: {exception_name}, message: {e}"
+            )  # pragma: no mutate
 
             if exception_name == "OperationNotPageableError":
-                debug_print(f"Operation not pageable, falling back to direct call")
+                debug_print(
+                    f"Operation not pageable, falling back to direct call"
+                )  # pragma: no mutate
                 return [operation(**call_params)]
             elif exception_name == "ParamValidationError":
-                debug_print(f"ParamValidationError detected during pagination, re-raising")
+                debug_print(
+                    f"ParamValidationError detected during pagination, re-raising"
+                )  # pragma: no mutate
                 raise e
             elif isinstance(e, ClientError):
                 error_code = e.response.get("Error", {}).get("Code", "")
                 if error_code in ["ValidationException", "ValidationError"]:
                     debug_print(
                         f"ValidationError ({error_code}) detected during pagination, re-raising"
-                    )
+                    )  # pragma: no mutate
                     raise e
                 else:
                     debug_print(
                         f"ClientError ({error_code}) during pagination, falling back to direct call"
-                    )
+                    )  # pragma: no mutate
                     return [operation(**call_params)]
             else:
-                debug_print(f"Unknown pagination error, falling back to direct call")
+                debug_print(
+                    f"Unknown pagination error, falling back to direct call"
+                )  # pragma: no mutate
                 return [operation(**call_params)]
 
     except NoCredentialsError:
@@ -124,15 +132,18 @@ def execute_multi_level_call_with_tracking(
     service, action, resource_filters, value_filters, column_filters, session=None
 ):
     """Handle multi-level API calls with automatic parameter resolution and tracking"""
-    debug_print(f"Starting multi-level call with tracking for {service}.{action}")
     debug_print(
-        f"Resource filters: {resource_filters}, "
-        f"Value filters: {value_filters}, Column filters: {column_filters}"
-    )
+        f"Starting multi-level call with tracking for {service}.{action}"
+    )  # pragma: no mutate
+    debug_print(
+        f"Resource filters: {resource_filters}, "  # pragma: no mutate
+        f"Value filters: {value_filters}, Column filters: {column_filters}"  # pragma: no mutate
+    )  # pragma: no mutate
 
     call_result = CallResult()
 
     # First attempt - main call
+    response = None
     try:
         response = execute_aws_call(service, action, parameters=None, session=session)
 
@@ -142,22 +153,28 @@ def execute_multi_level_call_with_tracking(
             )
             error_info = response["validation_error"]
             parameter_name = error_info["parameter_name"]
-            debug_print(f"Validation error - missing parameter: {parameter_name}")
+            debug_print(
+                f"Validation error - missing parameter: {parameter_name}"
+            )  # pragma: no mutate
         else:
             # Initial call succeeded
             call_result.successful_responses.append(response)
             call_result.last_successful_response = response
             call_result.final_success = True
-            debug_print(f"Tracking: Initial call to {service}.{action} succeeded")
+            debug_print(
+                f"Tracking: Initial call to {service}.{action} succeeded"
+            )  # pragma: no mutate
 
             from .formatters import flatten_response
 
             resources = flatten_response(response)
-            debug_print(f"Final call returned {len(resources)} resources")
+            debug_print(f"Final call returned {len(resources)} resources")  # pragma: no mutate
 
             if value_filters:
                 filtered_resources = filter_resources(resources, value_filters)
-                debug_print(f"After value filtering: {len(filtered_resources)} resources")
+                debug_print(
+                    f"After value filtering: {len(filtered_resources)} resources"
+                )  # pragma: no mutate
             else:
                 filtered_resources = resources
 
@@ -165,14 +182,14 @@ def execute_multi_level_call_with_tracking(
 
     except Exception as e:
         call_result.error_messages.append(f"Initial call failed: {str(e)}")
-        debug_print(f"Initial call failed: {e}")
+        debug_print(f"Initial call failed: {e}")  # pragma: no mutate
         # Continue to multi-level resolution
 
     # Multi-level resolution needed
-    if isinstance(response, dict) and "validation_error" in response:
+    if response and isinstance(response, dict) and "validation_error" in response:
         error_info = response["validation_error"]
         parameter_name = error_info["parameter_name"]
-        debug_print(f"Validation error - missing parameter: {parameter_name}")
+        debug_print(f"Validation error - missing parameter: {parameter_name}")  # pragma: no mutate
 
         print(f"Resolving required parameter '{parameter_name}'", file=sys.stderr)
 
@@ -183,20 +200,20 @@ def execute_multi_level_call_with_tracking(
 
         for operation in possible_operations:
             try:
-                debug_print(f"Trying list operation: {operation}")
+                debug_print(f"Trying list operation: {operation}")  # pragma: no mutate
                 print(f"Calling {operation} to find available resources...", file=sys.stderr)
 
                 list_response = execute_aws_call(service, operation, session=session)
 
                 if isinstance(list_response, list) and list_response:
                     successful_operation = operation
-                    debug_print(f"Successfully executed: {operation}")
+                    debug_print(f"Successfully executed: {operation}")  # pragma: no mutate
                     # Track the successful list operation
                     call_result.successful_responses.append(list_response)
                     break
 
             except Exception as e:
-                debug_print(f"Operation {operation} failed: {e}")
+                debug_print(f"Operation {operation} failed: {e}")  # pragma: no mutate
                 continue
 
         if not list_response or not successful_operation:
@@ -213,11 +230,15 @@ def execute_multi_level_call_with_tracking(
         from .formatters import flatten_response
 
         list_resources = flatten_response(list_response)
-        debug_print(f"Got {len(list_resources)} resources from {successful_operation}")
+        debug_print(
+            f"Got {len(list_resources)} resources from {successful_operation}"
+        )  # pragma: no mutate
 
         if resource_filters:
             filtered_list_resources = filter_resources(list_resources, resource_filters)
-            debug_print(f"After resource filtering: {len(filtered_list_resources)} resources")
+            debug_print(
+                f"After resource filtering: {len(filtered_list_resources)} resources"
+            )  # pragma: no mutate
         else:
             filtered_list_resources = list_resources
 
@@ -270,21 +291,23 @@ def execute_multi_level_call_with_tracking(
 
             param_value = parameter_values[0]
 
-        debug_print(f"Using parameter value(s): {param_value}")
+        debug_print(f"Using parameter value(s): {param_value}")  # pragma: no mutate
 
         try:
             client = get_client(service, session)
             converted_parameter_name = get_correct_parameter_name(client, action, parameter_name)
             debug_print(
                 f"Parameter name resolution: {parameter_name} -> {converted_parameter_name}"
-            )
+            )  # pragma: no mutate
         except Exception as e:
-            debug_print(f"Could not create client for parameter introspection: {e}")
+            debug_print(
+                f"Could not create client for parameter introspection: {e}"
+            )  # pragma: no mutate
             converted_parameter_name = convert_parameter_name(parameter_name)
             debug_print(
                 f"Fallback parameter name conversion: "
                 f"{parameter_name} -> {converted_parameter_name}"
-            )
+            )  # pragma: no mutate
 
         parameters = {converted_parameter_name: param_value}
 
@@ -308,22 +331,26 @@ def execute_multi_level_call_with_tracking(
                 call_result.successful_responses.append(final_response)
                 call_result.last_successful_response = final_response
                 call_result.final_success = True
-                debug_print(f"Tracking: Final call to {service}.{action} succeeded")
+                debug_print(
+                    f"Tracking: Final call to {service}.{action} succeeded"
+                )  # pragma: no mutate
 
         except Exception as e:
             call_result.error_messages.append(f"Final call failed: {str(e)}")
-            debug_print(f"Final call failed: {e}")
+            debug_print(f"Final call failed: {e}")  # pragma: no mutate
             return call_result, []
 
     if call_result.last_successful_response:
         from .formatters import flatten_response
 
         resources = flatten_response(call_result.last_successful_response)
-        debug_print(f"Final call returned {len(resources)} resources")
+        debug_print(f"Final call returned {len(resources)} resources")  # pragma: no mutate
 
         if value_filters:
             filtered_resources = filter_resources(resources, value_filters)
-            debug_print(f"After value filtering: {len(filtered_resources)} resources")
+            debug_print(
+                f"After value filtering: {len(filtered_resources)} resources"
+            )  # pragma: no mutate
         else:
             filtered_resources = resources
 
@@ -336,11 +363,11 @@ def execute_multi_level_call(
     service, action, resource_filters, value_filters, column_filters, session=None
 ):
     """Handle multi-level API calls with automatic parameter resolution"""
-    debug_print(f"Starting multi-level call for {service}.{action}")
+    debug_print(f"Starting multi-level call for {service}.{action}")  # pragma: no mutate
     debug_print(
-        f"Resource filters: {resource_filters}, "
-        f"Value filters: {value_filters}, Column filters: {column_filters}"
-    )
+        f"Resource filters: {resource_filters}, "  # pragma: no mutate
+        f"Value filters: {value_filters}, Column filters: {column_filters}"  # pragma: no mutate
+    )  # pragma: no mutate
 
     response = execute_aws_call(service, action, session=session)
 
@@ -348,7 +375,7 @@ def execute_multi_level_call(
         error_info = response["validation_error"]
         parameter_name = error_info["parameter_name"]
 
-        debug_print(f"Validation error - missing parameter: {parameter_name}")
+        debug_print(f"Validation error - missing parameter: {parameter_name}")  # pragma: no mutate
 
         print(f"Resolving required parameter '{parameter_name}'", file=sys.stderr)
 
@@ -359,7 +386,7 @@ def execute_multi_level_call(
 
         for operation in possible_operations:
             try:
-                debug_print(f"Trying list operation: {operation}")
+                debug_print(f"Trying list operation: {operation}")  # pragma: no mutate
 
                 print(f"Calling {operation} to find available resources...", file=sys.stderr)
 
@@ -367,11 +394,11 @@ def execute_multi_level_call(
 
                 if isinstance(list_response, list) and list_response:
                     successful_operation = operation
-                    debug_print(f"Successfully executed: {operation}")
+                    debug_print(f"Successfully executed: {operation}")  # pragma: no mutate
                     break
 
             except Exception as e:
-                debug_print(f"Operation {operation} failed: {e}")
+                debug_print(f"Operation {operation} failed: {e}")  # pragma: no mutate
                 continue
 
         if not list_response or not successful_operation:
@@ -385,11 +412,15 @@ def execute_multi_level_call(
         from .formatters import flatten_response
 
         list_resources = flatten_response(list_response)
-        debug_print(f"Got {len(list_resources)} resources from {successful_operation}")
+        debug_print(
+            f"Got {len(list_resources)} resources from {successful_operation}"
+        )  # pragma: no mutate
 
         if resource_filters:
             filtered_list_resources = filter_resources(list_resources, resource_filters)
-            debug_print(f"After resource filtering: {len(filtered_list_resources)} resources")
+            debug_print(
+                f"After resource filtering: {len(filtered_list_resources)} resources"
+            )  # pragma: no mutate
         else:
             filtered_list_resources = list_resources
 
@@ -436,21 +467,23 @@ def execute_multi_level_call(
 
             param_value = parameter_values[0]
 
-        debug_print(f"Using parameter value(s): {param_value}")
+        debug_print(f"Using parameter value(s): {param_value}")  # pragma: no mutate
 
         try:
             client = get_client(service, session)
             converted_parameter_name = get_correct_parameter_name(client, action, parameter_name)
             debug_print(
                 f"Parameter name resolution: {parameter_name} -> {converted_parameter_name}"
-            )
+            )  # pragma: no mutate
         except Exception as e:
-            debug_print(f"Could not create client for parameter introspection: {e}")
+            debug_print(
+                f"Could not create client for parameter introspection: {e}"
+            )  # pragma: no mutate
             converted_parameter_name = convert_parameter_name(parameter_name)
             debug_print(
                 f"Fallback parameter name conversion: "
                 f"{parameter_name} -> {converted_parameter_name}"
-            )
+            )  # pragma: no mutate
 
         parameters = {converted_parameter_name: param_value}
         response = execute_aws_call(service, action, parameters, session)
@@ -466,11 +499,13 @@ def execute_multi_level_call(
     from .formatters import flatten_response
 
     resources = flatten_response(response)
-    debug_print(f"Final call returned {len(resources)} resources")
+    debug_print(f"Final call returned {len(resources)} resources")  # pragma: no mutate
 
     if value_filters:
         filtered_resources = filter_resources(resources, value_filters)
-        debug_print(f"After value filtering: {len(filtered_resources)} resources")
+        debug_print(
+            f"After value filtering: {len(filtered_resources)} resources"
+        )  # pragma: no mutate
     else:
         filtered_resources = resources
 
@@ -521,7 +556,7 @@ def parse_validation_error(error):
             "error_type": "missing_parameter",
         }
 
-    debug_print(f"Could not parse validation error: {error_message}")
+    debug_print(f"Could not parse validation error: {error_message}")  # pragma: no mutate
 
     return None
 
@@ -562,11 +597,11 @@ def infer_list_operation(service, parameter_name, action):
         debug_print(
             f"Parameter-based inference: '{parameter_name}' -> '{resource_name}' -> "
             f"{len(possible_operations)} operations"
-        )
+        )  # pragma: no mutate
     else:
         debug_print(
             f"Parameter '{parameter_name}' is too generic, skipping parameter-based inference"
-        )
+        )  # pragma: no mutate
 
     prefixes = ["describe", "get", "update", "delete", "create", "list"]
     action_lower = action.lower().replace("-", "_")
@@ -602,8 +637,8 @@ def infer_list_operation(service, parameter_name, action):
     debug_print(
         f"Action-based inference: '{action}' -> '{action_resource}' -> "
         f"added {len(action_operations)} operations"
-    )
-    debug_print(f"Total possible operations: {possible_operations}")
+    )  # pragma: no mutate
+    debug_print(f"Total possible operations: {possible_operations}")  # pragma: no mutate
 
     return possible_operations
 
@@ -642,39 +677,47 @@ def get_correct_parameter_name(client, action, parameter_name):
 
         operation_model = client.meta.service_model.operation_model(pascal_case_action)
 
-        debug_print(f"Introspecting parameter name for {action} (PascalCase: {pascal_case_action})")
+        debug_print(
+            f"Introspecting parameter name for {action} (PascalCase: {pascal_case_action})"
+        )  # pragma: no mutate
 
         if operation_model.input_shape:
             members = operation_model.input_shape.members
-            debug_print(f"Available parameters: {list(members.keys())}")
+            debug_print(f"Available parameters: {list(members.keys())}")  # pragma: no mutate
 
             if parameter_name in members:
-                debug_print(f"Found exact match: {parameter_name}")
+                debug_print(f"Found exact match: {parameter_name}")  # pragma: no mutate
                 return parameter_name
 
             for member_name in members:
                 if member_name.lower() == parameter_name.lower():
-                    debug_print(f"Found case-insensitive match: {parameter_name} -> {member_name}")
+                    debug_print(
+                        f"Found case-insensitive match: {parameter_name} -> {member_name}"
+                    )  # pragma: no mutate
                     return member_name
 
             pascal_case = parameter_name[0].upper() + parameter_name[1:]
             if pascal_case in members:
-                debug_print(f"Found PascalCase match: {parameter_name} -> {pascal_case}")
+                debug_print(
+                    f"Found PascalCase match: {parameter_name} -> {pascal_case}"
+                )  # pragma: no mutate
                 return pascal_case
 
             debug_print(
                 f"No parameter match found for '{parameter_name}' in {list(members.keys())}"
-            )
+            )  # pragma: no mutate
         else:
-            debug_print(f"Operation {pascal_case_action} has no input shape")
+            debug_print(f"Operation {pascal_case_action} has no input shape")  # pragma: no mutate
 
-        debug_print(f"Using original parameter name: {parameter_name}")
+        debug_print(f"Using original parameter name: {parameter_name}")  # pragma: no mutate
         return parameter_name
 
     except Exception as e:
-        debug_print(f"Could not introspect parameter name: {e}")
+        debug_print(f"Could not introspect parameter name: {e}")  # pragma: no mutate
         fallback = convert_parameter_name(parameter_name)
-        debug_print(f"Falling back to PascalCase: {parameter_name} -> {fallback}")
+        debug_print(
+            f"Falling back to PascalCase: {parameter_name} -> {fallback}"
+        )  # pragma: no mutate
         return fallback
 
 

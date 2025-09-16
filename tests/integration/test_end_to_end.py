@@ -12,12 +12,12 @@ import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 
 # Import modules under test
-from src.awsquery.cli import action_completer, main, service_completer
-from src.awsquery.core import execute_aws_call, execute_multi_level_call
-from src.awsquery.filters import parse_multi_level_filters_for_mode
-from src.awsquery.formatters import format_json_output, format_table_output, show_keys
-from src.awsquery.security import action_to_policy_format, load_security_policy, validate_security
-from src.awsquery.utils import normalize_action_name
+from awsquery.cli import action_completer, main, service_completer
+from awsquery.core import execute_aws_call, execute_multi_level_call
+from awsquery.filters import parse_multi_level_filters_for_mode
+from awsquery.formatters import format_json_output, format_table_output, show_keys
+from awsquery.security import action_to_policy_format, load_security_policy, validate_security
+from awsquery.utils import normalize_action_name
 
 
 class TestEndToEndScenarios:
@@ -38,7 +38,7 @@ class TestEndToEndScenarios:
 
         normalized = normalize_action_name("describe-instances")
         assert normalized == "describe_instances"
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         flattened = flatten_response(sample_ec2_response)
         assert len(flattened) > 0
@@ -58,7 +58,7 @@ class TestEndToEndScenarios:
         assert validate_security("ec2", "DescribeInstances", mock_security_policy)
 
         # 3. Format as JSON
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         flattened = flatten_response(sample_ec2_response)
 
@@ -107,7 +107,7 @@ class TestEndToEndScenarios:
         assert validate_security("cloudformation", "DescribeStackResources", mock_security_policy)
 
         # 3. Test that we can format the output
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         flattened = flatten_response(sample_cloudformation_response)
 
@@ -135,7 +135,7 @@ class TestEndToEndScenarios:
 
     def test_output_format_integration_with_column_filtering(self, sample_ec2_response):
         """Test integration between output formatting and column filtering."""
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         # Flatten response
         flattened = flatten_response(sample_ec2_response)
@@ -175,7 +175,7 @@ class TestEndToEndScenarios:
 
     def test_keys_mode_workflow_integration(self, sample_ec2_response):
         """Test keys mode functionality integration."""
-        from src.awsquery.formatters import extract_and_sort_keys, flatten_response
+        from awsquery.formatters import extract_and_sort_keys, flatten_response
 
         # Flatten response to extract keys
         flattened = flatten_response(sample_ec2_response)
@@ -195,7 +195,7 @@ class TestEndToEndScenarios:
 
     def test_debug_mode_integration(self, debug_mode):
         """Test debug mode functionality integration."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         # Debug mode is enabled via fixture
         assert utils.debug_enabled
@@ -328,7 +328,7 @@ class TestCLIArgumentParsing:
         assert "lambda" not in result  # Should not match prefix 'e'
 
     @patch("boto3.client")
-    @patch("src.awsquery.security.load_security_policy")
+    @patch("awsquery.security.load_security_policy")
     def test_autocomplete_action_completer(
         self, mock_policy, mock_boto_client, mock_security_policy
     ):
@@ -368,7 +368,7 @@ class TestCLIArgumentParsing:
 
     def test_flag_extraction_from_argv(self):
         """Test extraction of flags from command line arguments."""
-        from src.awsquery.cli import main
+        from awsquery.cli import main
 
         # Test that flags are correctly identified in argv
         # This tests the flag extraction logic that happens in main()
@@ -388,7 +388,7 @@ class TestCLIArgumentParsing:
 
     def test_argv_modification_for_argparse(self):
         """Test sys.argv modification for argparse compatibility."""
-        from src.awsquery.filters import parse_multi_level_filters_for_mode
+        from awsquery.filters import parse_multi_level_filters_for_mode
 
         # Test that complex argv gets properly parsed
         argv = [
@@ -439,10 +439,10 @@ class TestCLIArgumentParsing:
             mock_parsed_args = Mock()
             mock_parsed_args.service = "ec2"
 
-            with patch("src.awsquery.security.load_security_policy") as mock_load_policy:
+            with patch("awsquery.security.load_security_policy") as mock_load_policy:
                 mock_load_policy.return_value = {"ec2:DescribeInstances", "ec2:RunInstances"}
 
-                with patch("src.awsquery.security.validate_security") as mock_validate:
+                with patch("awsquery.security.validate_security") as mock_validate:
                     mock_validate.side_effect = lambda s, a, p: f"{s}:{a}" in p
 
                     # Test action completer
@@ -452,7 +452,7 @@ class TestCLIArgumentParsing:
 
     def test_complex_argv_parsing_edge_cases(self):
         """Test complex argv parsing scenarios."""
-        from src.awsquery.filters import parse_multi_level_filters_for_mode
+        from awsquery.filters import parse_multi_level_filters_for_mode
 
         # Test empty separators
         argv = ["ec2", "describe-instances", "--", "--", "InstanceId"]
@@ -473,7 +473,7 @@ class TestCLIArgumentParsing:
 
     def test_input_sanitization_integration(self):
         """Test input sanitization during argv processing."""
-        from src.awsquery.utils import sanitize_input
+        from awsquery.utils import sanitize_input
 
         # Test various sanitization scenarios
         test_cases = [
@@ -489,7 +489,7 @@ class TestCLIArgumentParsing:
 
     def test_action_name_normalization_integration(self):
         """Test action name normalization in CLI workflow."""
-        from src.awsquery.utils import normalize_action_name
+        from awsquery.utils import normalize_action_name
 
         test_cases = [
             ("describe-instances", "describe_instances"),
@@ -567,7 +567,7 @@ class TestCLIErrorHandling:
 
     def test_argparse_system_exit_handling(self):
         """Test argparse SystemExit handling in main function."""
-        from src.awsquery.cli import main
+        from awsquery.cli import main
 
         # Test invalid arguments that cause argparse to exit
         with patch("sys.argv", ["awsquery", "--invalid-flag"]):
@@ -581,10 +581,10 @@ class TestCLIErrorHandling:
     def test_aws_credential_errors(self):
         """Test AWS credential and authentication error scenarios."""
         with patch("sys.argv", ["awsquery", "ec2", "describe-instances"]):
-            with patch("src.awsquery.security.load_security_policy") as mock_load_policy:
+            with patch("awsquery.security.load_security_policy") as mock_load_policy:
                 mock_load_policy.return_value = {"ec2:DescribeInstances"}
 
-                with patch("src.awsquery.core.execute_aws_call") as mock_execute:
+                with patch("awsquery.core.execute_aws_call") as mock_execute:
                     # Test NoCredentialsError
                     mock_execute.side_effect = NoCredentialsError()
 
@@ -608,7 +608,7 @@ class TestCLIErrorHandling:
         """Test edge cases for missing service/action arguments."""
         # Test empty service (which is falsy and triggers service listing)
         with patch("sys.argv", ["awsquery", "", "describe-instances"]):
-            with patch("src.awsquery.utils.get_aws_services") as mock_get_services:
+            with patch("awsquery.utils.get_aws_services") as mock_get_services:
                 mock_get_services.return_value = ["ec2", "s3"]
 
                 with patch("sys.exit") as mock_exit:
@@ -624,7 +624,7 @@ class TestCLIErrorHandling:
 
     def test_security_policy_loading_failures(self):
         """Test security policy loading failure scenarios."""
-        from src.awsquery.security import load_security_policy
+        from awsquery.security import load_security_policy
 
         # Test when policy file is missing - should call sys.exit(1)
         with patch("builtins.open") as mock_open:
@@ -641,7 +641,7 @@ class TestCLIErrorHandling:
 
     def test_service_model_introspection_errors(self):
         """Test service model introspection error scenarios."""
-        from src.awsquery.cli import action_completer
+        from awsquery.cli import action_completer
 
         # Test with non-existent service
         mock_parsed_args = Mock()
@@ -656,7 +656,7 @@ class TestCLIErrorHandling:
 
     def test_sanitization_edge_cases(self):
         """Test input sanitization with edge cases."""
-        from src.awsquery.utils import sanitize_input
+        from awsquery.utils import sanitize_input
 
         # Test edge cases that could cause issues
         edge_cases = ["", " ", "   ", "\n", "\t", "normal"]
@@ -668,8 +668,8 @@ class TestCLIErrorHandling:
 
     def test_debug_print_integration_enabled(self, debug_mode):
         """Test debug print functionality when debug is enabled."""
-        from src.awsquery import utils
-        from src.awsquery.utils import debug_print
+        from awsquery import utils
+        from awsquery.utils import debug_print
 
         # Debug mode is enabled via fixture
         assert utils.debug_enabled
@@ -681,8 +681,8 @@ class TestCLIErrorHandling:
 
     def test_debug_print_integration_disabled(self, debug_disabled):
         """Test debug print functionality when debug is disabled."""
-        from src.awsquery import utils
-        from src.awsquery.utils import debug_print
+        from awsquery import utils
+        from awsquery.utils import debug_print
 
         # Debug mode is disabled via fixture
         assert not utils.debug_enabled
@@ -698,7 +698,7 @@ class TestCLIOutputFormats:
 
     def test_table_output_format_structure(self, sample_ec2_response):
         """Test table output format structure."""
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         flattened = flatten_response(sample_ec2_response)
         table_output = format_table_output(flattened, [])
@@ -717,7 +717,7 @@ class TestCLIOutputFormats:
 
     def test_json_output_format_structure(self, sample_ec2_response):
         """Test JSON output format structure."""
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         flattened = flatten_response(sample_ec2_response)
         json_output = format_json_output(flattened, [])
@@ -747,7 +747,7 @@ class TestCLIOutputFormats:
 
     def test_column_filtering_effects_both_formats(self, sample_ec2_response):
         """Test column filtering effects on both table and JSON output."""
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         flattened = flatten_response(sample_ec2_response)
         column_filters = ["InstanceId", "State"]
@@ -780,7 +780,7 @@ class TestCLIOutputFormats:
         # Empty response
         empty_response = {"Reservations": [], "ResponseMetadata": {"RequestId": "test"}}
 
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         flattened = flatten_response(empty_response)
 
@@ -823,7 +823,7 @@ class TestCLIOutputFormats:
             "ResponseMetadata": {"RequestId": "large-test"},
         }
 
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         flattened = flatten_response(large_response)
 
@@ -854,7 +854,7 @@ class TestCLIOutputFormats:
 
     def test_show_keys_functionality(self, sample_ec2_response):
         """Test show keys functionality with mocked data."""
-        with patch("src.awsquery.core.execute_aws_call") as mock_execute:
+        with patch("awsquery.core.execute_aws_call") as mock_execute:
             mock_execute.return_value = sample_ec2_response
 
             # Test show_keys function
@@ -873,14 +873,14 @@ class TestCLIMainFunctionBasics:
     def test_main_function_argument_processing(self):
         """Test basic argument processing functionality."""
         # Test that main function can be imported and called without crashing
-        from src.awsquery.cli import main
+        from awsquery.cli import main
 
         # This is a basic smoke test to ensure main can be imported and basic functionality works
         assert main is not None
         assert callable(main)
 
         # Test basic component integration
-        from src.awsquery.utils import normalize_action_name, sanitize_input
+        from awsquery.utils import normalize_action_name, sanitize_input
 
         service = sanitize_input("ec2")
         action = normalize_action_name("describe-instances")

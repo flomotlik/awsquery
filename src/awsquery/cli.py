@@ -170,7 +170,7 @@ def _build_filter_argv(args, remaining):
 def determine_column_filters(column_filters, service, action):
     """Determine which column filters to apply - user specified or defaults"""
     if column_filters:
-        debug_print(f"Using user-specified column filters: {column_filters}")
+        debug_print(f"Using user-specified column filters: {column_filters}")  # pragma: no mutate
         return column_filters
 
     # Check for defaults - normalize action name for lookup
@@ -181,10 +181,12 @@ def determine_column_filters(column_filters, service, action):
     if default_columns:
         debug_print(
             f"Applying default column filters for {service}.{normalized_action}: {default_columns}"
-        )
+        )  # pragma: no mutate
         return default_columns
 
-    debug_print(f"No column filters (user or default) for {service}.{normalized_action}")
+    debug_print(
+        f"No column filters (user or default) for {service}.{normalized_action}"
+    )  # pragma: no mutate
     return None
 
 
@@ -241,9 +243,11 @@ def action_completer(prefix, parsed_args, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Query AWS APIs with flexible filtering and automatic parameter resolution",
+        description=(
+            "Query AWS APIs with flexible filtering and automatic parameter resolution"
+        ),  # pragma: no mutate
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog="""  # pragma: no mutate
 Examples:
   awsquery ec2 describe_instances prod web -- Tags.Name State InstanceId
   awsquery s3 list_buckets backup
@@ -257,19 +261,31 @@ Examples:
     )
 
     parser.add_argument(
-        "-j", "--json", action="store_true", help="Output results in JSON format instead of table"
+        "-j",
+        "--json",
+        action="store_true",
+        help="Output results in JSON format instead of table",  # pragma: no mutate
     )
     parser.add_argument(
-        "-k", "--keys", action="store_true", help="Show all available keys for the command"
+        "-k",
+        "--keys",
+        action="store_true",
+        help="Show all available keys for the command",  # pragma: no mutate
     )
-    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug output")
-    parser.add_argument("--region", help="AWS region to use for requests")
-    parser.add_argument("--profile", help="AWS profile to use for requests")
+    parser.add_argument(
+        "-d", "--debug", action="store_true", help="Enable debug output"
+    )  # pragma: no mutate
+    parser.add_argument("--region", help="AWS region to use for requests")  # pragma: no mutate
+    parser.add_argument("--profile", help="AWS profile to use for requests")  # pragma: no mutate
 
-    service_arg = parser.add_argument("service", nargs="?", help="AWS service name")
+    service_arg = parser.add_argument(
+        "service", nargs="?", help="AWS service name"
+    )  # pragma: no mutate
     service_arg.completer = service_completer  # type: ignore[attr-defined]
 
-    action_arg = parser.add_argument("action", nargs="?", help="Service action name")
+    action_arg = parser.add_argument(
+        "action", nargs="?", help="Service action name"
+    )  # pragma: no mutate
     action_arg.completer = action_completer  # type: ignore[attr-defined]
 
     argcomplete.autocomplete(parser)
@@ -364,18 +380,22 @@ Examples:
     debug_print(
         f"DEBUG: Checking security for service='{service}', "
         f"action='{action}', policy_action='{policy_action}'"
-    )
-    debug_print(f"DEBUG: Policy has {len(allowed_actions)} allowed actions")
+    )  # pragma: no mutate
+    debug_print(f"DEBUG: Policy has {len(allowed_actions)} allowed actions")  # pragma: no mutate
 
     if not validate_security(service, policy_action, allowed_actions):
         print(f"ERROR: Action {service}:{action} not permitted by security policy", file=sys.stderr)
         sys.exit(1)
     else:
-        debug_print(f"DEBUG: Action {service}:{policy_action} IS ALLOWED by security policy")
+        debug_print(
+            f"DEBUG: Action {service}:{policy_action} IS ALLOWED by security policy"
+        )  # pragma: no mutate
 
     # Create session with region/profile if specified
     session = create_session(region=args.region, profile=args.profile)
-    debug_print(f"DEBUG: Created session with region={args.region}, profile={args.profile}")
+    debug_print(
+        f"DEBUG: Created session with region={args.region}, profile={args.profile}"
+    )  # pragma: no mutate
 
     # Determine final column filters (user-specified or defaults)
     final_column_filters = determine_column_filters(column_filters, service, action)
@@ -389,7 +409,9 @@ Examples:
 
             # If the initial call failed, try multi-level resolution
             if not call_result.final_success:
-                debug_print("Keys mode: Initial call failed, trying multi-level resolution")
+                debug_print(
+                    "Keys mode: Initial call failed, trying multi-level resolution"
+                )  # pragma: no mutate
                 _, multi_resource_filters, multi_value_filters, multi_column_filters = (
                     parse_multi_level_filters_for_mode(filter_argv, mode="multi")
                 )
@@ -409,11 +431,13 @@ Examples:
             sys.exit(1)
 
     try:
-        debug_print(f"Using single-level execution first")
+        debug_print(f"Using single-level execution first")  # pragma: no mutate
         response = execute_aws_call(service, action, session=session)
 
         if isinstance(response, dict) and "validation_error" in response:
-            debug_print(f"ValidationError detected in single-level call, switching to multi-level")
+            debug_print(
+                f"ValidationError detected in single-level call, switching to multi-level"
+            )  # pragma: no mutate
             _, multi_resource_filters, multi_value_filters, multi_column_filters = (
                 parse_multi_level_filters_for_mode(filter_argv, mode="multi")
             )
@@ -421,7 +445,7 @@ Examples:
                 f"Re-parsed filters for multi-level - "
                 f"Resource: {multi_resource_filters}, Value: {multi_value_filters}, "
                 f"Column: {multi_column_filters}"
-            )
+            )  # pragma: no mutate
             # Apply defaults for multi-level if no user columns specified
             final_multi_column_filters = determine_column_filters(
                 multi_column_filters, service, action
@@ -434,16 +458,18 @@ Examples:
                 final_multi_column_filters,
                 session,
             )
-            debug_print(f"Multi-level call completed with {len(filtered_resources)} resources")
+            debug_print(
+                f"Multi-level call completed with {len(filtered_resources)} resources"
+            )  # pragma: no mutate
         else:
             resources = flatten_response(response)
-            debug_print(f"Total resources extracted: {len(resources)}")
+            debug_print(f"Total resources extracted: {len(resources)}")  # pragma: no mutate
 
             filtered_resources = filter_resources(resources, value_filters)
 
         if final_column_filters:
             for filter_word in final_column_filters:
-                debug_print(f"Applying column filter: {filter_word}")
+                debug_print(f"Applying column filter: {filter_word}")  # pragma: no mutate
 
         if args.keys:
             sorted_keys = extract_and_sort_keys(filtered_resources)
