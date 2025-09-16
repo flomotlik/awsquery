@@ -45,6 +45,52 @@ cd awsquery
 pip install -e ".[dev]"
 ```
 
+### Enable Shell Autocomplete
+
+awsquery supports tab completion for AWS services and actions through argcomplete.
+
+#### Quick Setup (Automatic)
+```bash
+# Run the setup script
+./setup-autocomplete.sh
+
+# Then reload your shell configuration
+source ~/.bashrc  # or ~/.zshrc, etc.
+```
+
+#### Manual Setup
+
+##### Bash
+```bash
+# Add to ~/.bashrc or ~/.bash_profile
+eval "$(register-python-argcomplete awsquery)"
+```
+
+##### Zsh
+```bash
+# Add to ~/.zshrc
+autoload -U bashcompinit && bashcompinit
+eval "$(register-python-argcomplete awsquery)"
+```
+
+##### Fish
+```bash
+# Add to ~/.config/fish/config.fish
+register-python-argcomplete --shell fish awsquery | source
+```
+
+After adding the appropriate line to your shell configuration, restart your shell or source the file:
+```bash
+source ~/.bashrc  # or ~/.zshrc, etc.
+```
+
+Now you can use tab completion:
+```bash
+awsquery <TAB>              # Shows available services
+awsquery ec2 <TAB>          # Shows available ec2 actions
+awsquery s3 list-<TAB>      # Shows s3 list actions
+```
+
 ## Usage
 
 ### Basic Query
@@ -266,40 +312,59 @@ make release  # Create a new release with version bump
 
 ## Advanced Usage
 
-### Partial Matching Behavior
+### Filter Matching Behavior
 
-All filters in awsquery use **case-insensitive partial matching**:
+All filters in awsquery use **case-insensitive matching** with optional anchoring:
+
+#### Filter Operators
+- `^` at the start: matches values that START WITH the pattern (prefix match)
+  - Both `^` (U+005E) and `ˆ` (U+02C6) are supported for keyboard compatibility
+- `$` at the end: matches values that END WITH the pattern (suffix match)
+- `^...$`: matches values that EXACTLY equal the pattern (exact match)
+- No operators: matches values that CONTAIN the pattern (partial match)
 
 #### Value Filters (before `--`)
 - Match against ANY field in the response data
 - ALL specified filters must match (AND logic)
-- Case-insensitive substring matching
+- Case-insensitive matching with optional anchoring
 
 ```bash
-# "prod" matches: "production", "prod-server", "my-prod-app"
+# "prod" matches: "production", "prod-server", "my-prod-app" (contains)
 awsquery ec2 describe-instances prod
 
-# Both "prod" AND "web" must appear (in any fields)
-awsquery ec2 describe-instances prod web
+# "^prod" matches: "production", "prod-server" (starts with)
+awsquery ec2 describe-instances ^prod
 
-# "i-123" matches any instance ID starting with "i-123"
-awsquery ec2 describe-instances i-123
+# "prod$" matches: "my-prod", "dev-prod" (ends with)
+awsquery ec2 describe-instances prod$
+
+# "^prod$" matches: only exactly "prod" (exact match)
+awsquery ec2 describe-instances ^prod$
+
+# Both filters must match (AND logic)
+awsquery ec2 describe-instances ^prod web$
 ```
 
 #### Column Filters (after `--`)
 - Match against column/field names in the output
-- Partial, case-insensitive matching on column names
+- Case-insensitive matching with optional anchoring
 - Multiple columns can be specified
 
 ```bash
-# "Instance" matches: "InstanceId", "InstanceType", "InstanceName"
+# "Instance" matches: "InstanceId", "InstanceType", "InstanceName" (contains)
 awsquery ec2 describe-instances -- Instance
 
-# Shows columns containing "Tag", "State", or "IP"
-awsquery ec2 describe-instances -- Tag State IP
+# "^Instance" matches: "InstanceId", "InstanceType" (starts with)
+awsquery ec2 describe-instances -- ^Instance
 
-# Nested field matching
-awsquery ec2 describe-instances -- State.Name Tags.Environment
+# "Name$" matches: "InstanceName", "GroupName", "Tags.Name" (ends with)
+awsquery ec2 describe-instances -- Name$
+
+# "^State.Name$" matches: only exactly "State.Name" (exact match)
+awsquery ec2 describe-instances -- ^State.Name$
+
+# Multiple patterns
+awsquery ec2 describe-instances -- ^Instance Name$ State
 ```
 
 ### Multi-Level API Calls

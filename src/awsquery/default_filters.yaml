@@ -1,6 +1,11 @@
 # Default column filters for AWS service actions
-# Phase 3A: Core Services (Priority 1)
+# Using ^ and $ operators for precise field matching:
+# - ^field$ for exact match
+# - ^field for prefix match
+# - field$ for suffix match
+# - field for contains match
 
+# Core Services (Priority 1)
 ec2:
   describe_instances:
     columns:
@@ -69,8 +74,278 @@ rds:
 cloudformation:
   describe_stacks:
     columns:
-      - "StackName"
-      - "StackStatus"
+      - "^StackName$"
+      - "^StackStatus$"
       - "CreationTime"
-      - "LastUpdated"
+      - "LastUpdatedTime"
     description: "Default columns for CloudFormation stack listing"
+
+# High-Priority Services (Priority 2)
+iam:
+  list_users:
+    columns:
+      - "^UserName$"
+      - "^UserId$"
+      - "^Arn$"
+      - "CreateDate"
+      - "PasswordLastUsed"
+    description: "Default columns for IAM user listing"
+
+  list_roles:
+    columns:
+      - "^RoleName$"
+      - "^RoleId$"
+      - "^Arn$"
+      - "CreateDate"
+      - "MaxSessionDuration"
+    description: "Default columns for IAM role listing"
+
+  list_policies:
+    columns:
+      - "^PolicyName$"
+      - "^PolicyId$"
+      - "^Arn$"
+      - "DefaultVersionId"
+      - "AttachmentCount"
+    description: "Default columns for IAM policy listing"
+
+ecs:
+  list_clusters:
+    columns:
+      - "^clusterName$"
+      - "status"
+      - "registeredContainerInstancesCount"
+      - "runningTasksCount"
+      - "activeServicesCount"
+    description: "Default columns for ECS cluster listing"
+
+  list_services:
+    columns:
+      - "^serviceName$"
+      - "^serviceArn$"
+      - "status"
+      - "desiredCount"
+      - "runningCount"
+    description: "Default columns for ECS service listing"
+
+  list_tasks:
+    columns:
+      - "^taskArn$"
+      - "^taskDefinitionArn$"
+      - "lastStatus"
+      - "desiredStatus"
+    description: "Default columns for ECS task listing"
+
+dynamodb:
+  list_tables:
+    columns:
+      - "^TableName$"
+    description: "Default columns for DynamoDB table listing"
+
+  describe_table:
+    columns:
+      - "Table.^TableName$"
+      - "Table.TableStatus"
+      - "Table.ItemCount"
+      - "Table.TableSizeBytes"
+      - "Table.CreationDateTime"
+    description: "Default columns for DynamoDB table details"
+
+sqs:
+  list_queues:
+    columns:
+      - "QueueUrl"
+    description: "Default columns for SQS queue listing"
+
+  get_queue_attributes:
+    columns:
+      - "Attributes.QueueArn"
+      - "Attributes.ApproximateNumberOfMessages"
+      - "Attributes.ApproximateNumberOfMessagesNotVisible"
+      - "Attributes.CreatedTimestamp"
+    description: "Default columns for SQS queue attributes"
+
+sns:
+  list_topics:
+    columns:
+      - "^TopicArn$"
+    description: "Default columns for SNS topic listing"
+
+  get_topic_attributes:
+    columns:
+      - "Attributes.DisplayName"
+      - "Attributes.SubscriptionsConfirmed"
+      - "Attributes.SubscriptionsPending"
+    description: "Default columns for SNS topic attributes"
+
+cloudwatch:
+  describe_alarms:
+    columns:
+      - "^AlarmName$"
+      - "^StateValue$"
+      - "MetricName"
+      - "Namespace"
+      - "Threshold"
+    description: "Default columns for CloudWatch alarm listing"
+
+  list_metrics:
+    columns:
+      - "^Namespace$"
+      - "^MetricName$"
+      - "Dimensions"
+    description: "Default columns for CloudWatch metrics listing"
+
+# Additional Services (Priority 3)
+route53:
+  list_hosted_zones:
+    columns:
+      - "^Id$"
+      - "^Name$"
+      - "Config.PrivateZone"
+      - "ResourceRecordSetCount"
+    description: "Default columns for Route53 hosted zone listing"
+
+  list_resource_record_sets:
+    columns:
+      - "^Name$"
+      - "^Type$"
+      - "TTL"
+      - "ResourceRecords[0].Value"
+    description: "Default columns for Route53 record set listing"
+
+eks:
+  list_clusters:
+    columns:
+      - "^Name$"
+    description: "Default columns for EKS cluster listing"
+
+  describe_cluster:
+    columns:
+      - "cluster.name$"
+      - "cluster.status"
+      - "cluster.version"
+      - "cluster.endpoint"
+      - "cluster.platformVersion"
+    description: "Default columns for EKS cluster details"
+
+  list_nodegroups:
+    columns:
+      - "^nodegroupName$"
+    description: "Default columns for EKS nodegroup listing"
+
+efs:
+  describe_file_systems:
+    columns:
+      - "^FileSystemId$"
+      - "^Name$"
+      - "LifeCycleState"
+      - "SizeInBytes.Value"
+      - "CreationTime"
+    description: "Default columns for EFS filesystem listing"
+
+apigateway:
+  get_rest_apis:
+    columns:
+      - "^id$"
+      - "^name$"
+      - "endpointConfiguration.types[0]"
+      - "createdDate"
+    description: "Default columns for API Gateway REST API listing"
+
+  get_resources:
+    columns:
+      - "^id$"
+      - "^path$"
+      - "resourceMethods"
+    description: "Default columns for API Gateway resource listing"
+
+apigatewayv2:
+  get_apis:
+    columns:
+      - "^ApiId$"
+      - "^Name$"
+      - "ProtocolType"
+      - "ApiEndpoint"
+      - "CreatedDate"
+    description: "Default columns for API Gateway V2 API listing"
+
+codebuild:
+  list_projects:
+    columns:
+      - "^name$"
+    description: "Default columns for CodeBuild project listing"
+
+  batch_get_projects:
+    columns:
+      - "projects[].^name$"
+      - "projects[].source.type"
+      - "projects[].environment.computeType"
+      - "projects[].lastModified"
+    description: "Default columns for CodeBuild project details"
+
+codepipeline:
+  list_pipelines:
+    columns:
+      - "^name$"
+      - "version"
+      - "created"
+      - "updated"
+    description: "Default columns for CodePipeline pipeline listing"
+
+  get_pipeline:
+    columns:
+      - "pipeline.^name$"
+      - "pipeline.roleArn"
+      - "pipeline.stages[].name"
+    description: "Default columns for CodePipeline pipeline details"
+
+kinesis:
+  list_streams:
+    columns:
+      - "^StreamNames$"
+    description: "Default columns for Kinesis stream listing"
+
+  describe_stream:
+    columns:
+      - "StreamDescription.^StreamName$"
+      - "StreamDescription.StreamStatus"
+      - "StreamDescription.StreamCreationTimestamp"
+      - "StreamDescription.Shards[].ShardId"
+    description: "Default columns for Kinesis stream details"
+
+elasticache:
+  describe_cache_clusters:
+    columns:
+      - "^CacheClusterId$"
+      - "CacheNodeType"
+      - "Engine"
+      - "CacheClusterStatus"
+      - "NumCacheNodes"
+    description: "Default columns for ElastiCache cluster listing"
+
+redshift:
+  describe_clusters:
+    columns:
+      - "^ClusterIdentifier$"
+      - "ClusterStatus"
+      - "NodeType"
+      - "NumberOfNodes"
+      - "DatabaseName"
+    description: "Default columns for Redshift cluster listing"
+
+elasticbeanstalk:
+  describe_environments:
+    columns:
+      - "^EnvironmentName$"
+      - "^ApplicationName$"
+      - "Status"
+      - "Health"
+      - "VersionLabel"
+    description: "Default columns for Elastic Beanstalk environment listing"
+
+  describe_applications:
+    columns:
+      - "^ApplicationName$"
+      - "DateCreated"
+      - "DateUpdated"
+    description: "Default columns for Elastic Beanstalk application listing"

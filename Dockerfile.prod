@@ -43,6 +43,12 @@ RUN ln -sf /app/awsquery.py /usr/local/bin/awsquery-legacy \
 
 # Create non-root user for security
 RUN useradd -m -u 1000 awsquery
+
+# Configure bash autocomplete for awsquery user
+RUN echo '# Enable awsquery autocomplete' >> /home/awsquery/.bashrc \
+    && echo 'eval "$(register-python-argcomplete awsquery)"' >> /home/awsquery/.bashrc \
+    && chown awsquery:awsquery /home/awsquery/.bashrc
+
 USER awsquery
 
 # Set default command to the CLI tool

@@ -6,13 +6,78 @@ from .formatters import convert_parameter_name, flatten_dict_keys, transform_tag
 from .utils import debug_print, simplify_key
 
 
+def parse_filter_pattern(filter_text):
+    """Parse filter pattern to extract ^ and $ operators and determine matching mode.
+
+    Returns:
+        tuple: (filter_pattern, match_mode) where match_mode is one of:
+               'exact', 'prefix', 'suffix', 'contains'
+    """
+    if not filter_text:
+        return "", "contains"
+
+    # Check for prefix operator (^ at start) - support both ASCII and modifier circumflex
+    # U+005E (^) is the standard ASCII circumflex
+    # U+02C6 (ˆ) is the modifier letter circumflex that some keyboards produce
+    has_prefix = filter_text.startswith("^") or filter_text.startswith("ˆ")
+    # Check for suffix operator ($ at end)
+    has_suffix = filter_text.endswith("$")
+
+    # Extract the actual pattern by removing ^ or ˆ from start and $ from end
+    pattern = filter_text
+    if has_prefix:
+        pattern = pattern[1:]  # Remove ^ or ˆ
+    if has_suffix:
+        pattern = pattern[:-1]  # Remove $
+
+    # Determine match mode based on ^ and $ operators
+    if has_prefix and has_suffix:
+        mode = "exact"
+    elif has_prefix:
+        mode = "prefix"
+    elif has_suffix:
+        mode = "suffix"
+    else:
+        mode = "contains"
+
+    return pattern, mode
+
+
+def matches_pattern(text, pattern, mode):
+    """Check if text matches pattern according to the given mode.
+
+    Args:
+        text: The text to check
+        pattern: The pattern to match against
+        mode: One of 'exact', 'prefix', 'suffix', 'contains'
+
+    Returns:
+        bool: True if text matches pattern according to mode
+    """
+    text_lower = str(text).lower()
+    pattern_lower = str(pattern).lower()
+
+    if mode == "exact":
+        return text_lower == pattern_lower
+    elif mode == "prefix":
+        return text_lower.startswith(pattern_lower)
+    elif mode == "suffix":
+        return text_lower.endswith(pattern_lower)
+    else:  # contains
+        return pattern_lower in text_lower
+
+
 def filter_resources(resources, value_filters):
     """Filter resources by value filters (ALL must match)"""
     if not value_filters:
         return resources
 
+    # Parse filter patterns once
+    parsed_filters = []
     for filter_text in value_filters:
-        debug_print(f"Applying value filter: {filter_text}")
+        pattern, mode = parse_filter_pattern(filter_text)
+        parsed_filters.append((pattern, mode))
+        debug_print(f"Applying value filter: {filter_text} (mode: {mode})")
 
     # Apply tag transformation before filtering
     transformed_resources = []
@@ -26,26 +91,35 @@ def filter_resources(resources, value_filters):
 
         searchable_items = []
 
-        searchable_items.extend([key.lower() for key in flattened.keys()])
-
-        searchable_items.extend([str(value).lower() for value in flattened.values()])
+        searchable_items.extend([key for key in flattened.keys()])
+        searchable_items.extend([str(value) for value in flattened.values()])
 
         if len(filtered) + len([r for r in resources if r != resource]) < 3:
             debug_print(f"Sample flattened keys: {list(flattened.keys())[:5]}")
             debug_print(f"Sample searchable items: {searchable_items[:10]}")
 
         matches_all = True
-        for filter_text in value_filters:
-            filter_lower = filter_text.lower()
-            if not any(filter_lower in item for item in searchable_items):
+        for pattern, mode in parsed_filters:
+            if not pattern:  # Empty pattern matches everything
+                continue
+
+            # Check if any item matches the pattern with the given mode
+            matched = False
+            for item in searchable_items:
+                if matches_pattern(item, pattern, mode):
+                    matched = True
+                    matching_items = [
+                        i for i in searchable_items if matches_pattern(i, pattern, mode)
+                    ]
+                    debug_print(
+                        f"Filter '{pattern}' (mode: {mode}) matched: {matching_items[:3]}"
+                        f"{'...' if len(matching_items) > 3 else ''}"
+                    )
+                    break
+
+            if not matched:
                 matches_all = False
                 break
-            else:
-                matching_items = [item for item in searchable_items if filter_lower in item]
-                debug_print(
-                    f"Filter '{filter_text}' matched: {matching_items[:3]}"
-                    f"{'...' if len(matching_items) > 3 else ''}"
-                )
 
         if matches_all:
             filtered.append(resource)

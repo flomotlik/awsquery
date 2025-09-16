@@ -49,5 +49,10 @@ RUN chmod +x awsquery.py
 RUN ln -sf /app/awsquery.py /usr/local/bin/awsquery-legacy \
     && ln -sf /usr/local/bin/awsquery /usr/local/bin/awsquery-cli
 
+# Configure bash autocomplete for awsquery
+RUN echo '# Enable awsquery autocomplete' >> /root/.bashrc \
+    && echo 'eval "$(register-python-argcomplete awsquery)"' >> /root/.bashrc \
+    && echo 'echo "awsquery autocomplete enabled. Try: awsquery <TAB>"' >> /root/.bashrc
+
 # Set default command to bash for interactive use
 ENTRYPOINT ["/bin/bash"]

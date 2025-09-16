@@ -7,6 +7,44 @@ from tabulate import tabulate
 from .utils import debug_print, simplify_key
 
 
+def filter_columns(flattened_data, column_filters):
+    """Filter columns based on filter patterns with ! operators.
+
+    Args:
+        flattened_data: Dictionary with flattened keys
+        column_filters: List of column filter patterns
+
+    Returns:
+        Dictionary with only the columns that match the filters
+    """
+    # Import here to avoid circular dependency
+    from .filters import matches_pattern, parse_filter_pattern
+
+    if not column_filters:
+        return flattened_data
+
+    # Parse filter patterns
+    parsed_filters = []
+    for filter_text in column_filters:
+        pattern, mode = parse_filter_pattern(filter_text)
+        parsed_filters.append((pattern, mode))
+        debug_print(f"Applying column filter: {filter_text} (mode: {mode})")
+
+    filtered_columns = {}
+
+    for key, value in flattened_data.items():
+        for pattern, mode in parsed_filters:
+            if not pattern:  # Empty pattern matches everything
+                filtered_columns[key] = value
+                break
+            elif matches_pattern(key, pattern, mode):
+                filtered_columns[key] = value
+                debug_print(f"Column '{key}' matched filter '{pattern}' (mode: {mode})")
+                break
+
+    return filtered_columns
+
+
 def detect_aws_tags(obj):
     """Detect if object contains AWS Tag structure"""
     if isinstance(obj, dict) and "Tags" in obj:
@@ -211,25 +249,16 @@ def format_table_output(resources, column_filters=None):
         all_keys.update(flat.keys())
 
     if column_filters:
-        for filter_word in column_filters:
-            debug_print(f"Applying column filter: {filter_word}")
+        # Use filter_columns to apply pattern matching with ! operators
+        # Create a dummy dict with all keys to test which ones match
+        all_keys_dict = {key: True for key in all_keys}
+        filtered_dict = filter_columns(all_keys_dict, column_filters)
+        selected_keys = list(filtered_dict.keys())
 
-        selected_keys = []
-        for filter_word in column_filters:
-            matching_keys = []
-            for key in all_keys:
-                simplified = simplify_key(key)
-                if filter_word.lower() in key.lower() or filter_word.lower() in simplified.lower():
-                    matching_keys.append(key)
-            selected_keys.extend(matching_keys)
-            if matching_keys:
-                debug_print(
-                    f"Column filter '{filter_word}' matched: "
-                    f"{', '.join(matching_keys[:5])}{'...' if len(matching_keys) > 5 else ''}"
-                )
-            else:
-                debug_print(f"Column filter '{filter_word}' matched no columns")
-        selected_keys = list(dict.fromkeys(selected_keys))
+        if not selected_keys:
+            debug_print(f"No columns matched filters: {column_filters}")
+        else:
+            debug_print(f"Selected {len(selected_keys)} columns from {len(all_keys)} available")
     else:
         selected_keys = sorted(list(all_keys))
 
@@ -284,24 +313,23 @@ def format_json_output(resources, column_filters=None):
         transformed_resources.append(transformed)
 
     if column_filters:
-        for filter_word in column_filters:
-            debug_print(f"Applying column filter to JSON: {filter_word}")
+        debug_print(f"Applying column filters to JSON: {column_filters}")
 
         filtered_resources = []
         for resource in transformed_resources:
             flat = flatten_dict_keys(resource)
 
+            # Use filter_columns to apply pattern matching with ! operators
+            filtered_flat = filter_columns(flat, column_filters)
+
+            # Group by simplified keys for cleaner output
             simplified_groups: dict[str, set[str]] = {}
-            for key, value in flat.items():
+            for key, value in filtered_flat.items():
                 simplified = simplify_key(key)
-                if any(
-                    cf.lower() in key.lower() or cf.lower() in simplified.lower()
-                    for cf in column_filters
-                ):
-                    if simplified not in simplified_groups:
-                        simplified_groups[simplified] = set()
-                    if value:
-                        simplified_groups[simplified].add(str(value))
+                if simplified not in simplified_groups:
+                    simplified_groups[simplified] = set()
+                if value:
+                    simplified_groups[simplified].add(str(value))
 
             filtered = {}
             for simplified_key, values in simplified_groups.items():

@@ -656,7 +656,7 @@ class TestCLIErrorHandling:
         with patch("boto3.client") as mock_client:
             mock_client.side_effect = Exception("Unknown service")
 
-            # Should handle gracefully and return empty list
+            # Should handle gracefully and return empty list for unknown services
             results = action_completer("describe", mock_parsed_args)
             assert results == []
 

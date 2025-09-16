@@ -1,6 +1,7 @@
 """Command-line interface for AWS Query Tool."""
 
 import argparse
+import os
 import re
 import sys
 
@@ -27,11 +28,143 @@ from .security import action_to_policy_format, load_security_policy, validate_se
 from .utils import create_session, debug_print, get_aws_services, sanitize_input
 
 
+def _extract_flags_from_args(remaining_args):
+    """Extract CLI flags from remaining arguments."""
+    flags = []
+    non_flags = []
+    i = 0
+    while i < len(remaining_args):
+        arg = remaining_args[i]
+        if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
+            flags.append(arg)
+        elif arg in ["--region", "--profile"]:
+            flags.append(arg)
+            # Check for value after the flag
+            if i + 1 < len(remaining_args):
+                next_arg = remaining_args[i + 1]
+                if not next_arg.startswith("-"):
+                    flags.append(next_arg)
+                    i += 1
+        else:
+            non_flags.append(arg)
+        i += 1
+    return flags, non_flags
+
+
+def _preserve_parsed_flags(args):
+    """Preserve flags that were already parsed."""
+    flags = []
+    if args.debug:
+        flags.append("-d")
+    if getattr(args, "json", False):
+        flags.append("-j")
+    if getattr(args, "keys", False):
+        flags.append("-k")
+    if getattr(args, "region", None):
+        flags.extend(["--region", args.region])
+    if getattr(args, "profile", None):
+        flags.extend(["--profile", args.profile])
+    return flags
+
+
 def service_completer(prefix, parsed_args, **kwargs):
     """Autocomplete AWS service names"""
-    session = boto3.Session()
-    services = session.get_available_services()
+    try:
+        # Create a session without requiring valid credentials
+        # This works locally to get service names from botocore's data files
+        import botocore.session
+
+        # Temporarily clear AWS_PROFILE to avoid validation errors
+        old_profile = os.environ.pop("AWS_PROFILE", None)
+        try:
+            session = botocore.session.Session()
+            # Get available services from botocore's local data
+            services = session.get_available_services()
+        finally:
+            # Restore AWS_PROFILE if it existed
+            if old_profile is not None:
+                os.environ["AWS_PROFILE"] = old_profile
+
+    except Exception:
+        # If even local session fails, return empty
+        return []
+
     return [s for s in services if s.startswith(prefix)]
+
+
+def _extract_flag_and_value(args, i):
+    """Extract a flag and optionally its value from args list."""
+    flags = []
+    flags.append(args[i])
+    if args[i] in ["--region", "--profile"]:
+        if i + 1 < len(args) and not args[i + 1].startswith("-") and args[i + 1] != "--":
+            flags.append(args[i + 1])
+            return flags, 2  # consumed 2 args
+    return flags, 1  # consumed 1 arg
+
+
+def _process_remaining_args_after_separator(remaining):
+    """Process remaining args when -- was in original but not in remaining."""
+    flags = []
+    non_flags = []
+    i = 0
+    while i < len(remaining):
+        arg = remaining[i]
+        if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
+            flags.append(arg)
+            i += 1
+        elif arg in ["--region", "--profile"]:
+            extracted, consumed = _extract_flag_and_value(remaining, i)
+            flags.extend(extracted)
+            i += consumed
+        else:
+            non_flags.append(arg)
+            i += 1
+    return flags, non_flags
+
+
+def _process_remaining_args(remaining):
+    """Process remaining args, extracting flags from non-flags."""
+    flags = []
+    non_flags = []
+    i = 0
+    while i < len(remaining):
+        arg = remaining[i]
+        if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
+            flags.append(arg)
+            i += 1
+        elif arg in ["--region", "--profile"]:
+            extracted, consumed = _extract_flag_and_value(remaining, i)
+            flags.extend(extracted)
+            i += consumed
+        else:
+            non_flags.append(arg)
+            i += 1
+    return flags, non_flags
+
+
+def _build_filter_argv(args, remaining):
+    """Build argv for filter parsing, excluding processed flags."""
+    filter_argv = []
+    if args.service:
+        filter_argv.append(args.service)
+    if args.action:
+        filter_argv.append(args.action)
+
+    i = 0
+    while i < len(remaining):
+        arg = remaining[i]
+        if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
+            i += 1
+            continue
+        if arg in ["--region", "--profile"]:
+            i += 1
+            if i < len(remaining) and not remaining[i].startswith("-"):
+                i += 1
+            continue
+        filter_argv.append(arg)
+        i += 1
+    return filter_argv
 
 
 def determine_column_filters(column_filters, service, action):
@@ -61,12 +194,31 @@ def action_completer(prefix, parsed_args, **kwargs):
         return []
 
     try:
-        client = boto3.client(parsed_args.service)
-        operations = client.meta.service_model.operation_names
+        # Create a client with minimal configuration to get operation names
+        # This doesn't require valid AWS credentials, just the service model
+        import botocore.session
+
+        # Temporarily clear AWS_PROFILE to avoid validation errors
+        old_profile = os.environ.pop("AWS_PROFILE", None)
+        try:
+            session = botocore.session.Session()
+
+            # Check if service exists in botocore's data
+            if parsed_args.service not in session.get_available_services():
+                return []
+
+            # Load the service model to get operations
+            service_model = session.get_service_model(parsed_args.service)
+            operations = list(service_model.operation_names)
+        finally:
+            # Restore AWS_PROFILE if it existed
+            if old_profile is not None:
+                os.environ["AWS_PROFILE"] = old_profile
 
         try:
             allowed_actions = load_security_policy()
         except:
+            # If policy loading fails, allow common read operations
             allowed_actions = set()
             for op in operations:
                 if any(op.startswith(prefix) for prefix in ["Describe", "List", "Get"]):
@@ -82,7 +234,8 @@ def action_completer(prefix, parsed_args, **kwargs):
 
         matched_ops = [op for op in cli_operations if op.startswith(prefix)]
         return sorted(list(set(matched_ops)))
-    except:
+    except Exception:
+        # If we can't get operations, return empty
         return []
 
 
@@ -125,41 +278,47 @@ Examples:
     args, remaining = parser.parse_known_args()
 
     # If there are remaining args, check if any are flags that should be parsed
-    # This handles cases where flags appear after service/action or after --
+    # This handles cases where flags appear after service/action but BEFORE --
     if remaining:
+        # Check if -- separator was in the original command line
+        # argparse removes -- when it's right after recognized arguments,
+        # so we need to check sys.argv to know if it was there
+        has_separator = "--" in sys.argv
+        separator_in_remaining = "--" in remaining
+
         # Re-parse with the full argument list to catch all flags
         # We need to build a new argv that puts flags before positional args
         reordered_argv = [sys.argv[0]]  # Program name
         flags = []
         non_flags = []
 
-        # Separate flags from non-flags in remaining args
-        i = 0
-        while i < len(remaining):
-            arg = remaining[i]
-            if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
-                flags.append(arg)
-            elif arg in ["--region", "--profile"]:
-                # These flags take a value
-                flags.append(arg)
-                if i + 1 < len(remaining):
-                    flags.append(remaining[i + 1])
-                    i += 1
-            else:
-                non_flags.append(arg)
-            i += 1
+        # Preserve flags that were already successfully parsed
+        if args.debug:
+            flags.append("-d")
+        if getattr(args, "json", False):
+            flags.append("-j")
+        if getattr(args, "keys", False):
+            flags.append("-k")
+        if getattr(args, "region", None):
+            flags.extend(["--region", args.region])
+        if getattr(args, "profile", None):
+            flags.extend(["--profile", args.profile])
 
-        # Add original flags from sys.argv that were already parsed
-        for arg in sys.argv[1:]:
-            if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
-                if arg not in flags:
-                    reordered_argv.append(arg)
-            elif arg == "--region" and args.region:
-                reordered_argv.extend(["--region", args.region])
-            elif arg == "--profile" and args.profile:
-                reordered_argv.extend(["--profile", args.profile])
+        # If -- was in original but not in remaining, it means everything
+        # in remaining is after the -- separator
+        if has_separator and not separator_in_remaining:
+            extracted_flags, non_flags = _process_remaining_args_after_separator(remaining)
+            flags.extend(extracted_flags)
+            # Re-insert the -- separator at the beginning for filter parsing
+            if non_flags and "--" not in non_flags:
+                non_flags.insert(0, "--")
+        else:
+            # Separate flags from non-flags in remaining args
+            extracted_flags, non_flags = _process_remaining_args(remaining)
+            flags.extend(extracted_flags)
 
-        # Add newly found flags
+        # Add flags to reordered_argv
+        # The flags list contains all flags found in remaining args
         reordered_argv.extend(flags)
 
         # Add service and action
@@ -180,13 +339,8 @@ Examples:
     utils.debug_enabled = args.debug
 
     # Build the argv for filter parsing (service, action, and remaining arguments)
-    filter_argv = []
-    if args.service:
-        filter_argv.append(args.service)
-    if args.action:
-        filter_argv.append(args.action)
-    # Add the remaining arguments (filters, --, column names, etc.)
-    filter_argv.extend(remaining)
+    # But exclude any flags that were already processed
+    filter_argv = _build_filter_argv(args, remaining)
 
     base_command, resource_filters, value_filters, column_filters = (
         parse_multi_level_filters_for_mode(filter_argv, mode="single")

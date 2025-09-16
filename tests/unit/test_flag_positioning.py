@@ -8,8 +8,9 @@ The fix uses parse_known_args() instead of parse_args() to properly handle
 flags that appear after the service and action arguments without treating
 them as unrecognized arguments.
 
-Note: Flags appearing after -- are treated as column filters, which is the
-correct and expected behavior.
+Note: Flags can appear anywhere in the command line, including after the --
+separator. The -- separator only affects non-flag arguments (which become
+column filters).
 """
 
 import sys
@@ -63,6 +64,11 @@ class TestFlagPositioning:
         mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": []}]
         mock_session.return_value = Mock()
+
+        # Reset debug mode from any previous tests
+        from src.awsquery import utils
+
+        utils.debug_enabled = False
 
         # Test with -d after value filters
         sys.argv = ["awsquery", "ec2", "describe-instances", "prod", "-d"]
@@ -210,6 +216,11 @@ class TestFlagPositioning:
             {"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}
         ]
         mock_session.return_value = Mock()
+
+        # Reset debug mode from any previous tests
+        from src.awsquery import utils
+
+        utils.debug_enabled = False
 
         # Complex command with flags before the -- separator
         sys.argv = ["awsquery", "ec2", "describe-instances", "prod", "-d", "-j", "--", "InstanceId"]

@@ -28,7 +28,8 @@ def sanitize_input(value):
     """Basic input sanitization"""
     if not isinstance(value, str):
         return str(value)
-    dangerous = ["|", ";", "&", "`", "$", "(", ")", "[", "]", "{", "}"]
+    # Note: $ is not included as it's used for suffix matching in filters
+    dangerous = ["|", ";", "&", "`", "(", ")", "[", "]", "{", "}"]
     for char in dangerous:
         value = value.replace(char, "")
     return value.strip()
