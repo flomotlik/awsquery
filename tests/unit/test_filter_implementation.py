@@ -14,7 +14,6 @@ from src.awsquery.filters import (
 )
 
 
-@pytest.mark.unit
 class TestFilterPatternImplementation:
     """Test the actual filter pattern parsing implementation."""
 
@@ -97,7 +96,6 @@ class TestFilterPatternImplementation:
         assert mode == "suffix"
 
 
-@pytest.mark.unit
 class TestActualFiltering:
     """Test the actual filter_resources function with real data."""
 
@@ -214,7 +212,6 @@ class TestActualFiltering:
         assert len(filtered) == 3
 
 
-@pytest.mark.unit
 class TestParameterExtraction:
     """Test the extract_parameter_values function with real data."""
 
@@ -270,7 +267,6 @@ class TestParameterExtraction:
         assert len(values) >= 0  # May or may not find values based on implementation
 
 
-@pytest.mark.unit
 class TestMatchesPattern:
     """Test the matches_pattern function directly."""
 

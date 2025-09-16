@@ -159,12 +159,13 @@ disable = [
 
 [tool.mutmut]
 paths_to_mutate = ["src/awsquery/"]
-runner = "python -m pytest -x -q"
+runner = "python -m pytest -x --no-cov -q"
+use_coverage = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
-addopts = "-ra -q --strict-markers"
+addopts = "-ra -q"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",

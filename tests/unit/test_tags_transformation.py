@@ -7,7 +7,6 @@ import pytest
 from src.awsquery.formatters import detect_aws_tags, flatten_response, transform_tags_structure
 
 
-@pytest.mark.unit
 class TestDetectAwsTags:
     """Test AWS Tags structure detection."""
 
@@ -81,7 +80,6 @@ class TestDetectAwsTags:
         assert detect_aws_tags(obj) is False
 
 
-@pytest.mark.unit
 class TestTransformTagsStructure:
     """Test AWS Tags structure transformation."""
 
@@ -270,7 +268,6 @@ class TestTransformTagsStructure:
             utils.debug_enabled = original_debug
 
 
-@pytest.mark.unit
 class TestTagsIntegrationWithFormatters:
     """Test tags transformation integration with response formatting."""
 
@@ -365,7 +362,6 @@ class TestTagsIntegrationWithFormatters:
         assert stack["Tags"]["CostCenter"] == "1234"
 
 
-@pytest.mark.unit
 class TestTagsPerformance:
     """Test performance characteristics of tags transformation."""
 
@@ -438,7 +434,6 @@ class TestTagsPerformance:
             assert instance["Tags"]["Batch"] == "performance-test"
 
 
-@pytest.mark.unit
 class TestTagsErrorHandling:
     """Test error handling in tags transformation."""
 

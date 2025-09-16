@@ -10,7 +10,6 @@ from src.awsquery.cli import determine_column_filters, main
 from src.awsquery.utils import create_session, get_client
 
 
-@pytest.mark.unit
 class TestSessionCreation:
     """Test session creation with region and profile arguments."""
 
@@ -60,7 +59,6 @@ class TestSessionCreation:
             mock_session.assert_called_once_with()
 
 
-@pytest.mark.unit
 class TestClientCreation:
     """Test client creation with and without sessions."""
 
@@ -83,7 +81,6 @@ class TestClientCreation:
         mock_session.client.assert_called_once_with("s3")
 
 
-@pytest.mark.unit
 class TestCLIArgumentParsing:
     """Test CLI argument parsing for region and profile."""
 
@@ -207,7 +204,6 @@ class TestCLIArgumentParsing:
         assert cleaned_argv == expected
 
 
-@pytest.mark.unit
 class TestSessionIntegration:
     """Test session integration with AWS calls."""
 
@@ -248,7 +244,6 @@ class TestSessionIntegration:
             mock_execute.assert_called_once_with("ec2", "describe-instances", session=mock_session)
 
 
-@pytest.mark.unit
 class TestSessionErrorHandling:
     """Test error handling for session-related issues."""
 
@@ -284,7 +279,6 @@ class TestSessionErrorHandling:
                     main()
 
 
-@pytest.mark.unit
 class TestSessionDebugOutput:
     """Test debug output for session creation."""
 

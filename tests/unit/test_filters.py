@@ -9,7 +9,6 @@ import pytest
 from src.awsquery.filters import filter_resources, parse_multi_level_filters_for_mode
 
 
-@pytest.mark.unit
 class TestFilterResources:
 
     def test_empty_filters_returns_all_resources(self):
@@ -355,7 +354,6 @@ class TestFilterResources:
         assert result[0]["InstanceId"] == "i-456"
 
 
-@pytest.mark.unit
 class TestParseMultiLevelFilters:
     """Test suite for parse_multi_level_filters_for_mode() function."""
 
@@ -686,7 +684,6 @@ class TestParseMultiLevelFilters:
         assert column_filters == []
 
 
-@pytest.mark.unit
 class TestMultiLevelFilterParsing:
     """Test cases that should FAIL with current implementation and PASS after fix."""
 

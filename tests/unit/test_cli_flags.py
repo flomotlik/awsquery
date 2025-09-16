@@ -13,7 +13,6 @@ import pytest
 from src.awsquery.cli import main
 
 
-@pytest.mark.unit
 class TestCLIFlagHandling:
     """Test that CLI flags work in all positions."""
 

@@ -16,7 +16,6 @@ from src.awsquery.cli import main
 from src.awsquery.filters import parse_multi_level_filters_for_mode
 
 
-@pytest.mark.unit
 class TestCLIParserSeparator:
     """Test CLI parser handles -- separator correctly for column filters."""
 
@@ -167,7 +166,6 @@ class TestCLIParserSeparator:
                     mock_json.assert_called_once()
 
 
-@pytest.mark.unit
 class TestCLIParserEdgeCases:
     """Test edge cases in CLI argument parsing."""
 
@@ -255,7 +253,6 @@ class TestCLIParserEdgeCases:
                         assert utils.debug_enabled is True
 
 
-@pytest.mark.unit
 class TestParserRegressionPrevention:
     """Regression tests to prevent parser bugs from reoccurring."""
 
@@ -354,7 +351,6 @@ class TestParserRegressionPrevention:
                 assert "State.Name" in column_filters
 
 
-@pytest.mark.unit
 class TestCLIParserRegression:
     """Regression tests to prevent parser issues from reoccurring."""
 

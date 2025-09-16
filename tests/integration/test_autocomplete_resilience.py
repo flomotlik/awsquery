@@ -8,7 +8,6 @@ import pytest
 from src.awsquery.cli import action_completer, service_completer
 
 
-@pytest.mark.integration
 class TestAutocompleteWithoutCredentials:
     """Test that autocomplete works without AWS credentials using botocore's local data."""
 

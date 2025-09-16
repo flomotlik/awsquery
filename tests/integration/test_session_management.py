@@ -11,7 +11,6 @@ from src.awsquery.core import execute_aws_call, execute_multi_level_call
 from src.awsquery.utils import create_session, get_client
 
 
-@pytest.mark.integration
 class TestSessionManagementIntegration:
     """Integration tests for session management across the application."""
 
@@ -178,7 +177,6 @@ class TestSessionManagementIntegration:
             assert eu_result == [eu_response]
 
 
-@pytest.mark.integration
 class TestSessionErrorScenarios:
     """Integration tests for session error scenarios."""
 
@@ -244,7 +242,6 @@ class TestSessionErrorScenarios:
             assert session is not None
 
 
-@pytest.mark.integration
 class TestSessionEnvironmentIntegration:
     """Integration tests for session interaction with environment variables."""
 
@@ -287,7 +284,6 @@ class TestSessionEnvironmentIntegration:
                 mock_session.assert_called_once_with(region_name="us-east-1")
 
 
-@pytest.mark.integration
 class TestCLISessionIntegration:
     """Integration tests for CLI session argument handling."""
 
@@ -394,7 +390,6 @@ class TestCLISessionIntegration:
                 main()
 
 
-@pytest.mark.integration
 class TestSessionMultiServiceIntegration:
     """Integration tests for session usage across multiple services."""
 
@@ -476,7 +471,6 @@ class TestSessionMultiServiceIntegration:
                 execute_aws_call("someservice", "describe-something", session=session)
 
 
-@pytest.mark.integration
 class TestSessionWithKeysModeIntegration:
     """Integration tests for session management with keys mode."""
 

@@ -12,7 +12,6 @@ from src.awsquery.core import (
 )
 
 
-@pytest.mark.unit
 class TestCallResult:
     """Test CallResult class for tracking successful responses."""
 
@@ -54,7 +53,6 @@ class TestCallResult:
         assert result.final_success is False
 
 
-@pytest.mark.unit
 class TestExecuteWithTracking:
     """Test execute_with_tracking function."""
 
@@ -130,7 +128,6 @@ class TestExecuteWithTracking:
         assert result.final_success is True
 
 
-@pytest.mark.unit
 class TestShowKeysFromResult:
     """Test show_keys_from_result function."""
 
@@ -188,7 +185,6 @@ class TestShowKeysFromResult:
         assert output == "Error: No data to extract keys from in successful response"
 
 
-@pytest.mark.unit
 class TestMultiLevelCallWithTracking:
     """Test execute_multi_level_call_with_tracking function."""
 
@@ -368,7 +364,6 @@ class TestMultiLevelCallWithTracking:
         assert len(resources) == 0
 
 
-@pytest.mark.unit
 class TestKeysModeBehavior:
     """Test keys mode behavior with tracking."""
 
@@ -489,7 +484,6 @@ class TestKeysModeBehavior:
             assert "CreationDate" in output
 
 
-@pytest.mark.unit
 class TestTrackingDebugOutput:
     """Test debug output for tracking functionality."""
 

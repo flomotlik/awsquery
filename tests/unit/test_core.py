@@ -18,9 +18,6 @@ from src.awsquery.core import (
 )
 
 
-@pytest.mark.unit
-@pytest.mark.aws
-@pytest.mark.critical
 class TestExecuteAwsCall:
 
     def test_successful_paginated_call(self, sample_ec2_response):
@@ -280,9 +277,6 @@ class TestExecuteAwsCall:
         mock_client.get_paginator.assert_called_once_with(expected_normalized)
 
 
-@pytest.mark.unit
-@pytest.mark.aws
-@pytest.mark.critical
 class TestExecuteMultiLevelCall:
     """Test suite for execute_multi_level_call() function."""
 
@@ -568,7 +562,6 @@ class TestExecuteMultiLevelCall:
         assert "Still getting validation error after parameter resolution" in captured.err
 
 
-@pytest.mark.unit
 class TestParameterResolution:
     """Test suite for parameter resolution and validation functions."""
 
@@ -843,8 +836,6 @@ class TestParameterResolution:
         mock_convert.assert_called_once_with("originalParam")
 
 
-@pytest.mark.unit
-@pytest.mark.aws
 class TestResponseFlattening:
     """Test suite for response flattening functions (imported from formatters)."""
 

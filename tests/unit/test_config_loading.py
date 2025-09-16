@@ -11,7 +11,6 @@ from src.awsquery.config import load_default_filters
 from src.awsquery.security import load_security_policy
 
 
-@pytest.mark.unit
 class TestConfigFileLoading:
     """Test that configuration files are loaded from package directory."""
 

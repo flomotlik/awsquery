@@ -20,8 +20,6 @@ from src.awsquery.security import action_to_policy_format, load_security_policy,
 from src.awsquery.utils import normalize_action_name
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestEndToEndScenarios:
     def test_complete_aws_query_workflow_table_output(
         self, sample_ec2_response, mock_security_policy
@@ -225,8 +223,6 @@ class TestEndToEndScenarios:
         assert isinstance(result, bool)  # Should return a boolean
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestCLIArgumentParsing:
     """Test CLI argument parsing and flag handling."""
 
@@ -507,8 +503,6 @@ class TestCLIArgumentParsing:
             assert result == expected
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestCLIErrorHandling:
     """Test CLI error scenarios and exit codes."""
 
@@ -699,8 +693,6 @@ class TestCLIErrorHandling:
             assert "Test debug message" not in output
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestCLIOutputFormats:
     """Test CLI output formatting - JSON vs table."""
 
@@ -875,7 +867,6 @@ class TestCLIOutputFormats:
                 assert "InstanceId" in keys_output or "keys" in keys_output.lower()
 
 
-@pytest.mark.integration
 class TestCLIMainFunctionBasics:
     """Basic CLI main function integration tests focusing on core paths."""
 

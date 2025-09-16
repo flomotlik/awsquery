@@ -14,8 +14,6 @@ from src.awsquery.core import execute_multi_level_call
 from src.awsquery.utils import debug_enabled, debug_print
 
 
-@pytest.mark.unit
-@pytest.mark.messaging
 class TestEnhancedDebugPrint:
     def test_debug_print_disabled_no_output(self, debug_disabled, capsys):
         debug_print("This should not appear")
@@ -73,8 +71,6 @@ class TestEnhancedDebugPrint:
         assert "[DEBUG]" in captured.err
 
 
-@pytest.mark.unit
-@pytest.mark.messaging
 class TestMultiLevelUserMessages:
     """Test suite for user-friendly messages in multi-level operations."""
 
@@ -377,8 +373,6 @@ class TestMultiLevelUserMessages:
         assert "[DEBUG]" not in captured.err
 
 
-@pytest.mark.unit
-@pytest.mark.messaging
 class TestUserMessageIntegration:
     """Integration tests for user messaging system."""
 

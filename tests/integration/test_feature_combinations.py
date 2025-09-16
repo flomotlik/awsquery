@@ -9,8 +9,6 @@ from src.awsquery.cli import main
 from src.awsquery.core import CallResult
 
 
-@pytest.mark.integration
-@pytest.mark.critical
 class TestAllFeaturesIntegration:
     """Integration tests for all TodoPlan.md features working together."""
 
@@ -464,8 +462,6 @@ class TestAllFeaturesIntegration:
         assert result is None
 
 
-@pytest.mark.integration
-@pytest.mark.critical
 class TestErrorHandlingAcrossFeatures:
     """Test error handling when multiple features are used together."""
 
@@ -580,8 +576,6 @@ class TestErrorHandlingAcrossFeatures:
         assert len(defaults) > 0
 
 
-@pytest.mark.integration
-@pytest.mark.critical
 class TestRegressionPrevention:
     """Integration tests to prevent regressions in existing functionality."""
 

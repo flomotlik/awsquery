@@ -14,7 +14,6 @@ from src.awsquery.core import (
 )
 
 
-@pytest.mark.integration
 class TestKeysModeMultiLevelIntegration:
     """Integration tests for keys mode with multi-level call scenarios."""
 
@@ -263,7 +262,6 @@ class TestKeysModeMultiLevelIntegration:
             assert "Could not find working list operation" in error_output
 
 
-@pytest.mark.integration
 class TestKeysModeWithFilteredMultiLevel:
     """Integration tests for keys mode with filtered multi-level calls."""
 
@@ -422,7 +420,6 @@ class TestKeysModeWithFilteredMultiLevel:
             assert "StackSummaries" not in keys_output
 
 
-@pytest.mark.integration
 class TestKeysModeRealWorldScenarios:
     """Integration tests for keys mode in real-world usage scenarios."""
 
@@ -561,7 +558,6 @@ class TestKeysModeRealWorldScenarios:
             assert "Final call failed" in error_output
 
 
-@pytest.mark.integration
 class TestKeysModeDebugIntegration:
     """Integration tests for keys mode debug output."""
 

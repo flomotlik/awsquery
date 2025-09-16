@@ -10,7 +10,6 @@ from src.awsquery.filters import (
 from src.awsquery.formatters import filter_columns
 
 
-@pytest.mark.unit
 class TestParseFilterPattern:
 
     def test_prefix_match_pattern(self):
@@ -76,7 +75,6 @@ class TestParseFilterPattern:
         assert mode == "exact"
 
 
-@pytest.mark.unit
 class TestMatchesPattern:
 
     def test_exact_match(self):
@@ -115,7 +113,6 @@ class TestMatchesPattern:
         assert matches_pattern("MyNameField", "name", "contains")
 
 
-@pytest.mark.unit
 class TestResourceFiltering:
 
     def test_value_filter_prefix_match(self):
@@ -165,7 +162,6 @@ class TestResourceFiltering:
         assert all("running" in str(r).lower() for r in filtered)
 
 
-@pytest.mark.unit
 class TestColumnFiltering:
 
     def test_column_filter_prefix_match(self):
@@ -245,7 +241,6 @@ class TestColumnFiltering:
         assert "CreationTime" not in columns
 
 
-@pytest.mark.unit
 class TestEdgeCases:
 
     def test_empty_filter_string(self):

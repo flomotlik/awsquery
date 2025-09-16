@@ -18,8 +18,6 @@ from src.awsquery.security import load_security_policy, validate_security
 from src.awsquery.utils import debug_print, normalize_action_name
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestCompleteMultiLevelWorkflows:
     @patch("src.awsquery.core.execute_aws_call")
     @patch("src.awsquery.core.get_correct_parameter_name")
@@ -271,8 +269,6 @@ class TestCompleteMultiLevelWorkflows:
         assert "production" in result_str
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestParameterResolutionChain:
     """Test parameter resolution chain across modules."""
 
@@ -396,8 +392,6 @@ class TestParameterResolutionChain:
             # Should use fallback PascalCase conversion: instanceId -> InstanceId
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestMultiLevelWithMultipleFilters:
     """Test multi-level operations with complex filter combinations."""
 
@@ -566,8 +560,6 @@ class TestMultiLevelWithMultipleFilters:
         assert result[0]["Environment"]["Variables"]["SERVICE"] == "api"
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestErrorScenariosIntegration:
     """Test error scenarios across module boundaries."""
 
@@ -725,8 +717,6 @@ class TestErrorScenariosIntegration:
             assert result[0] == {}  # Empty dict response
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestEdgeCasesIntegration:
     """Test edge cases in multi-level operations."""
 
@@ -869,8 +859,6 @@ class TestEdgeCasesIntegration:
                 execute_multi_level_call("service", "describe-resource", [], [], [])
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestModuleInteractions:
     """Test interactions between core, filters, formatters, security, and utils modules."""
 
@@ -1051,8 +1039,6 @@ class TestModuleInteractions:
         assert "running" in json_output
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestRealisticUsagePatterns:
     """Test realistic AWS usage patterns and scenarios."""
 
@@ -1265,8 +1251,6 @@ class TestRealisticUsagePatterns:
         assert any(int(r["Timeout"]) >= 300 for r in result)
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestMultiLevelCallIssues:
     """Test multi-level call detection issues and user messaging improvements."""
 
@@ -1587,8 +1571,6 @@ class TestMultiLevelCallIssues:
         ), "Correctly triggers multi-level when multiple filter types are present"
 
 
-@pytest.mark.integration
-@pytest.mark.aws
 class TestCoreErrorScenariosBasic:
     """Basic integration tests for core error handling paths."""
 
@@ -1624,7 +1606,6 @@ class TestCoreErrorScenariosBasic:
         assert result == "StackName"  # Already PascalCase
 
 
-@pytest.mark.integration
 class TestUtilsIntegration:
     """Integration tests for utils module functions in real scenarios."""
 
