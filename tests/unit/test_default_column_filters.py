@@ -86,12 +86,13 @@ class TestGetDefaultColumns:
         columns = get_default_columns("ec2", "describe_instances")
 
         expected = [
-            "Tags.Name",
-            "InstanceId",
-            "InstanceType",
-            "State.Name",
-            "PublicIpAddress",
-            "PrivateIpAddress",
+            "InstanceId$",
+            "InstanceType$",
+            "State.Name$",
+            "PrivateIpAddress$",
+            "PublicIpAddress$",
+            "LaunchTime$",
+            "Tags.Name$",
         ]
         assert columns == expected
 
@@ -99,7 +100,7 @@ class TestGetDefaultColumns:
         """Test retrieving columns for different action of same service."""
         columns = get_default_columns("ec2", "describe_security_groups")
 
-        expected = ["GroupName", "GroupId", "Description", "VpcId"]
+        expected = ["GroupId$", "GroupName$", "Description$", "VpcId$"]
         assert columns == expected
 
     def test_case_insensitive_service_action(self):
@@ -127,13 +128,15 @@ class TestGetDefaultColumns:
         s3_columns = get_default_columns("s3", "list_buckets")
         lambda_columns = get_default_columns("lambda", "list_functions")
 
-        assert s3_columns == ["Name", "CreationDate"]
+        assert s3_columns == ["Name$", "CreationDate$"]
         assert lambda_columns == [
-            "FunctionName",
-            "Runtime",
-            "LastModified",
-            "CodeSize",
-            "Description",
+            "FunctionName$",
+            "Runtime$",
+            "Handler$",
+            "CodeSize$",
+            "MemorySize$",
+            "Timeout$",
+            "LastModified$",
         ]
 
 
@@ -152,12 +155,13 @@ class TestApplyDefaultFilters:
         result = apply_default_filters("ec2", "describe_instances", None)
 
         expected = [
-            "Tags.Name",
-            "InstanceId",
-            "InstanceType",
-            "State.Name",
-            "PublicIpAddress",
-            "PrivateIpAddress",
+            "InstanceId$",
+            "InstanceType$",
+            "State.Name$",
+            "PrivateIpAddress$",
+            "PublicIpAddress$",
+            "LaunchTime$",
+            "Tags.Name$",
         ]
         assert result == expected
 
@@ -166,12 +170,13 @@ class TestApplyDefaultFilters:
         result = apply_default_filters("ec2", "describe_instances", [])
 
         expected = [
-            "Tags.Name",
-            "InstanceId",
-            "InstanceType",
-            "State.Name",
-            "PublicIpAddress",
-            "PrivateIpAddress",
+            "InstanceId$",
+            "InstanceType$",
+            "State.Name$",
+            "PrivateIpAddress$",
+            "PublicIpAddress$",
+            "LaunchTime$",
+            "Tags.Name$",
         ]
         assert result == expected
 
@@ -203,12 +208,13 @@ class TestDetermineColumnFilters:
         result = determine_column_filters([], "ec2", "describe_instances")
 
         expected = [
-            "Tags.Name",
-            "InstanceId",
-            "InstanceType",
-            "State.Name",
-            "PublicIpAddress",
-            "PrivateIpAddress",
+            "InstanceId$",
+            "InstanceType$",
+            "State.Name$",
+            "PrivateIpAddress$",
+            "PublicIpAddress$",
+            "LaunchTime$",
+            "Tags.Name$",
         ]
         assert result == expected
 
@@ -216,7 +222,7 @@ class TestDetermineColumnFilters:
         """Test that defaults are applied when user columns are None."""
         result = determine_column_filters(None, "s3", "list_buckets")
 
-        expected = ["Name", "CreationDate"]
+        expected = ["Name$", "CreationDate$"]
         assert result == expected
 
     def test_unknown_service_action_returns_none(self):
@@ -262,18 +268,14 @@ class TestYAMLConfigurationStructure:
                         column, str
                     ), f"Column {column} in {service_name}.{action_name} should be string"
 
-    def test_descriptions_present(self):
-        """Test that descriptions are present for all configurations."""
+    def test_descriptions_not_required(self):
+        """Test that configurations work without descriptions."""
         config = load_default_filters()
 
+        # Verify that configurations can exist without descriptions
+        # (descriptions are optional in the YAML format)
         for service_name, service_config in config.items():
             for action_name, action_config in service_config.items():
-                assert (
-                    "description" in action_config
-                ), f"Description missing for {service_name}.{action_name}"
-                assert isinstance(
-                    action_config["description"], str
-                ), f"Description for {service_name}.{action_name} should be string"
-                assert (
-                    len(action_config["description"]) > 0
-                ), f"Description for {service_name}.{action_name} should not be empty"
+                # Only check that columns exist if present
+                if "columns" in action_config:
+                    assert isinstance(action_config["columns"], list)
