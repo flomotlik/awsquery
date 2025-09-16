@@ -65,9 +65,84 @@ The tool enforces security through a comprehensive `policy.json` file that defin
 
 ### Testing Structure
 - Unit tests in `tests/unit/` with `@pytest.mark.unit`
-- Integration tests in `tests/integration/` with `@pytest.mark.integration` 
+- Integration tests in `tests/integration/` with `@pytest.mark.integration`
 - Critical path tests marked with `@pytest.mark.critical`
 - AWS mocks using moto library marked with `@pytest.mark.aws`
+
+### STRICT Testing Requirements - MUST FOLLOW
+
+#### 🚫 PROHIBITED: Test Anti-Patterns
+**NEVER CREATE:**
+1. **Duplicate Test Files**: Before creating ANY test file, search for existing tests covering the same functionality
+   - Flag tests: Use `test_cli_flags.py` ONLY
+   - Parser tests: Use `test_cli_parser.py` ONLY
+   - Filter tests: Use `test_filter_implementation.py` for real tests, `test_filter_matching.py` for patterns
+2. **Over-Mocked Tests**: Tests that mock the very functions they claim to test
+3. **Mock Assertion Tests**: Tests that only verify `mock.assert_called()` without testing actual behavior
+4. **Nested Mock Contexts**: More than 2 levels of `with patch()` indicates over-mocking
+
+#### ✅ REQUIRED: Test Best Practices
+**ALWAYS:**
+1. **Test Real Implementation**:
+   ```python
+   # GOOD: Tests actual function
+   result = filter_resources(real_data, ["filter"])
+   assert len(result) == expected
+
+   # BAD: Only tests mock
+   mock_filter.return_value = []
+   mock_filter.assert_called_once()
+   ```
+
+2. **Minimal Mocking**: Only mock external dependencies (boto3, file I/O, network)
+   ```python
+   # GOOD: Only mock AWS
+   @patch("boto3.client")
+   def test_feature(mock_client):
+       # Test real code with mocked AWS
+
+   # BAD: Mock everything
+   @patch("filter_resources")
+   @patch("format_output")
+   @patch("parse_args")
+   ```
+
+3. **Consolidate Related Tests**: Group similar tests in one file
+   - All flag position tests → `test_cli_flags.py`
+   - All parser tests → `test_cli_parser.py`
+   - All filter implementation → `test_filter_implementation.py`
+
+4. **Test Edge Cases**: Include malformed input, Unicode, empty values
+   ```python
+   # Test edge cases
+   test_cases = ["", None, "^$", "ˆ", "$^", "^^$$"]
+   ```
+
+5. **Verify Actual Output**: Check real results, not mock calls
+   ```python
+   # GOOD: Verify actual JSON
+   output = format_json_output(data, filters)
+   parsed = json.loads(output)  # Ensures valid JSON
+
+   # BAD: Only check mock called
+   mock_json.assert_called_once()
+   ```
+
+#### 📋 Test Review Checklist
+Before committing ANY test:
+1. ❓ Does a test file for this feature already exist?
+2. ❓ Am I testing real code or just mocks?
+3. ❓ Do assertions verify actual behavior?
+4. ❓ Is mocking limited to external dependencies only?
+5. ❓ Are edge cases covered?
+
+#### 🔍 Finding Duplicate Tests
+```bash
+# Check for existing tests before creating new ones
+grep -r "test.*flag.*position" tests/
+grep -r "test.*parser" tests/
+grep -r "test.*filter" tests/
+```
 
 ### Test Documentation Requirements
 - **Minimal Comments**: Remove all unnecessary verbose comments from test files

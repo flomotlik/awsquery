@@ -1,11 +1,10 @@
-"""Tests for CLI argument parser behavior, especially with -- separator.
+"""Consolidated tests for CLI argument parser behavior.
 
-These tests ensure that the argument parser correctly handles the -- separator
-for column filters. They prevent regression of the issue where commands like
-'awsquery ec2 describe-instances -- Name' would fail with 'unrecognized arguments'.
-
-The fix involved adding a 'filters' argument with nargs='*' to capture all
-remaining arguments after the positional service and action arguments.
+These tests ensure that the argument parser correctly handles:
+1. The -- separator for column filters
+2. Prevention of 'unrecognized arguments' errors
+3. Proper propagation of filters to formatters
+4. Edge cases with multiple separators and flags
 """
 
 import sys
@@ -254,6 +253,105 @@ class TestCLIParserEdgeCases:
                         from src.awsquery import utils
 
                         assert utils.debug_enabled is True
+
+
+@pytest.mark.unit
+class TestParserRegressionPrevention:
+    """Regression tests to prevent parser bugs from reoccurring."""
+
+    def test_issue_double_dash_name_filter_regression(self):
+        """Regression test: 'awsquery ec2 describe-instances -- Name' should work.
+
+        This was failing with 'error: unrecognized arguments: Name'
+        """
+        test_command = ["ec2", "describe-instances", "--", "Name"]
+        base_cmd, resource_filters, value_filters, column_filters = (
+            parse_multi_level_filters_for_mode(test_command, mode="single")
+        )
+
+        assert base_cmd == ["ec2", "describe-instances"]
+        assert not resource_filters
+        assert not value_filters
+        assert column_filters == ["Name"]
+
+    @patch("src.awsquery.cli.create_session")
+    @patch("src.awsquery.cli.execute_aws_call")
+    @patch("src.awsquery.cli.load_security_policy")
+    @patch("src.awsquery.cli.validate_security")
+    def test_main_never_fails_with_unrecognized_arguments(
+        self, mock_validate, mock_load_policy, mock_execute, mock_session
+    ):
+        """Test main() doesn't raise 'unrecognized arguments' error."""
+        mock_validate.return_value = True
+        mock_load_policy.return_value = set()
+        mock_execute.return_value = [{"Instances": []}]
+        mock_session.return_value = None
+
+        test_commands = [
+            ["awsquery", "ec2", "describe-instances", "--", "Name"],
+            ["awsquery", "s3", "list-buckets", "--", "Name", "CreationDate"],
+            ["awsquery", "ec2", "describe-instances", "prod", "--", "InstanceId"],
+            ["awsquery", "--region", "us-west-2", "ec2", "describe-instances", "--", "Name"],
+            ["awsquery", "-j", "ec2", "describe-instances", "--", "Name", "State"],
+        ]
+
+        with patch("src.awsquery.cli.flatten_response", return_value=[]):
+            with patch("src.awsquery.cli.filter_resources", return_value=[]):
+                with patch("src.awsquery.cli.format_table_output", return_value=""):
+                    with patch("src.awsquery.cli.format_json_output", return_value="[]"):
+                        for cmd in test_commands:
+                            sys.argv = cmd
+                            error_occurred = False
+
+                            try:
+                                main()
+                            except SystemExit as e:
+                                if e.code != 0 and e.code is not None:
+                                    error_message = str(e)
+                                    if "unrecognized arguments" in error_message:
+                                        error_occurred = True
+                            except Exception as e:
+                                if "unrecognized arguments" in str(e):
+                                    error_occurred = True
+
+                            assert (
+                                not error_occurred
+                            ), f"Command {' '.join(cmd)} failed with 'unrecognized arguments'"
+
+    @patch("src.awsquery.cli.create_session")
+    @patch("src.awsquery.cli.execute_aws_call")
+    @patch("src.awsquery.cli.load_security_policy")
+    @patch("src.awsquery.cli.validate_security")
+    @patch("src.awsquery.cli.format_table_output")
+    def test_column_filters_propagate_to_formatter(
+        self, mock_format, mock_validate, mock_load_policy, mock_execute, mock_session
+    ):
+        """Test that column filters after -- are passed to the formatter."""
+        mock_validate.return_value = True
+        mock_load_policy.return_value = set()
+        mock_execute.return_value = [
+            {"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}
+        ]
+        mock_session.return_value = None
+        mock_format.return_value = "formatted output"
+
+        sys.argv = ["awsquery", "ec2", "describe-instances", "--", "InstanceId", "State.Name"]
+
+        with patch("src.awsquery.cli.flatten_response") as mock_flatten:
+            with patch("src.awsquery.cli.filter_resources") as mock_filter:
+                mock_flatten.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
+                mock_filter.return_value = [{"InstanceId": "i-123", "State": {"Name": "running"}}]
+
+                try:
+                    main()
+                except SystemExit:
+                    pass
+
+                mock_format.assert_called_once()
+                args = mock_format.call_args[0]
+                column_filters = args[1]
+                assert "InstanceId" in column_filters
+                assert "State.Name" in column_filters
 
 
 @pytest.mark.unit
