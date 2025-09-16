@@ -15,7 +15,7 @@ def filter_columns(flattened_data, column_filters):
         column_filters: List of column filter patterns
 
     Returns:
-        Dictionary with only the columns that match the filters
+        Dictionary with only the columns that match the filters, in filter order
     """
     # Import here to avoid circular dependency
     from .filters import matches_pattern, parse_filter_pattern
@@ -30,19 +30,24 @@ def filter_columns(flattened_data, column_filters):
         parsed_filters.append((pattern, mode))
         debug_print(f"Applying column filter: {filter_text} (mode: {mode})")  # pragma: no mutate
 
+    # Preserve order by processing filters in sequence
     filtered_columns = {}
+    matched_keys = set()
 
-    for key, value in flattened_data.items():
-        for pattern, mode in parsed_filters:
-            if not pattern:  # Empty pattern matches everything
+    # Process each filter in order
+    for pattern, mode in parsed_filters:
+        for key, value in flattened_data.items():
+            # Skip keys already matched by previous filters
+            if key in matched_keys:
+                continue
+
+            if not pattern or matches_pattern(key, pattern, mode):
                 filtered_columns[key] = value
-                break
-            elif matches_pattern(key, pattern, mode):
-                filtered_columns[key] = value
-                debug_print(
-                    f"Column '{key}' matched filter '{pattern}' (mode: {mode})"
-                )  # pragma: no mutate
-                break
+                matched_keys.add(key)
+                if pattern:
+                    debug_print(
+                        f"Column '{key}' matched filter '{pattern}' (mode: {mode})"
+                    )  # pragma: no mutate
 
     return filtered_columns
 
@@ -255,17 +260,20 @@ def format_table_output(resources, column_filters=None):
         transformed_resources.append(transformed)
 
     flattened_resources = []
-    all_keys = set()
+    all_keys_list = []  # Use list instead of set to preserve order
 
     for resource in transformed_resources:
         flat = flatten_dict_keys(resource)
         flattened_resources.append(flat)
-        all_keys.update(flat.keys())
+        # Collect keys preserving order
+        for key in flat.keys():
+            if key not in all_keys_list:
+                all_keys_list.append(key)
 
     if column_filters:
         # Use filter_columns to apply pattern matching with ! operators
         # Create a dummy dict with all keys to test which ones match
-        all_keys_dict = {key: True for key in all_keys}
+        all_keys_dict = {key: True for key in all_keys_list}
         filtered_dict = filter_columns(all_keys_dict, column_filters)
         selected_keys = list(filtered_dict.keys())
 
@@ -273,10 +281,10 @@ def format_table_output(resources, column_filters=None):
             debug_print(f"No columns matched filters: {column_filters}")  # pragma: no mutate
         else:
             debug_print(
-                f"Selected {len(selected_keys)} columns from {len(all_keys)} available"
+                f"Selected {len(selected_keys)} columns from {len(all_keys_list)} available"
             )  # pragma: no mutate
     else:
-        selected_keys = sorted(list(all_keys))
+        selected_keys = sorted(all_keys_list, key=str.lower)
 
     if not selected_keys:
         return "No matching columns found."
@@ -317,6 +325,45 @@ def format_table_output(resources, column_filters=None):
     return tabulate(table_data, headers=unique_headers, tablefmt="grid")
 
 
+def _process_json_resource_with_filters(resource, column_filters):
+    """Process a single resource with column filters for JSON output."""
+    from collections import OrderedDict
+
+    flat = flatten_dict_keys(resource)
+
+    # Use filter_columns to apply pattern matching with ! operators
+    filtered_flat = filter_columns(flat, column_filters)
+
+    # Preserve order by using ordered dictionary
+    simplified_ordered: OrderedDict[str, list[str]] = OrderedDict()
+
+    # Process keys in the order they appear in filtered_flat
+    for key, value in filtered_flat.items():
+        simplified = simplify_key(key)
+        if simplified not in simplified_ordered:
+            simplified_ordered[simplified] = []
+        if value:
+            simplified_ordered[simplified].append(str(value))
+
+    # Build final filtered dict preserving order
+    filtered: OrderedDict[str, str] = OrderedDict()
+    for simplified_key, values in simplified_ordered.items():
+        if not values:
+            continue
+        # Deduplicate values while preserving order
+        unique_values = []
+        seen = set()
+        for v in values:
+            if v not in seen:
+                unique_values.append(v)
+                seen.add(v)
+        filtered[simplified_key] = (
+            ", ".join(unique_values) if len(unique_values) > 1 else unique_values[0]
+        )
+
+    return dict(filtered) if filtered else None
+
+
 def format_json_output(resources, column_filters=None):
     """Format resources as JSON output"""
     if not resources:
@@ -333,27 +380,7 @@ def format_json_output(resources, column_filters=None):
 
         filtered_resources = []
         for resource in transformed_resources:
-            flat = flatten_dict_keys(resource)
-
-            # Use filter_columns to apply pattern matching with ! operators
-            filtered_flat = filter_columns(flat, column_filters)
-
-            # Group by simplified keys for cleaner output
-            simplified_groups: dict[str, set[str]] = {}
-            for key, value in filtered_flat.items():
-                simplified = simplify_key(key)
-                if simplified not in simplified_groups:
-                    simplified_groups[simplified] = set()
-                if value:
-                    simplified_groups[simplified].add(str(value))
-
-            filtered = {}
-            for simplified_key, values in simplified_groups.items():
-                if values:
-                    filtered[simplified_key] = (
-                        ", ".join(sorted(values)) if len(values) > 1 else list(values)[0]
-                    )
-
+            filtered = _process_json_resource_with_filters(resource, column_filters)
             if filtered:
                 filtered_resources.append(filtered)
         return json.dumps({"results": filtered_resources}, indent=2, default=str)

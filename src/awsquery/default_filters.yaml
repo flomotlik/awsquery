@@ -216,7 +216,7 @@ route53:
 eks:
   list_clusters:
     columns:
-      - "^Name$"
+      - "^values$"
     description: "Default columns for EKS cluster listing"
 
   describe_cluster:
