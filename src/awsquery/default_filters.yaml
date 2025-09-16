@@ -1,24 +1,24 @@
 acm:
   list_certificates:
     columns:
-    - CertificateArn$
     - DomainName$
     - Status$
     - Type$
+    - InUse$
+    - NotAfter$
+    - KeyAlgorithm$
     - CreatedAt$
-    - CertificateSummaryList$
-    - ExportOption$
-    - Exported$
+    - CertificateArn$
   describe_certificate:
     columns:
-    - OID$
-    - CertificateArn$
-    - CertificateAuthorityArn$
     - DomainName$
-    - Name$
+    - Status$
+    - Type$
     - ValidationStatus$
     - RenewalStatus$
-    - Status$
+    - KeyAlgorithm$
+    - NotAfter$
+    - CertificateArn$
 apigateway:
   describe_deployment:
     columns:
@@ -37,24 +37,19 @@ apigateway:
     - ^deploymentId$
   get_resources:
     columns:
-    - id$
-    - parentId$
-    - authorizerId$
-    - requestValidatorId$
-    - operationName$
-    - authorizationType$
-    - item$
     - path$
+    - httpMethod$
+    - authorizationType$
+    - apiKeyRequired$
+    - id$
   get_rest_apis:
     columns:
-    - id$
-    - rootResourceId$
     - name$
-    - ipAddressType$
-    - minimumCompressionSize$
-    - endpointConfiguration$
-    - item$
+    - id$
+    - createdDate$
     - apiKeySource$
+    - endpointConfiguration$
+    - version$
   list_api_keys:
     columns:
     - name$
@@ -155,23 +150,15 @@ appsync:
     - name$
   list_resolvers:
     columns:
-    - resolverArn$
-    - dataSourceName$
-    - fieldName$
-    - name$
     - typeName$
-    - runtime$
-    - maxBatchSize$
-    - nextToken$
+    - fieldName$
+    - dataSourceName$
+    - resolverArn$
   list_types:
     columns:
-    - arn$
     - name$
-    - nextToken$
-    - types$
-    - definition$
-    - description$
     - format$
+    - description$
 athena:
   get_query_execution:
     columns:
@@ -622,10 +609,8 @@ codebuild:
   list_builds:
     columns:
     - ids$
-    - nextToken$
   list_projects:
     columns:
-    - nextToken$
     - projects$
 codecommit:
   get_repository:
@@ -686,10 +671,7 @@ codepipeline:
     columns:
     - name$
     - pipelineType$
-    - nextToken$
-    - pipelines$
     - created$
-    - executionMode$
     - updated$
     - version$
 cognito:
@@ -703,23 +685,15 @@ cognito:
   list_user_pools:
     columns:
     - Id$
-    - KMSKeyID$
     - Name$
     - Status$
-    - NextToken$
-    - UserPools$
     - CreationDate$
-    - LambdaConfig$
   list_users:
     columns:
-    - Name$
-    - AttributeName$
     - Username$
     - UserStatus$
-    - PaginationToken$
-    - Users$
-    - Attributes$
-    - Value$
+    - Enabled$
+    - UserCreateDate$
 directconnect:
   describe_connections:
     columns:
@@ -1056,14 +1030,13 @@ ecs:
     - agentUpdateStatus$
   describe_services:
     columns:
-    - id$
-    - externalId$
-    - arn$
-    - clusterArn$
-    - targetGroupArn$
-    - roleArn$
+    - serviceName$
     - serviceArn$
-    - registryArn$
+    - status$
+    - desiredCount$
+    - runningCount$
+    - pendingCount$
+    - clusterArn$
   describe_task_definition:
     columns:
     - targetId$
@@ -1086,30 +1059,19 @@ ecs:
     - containerArn$
   list_clusters:
     columns:
-    - clusterArn$
-    - clusterName$
-    - status$
-    - registeredContainerInstancesCount$
-    - runningTasksCount$
-    - activeServicesCount$
+    - clusterArns$
   list_container_instances:
     columns:
     - containerInstanceArns$
     - nextToken$
   list_services:
     columns:
-    - serviceArn$
-    - serviceName$
-    - status$
-    - runningCount$
-    - desiredCount$
+    - serviceArns$
   list_task_definitions:
     columns:
-    - nextToken$
     - taskDefinitionArns$
   list_tasks:
     columns:
-    - nextToken$
     - taskArns$
 efs:
   describe_access_points:
@@ -1211,17 +1173,14 @@ eks:
   list_addons:
     columns:
     - addons$
-    - nextToken$
   list_clusters:
     columns:
-    - name$
+    - clusters$
   list_fargate_profiles:
     columns:
     - fargateProfileNames$
-    - nextToken$
   list_nodegroups:
     columns:
-    - nextToken$
     - nodegroups$
 elasticache:
   describe_cache_clusters:
@@ -1767,14 +1726,10 @@ kafka:
     - latestRevision$
   list_nodes:
     columns:
-    - attachedENIId$
     - brokerId$
-    - zookeeperId$
     - nodeARN$
     - instanceType$
     - nodeType$
-    - nextToken$
-    - nodeInfoList$
 kinesis:
   describe_stream:
     columns:
@@ -1798,32 +1753,22 @@ kinesis:
     - StreamCreationTimestamp$
   list_shards:
     columns:
-    - AdjacentParentShardId$
-    - ParentShardId$
     - ShardId$
-    - NextToken$
-    - Shards$
-    - HashKeyRange$
-    - EndingHashKey$
+    - ParentShardId$
     - StartingHashKey$
+    - EndingHashKey$
   list_stream_consumers:
     columns:
-    - ConsumerARN$
     - ConsumerName$
+    - ConsumerARN$
     - ConsumerStatus$
     - ConsumerCreationTimestamp$
-    - Consumers$
-    - NextToken$
   list_streams:
     columns:
-    - StreamARN$
     - StreamName$
+    - StreamARN$
     - StreamStatus$
     - StreamCreationTimestamp$
-    - HasMoreStreams$
-    - NextToken$
-    - StreamNames$
-    - StreamSummaries$
 kms:
   describe_key:
     columns:
@@ -1846,14 +1791,10 @@ kms:
     - RotationPeriodInDays$
   list_aliases:
     columns:
+    - AliasName$
     - TargetKeyId$
     - AliasArn$
-    - AliasName$
-    - Aliases$
     - CreationDate$
-    - LastUpdatedDate$
-    - NextMarker$
-    - Truncated$
   list_grants:
     columns:
     - GrantId$
@@ -2374,23 +2315,16 @@ sagemaker:
     - CollectionName$
   list_endpoints:
     columns:
-    - EndpointArn$
     - EndpointName$
     - EndpointStatus$
     - CreationTime$
-    - Endpoints$
     - LastModifiedTime$
-    - NextToken$
   list_experiments:
     columns:
-    - ExperimentArn$
-    - SourceArn$
-    - DisplayName$
     - ExperimentName$
+    - DisplayName$
     - SourceType$
     - CreationTime$
-    - ExperimentSummaries$
-    - ExperimentSource$
   list_feature_groups:
     columns:
     - FeatureGroupArn$
@@ -2403,41 +2337,25 @@ sagemaker:
     - BlockedReason$
   list_models:
     columns:
-    - ModelArn$
     - ModelName$
     - CreationTime$
-    - Models$
-    - NextToken$
   list_notebook_instances:
     columns:
-    - NotebookInstanceArn$
-    - NotebookInstanceLifecycleConfigName$
     - NotebookInstanceName$
     - NotebookInstanceStatus$
     - InstanceType$
     - CreationTime$
-    - NextToken$
-    - NotebookInstances$
   list_pipelines:
     columns:
-    - PipelineArn$
-    - RoleArn$
-    - PipelineDisplayName$
     - PipelineName$
+    - PipelineDisplayName$
     - CreationTime$
-    - NextToken$
-    - PipelineSummaries$
     - LastExecutionTime$
   list_processing_jobs:
     columns:
-    - ProcessingJobArn$
     - ProcessingJobName$
     - ProcessingJobStatus$
     - CreationTime$
-    - NextToken$
-    - ProcessingJobSummaries$
-    - ExitMessage$
-    - FailureReason$
   list_training_jobs:
     columns:
     - TrainingJobArn$
@@ -2466,14 +2384,10 @@ secretsmanager:
     - ResourcePolicy$
   list_secrets:
     columns:
-    - KmsKeyId$
-    - ARN$
-    - RotationLambdaARN$
     - Name$
-    - NextToken$
-    - SecretList$
+    - ARN$
     - CreatedDate$
-    - DeletedDate$
+    - LastAccessedDate$
 ses:
   describe_configuration_set:
     columns:
@@ -2488,7 +2402,6 @@ ses:
   list_identities:
     columns:
     - Identities$
-    - NextToken$
 sns:
   get_topic_attributes:
     columns:
@@ -2497,36 +2410,25 @@ sns:
     columns:
     - SubscriptionArn$
     - TopicArn$
-    - NextToken$
-    - Subscriptions$
     - Endpoint$
-    - Owner$
     - Protocol$
   list_subscriptions_by_topic:
     columns:
     - SubscriptionArn$
-    - TopicArn$
-    - NextToken$
-    - Subscriptions$
     - Endpoint$
-    - Owner$
     - Protocol$
   list_topics:
     columns:
     - TopicArn$
-    - NextToken$
-    - Topics$
 sqs:
   get_queue_attributes:
     columns:
     - Attributes$
   list_dead_letter_source_queues:
     columns:
-    - NextToken$
     - queueUrls$
   list_queues:
     columns:
-    - NextToken$
     - QueueUrls$
 ssm:
   describe_document:
@@ -2652,11 +2554,9 @@ stepfunctions:
     - itemCount$
   list_state_machines:
     columns:
-    - stateMachineArn$
     - name$
+    - stateMachineArn$
     - type$
-    - nextToken$
-    - stateMachines$
     - creationDate$
 vpc:
   describe_internet_gateway:
@@ -2736,14 +2636,10 @@ vpc:
     - ^VpcEndpointId$
   describe_vpcs:
     columns:
-    - dhcpOptionsId$
     - vpcId$
-    - state$
-    - vpcSet$
     - cidrBlock$
-    - instanceTenancy$
+    - state$
     - isDefault$
-    - tagSet$
   list_internet_gateways:
     columns:
     - ^InternetGatewayId$
