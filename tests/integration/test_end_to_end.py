@@ -327,17 +327,23 @@ class TestCLIArgumentParsing:
         assert "s3" not in result  # Should not match prefix 'e'
         assert "lambda" not in result  # Should not match prefix 'e'
 
-    @patch("boto3.client")
+    @patch("botocore.session.Session")
     @patch("awsquery.security.load_security_policy")
     def test_autocomplete_action_completer(
-        self, mock_policy, mock_boto_client, mock_security_policy
+        self, mock_policy, mock_session_class, mock_security_policy
     ):
         """Test action autocomplete functionality."""
         # Setup mocks
         mock_policy.return_value = mock_security_policy
 
-        mock_client = Mock()
-        mock_client.meta.service_model.operation_names = [
+        # Mock botocore session for the action completer
+        mock_session = Mock()
+        mock_session_class.return_value = mock_session
+        mock_session.get_available_services.return_value = ["ec2", "s3"]
+
+        # Mock service model
+        mock_service_model = Mock()
+        mock_service_model.operation_names = [
             "DescribeInstances",
             "DescribeImages",
             "DescribeSecurityGroups",
@@ -346,7 +352,7 @@ class TestCLIArgumentParsing:
             "GetObject",
             "PutObject",
         ]
-        mock_boto_client.return_value = mock_client
+        mock_session.get_service_model.return_value = mock_service_model
 
         # Mock parsed args
         mock_args = Mock()
@@ -416,8 +422,9 @@ class TestCLIArgumentParsing:
         assert "StackName" in column_filters
 
     def test_service_and_action_completers_integration(self):
-        """Test service and action completers with real boto3 session."""
-        with patch("boto3.Session") as mock_session_class:
+        """Test service and action completers with mocked botocore session."""
+        # Mock botocore.session.Session which is what the completers actually use
+        with patch("botocore.session.Session") as mock_session_class:
             mock_session = Mock()
             mock_session_class.return_value = mock_session
             mock_session.get_available_services.return_value = ["ec2", "s3", "iam", "rds"]
@@ -426,14 +433,15 @@ class TestCLIArgumentParsing:
             results = service_completer("e", None)
             assert "ec2" in results
 
-        with patch("boto3.client") as mock_client:
-            mock_boto_client = Mock()
-            mock_client.return_value = mock_boto_client
-            mock_boto_client.meta.service_model.operation_names = [
+            # Now test action completer
+            # Mock service model for action completer
+            mock_service_model = Mock()
+            mock_service_model.operation_names = [
                 "DescribeInstances",
                 "RunInstances",
                 "TerminateInstances",
             ]
+            mock_session.get_service_model.return_value = mock_service_model
 
             # Mock the parsed args
             mock_parsed_args = Mock()
