@@ -1,27 +1,52 @@
 # Ignore sample responses directory during build
 sample-responses/
 
-# Ignore temporary files
+# Ignore temporary files and caches
 *.pyc
 __pycache__/
 .pytest_cache/
 *.egg-info/
+.mutmut-cache/
+htmlcov/
+.coverage
+coverage.xml
 
 # Ignore git and IDE files
 .git/
 .gitignore
 .vscode/
 .idea/
+.claude/
 
-# Ignore test files
-test_*.py
-*_test.py
+# Ignore development and analysis files
+scripts/
+mutants/
+docs/
+awsinfo/
+*.log
+*.csv
 
-# Ignore documentation
+# Ignore temporary/development files
+core
+Name
+*.backup
+*.backup.md
+test_*.md
+*Plan*.md
+Todo.md
+Initial.md
+FixPlan.md
+.envrc
+
+# Ignore documentation (except essential README)
 *.md
 !README.md
 
 # Ignore Docker files themselves
 Dockerfile
+Dockerfile.prod
 docker-compose.yml
 .dockerignore
+
+# Ignore setup scripts that aren't needed in container
+setup-autocomplete.sh

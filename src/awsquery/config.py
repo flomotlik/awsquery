@@ -17,16 +17,22 @@ def load_default_filters():
     try:
         with open(config_path, "r") as f:
             config = yaml.safe_load(f)
-            debug_print(f"Loaded default filters configuration from {config_path}")
+            debug_print(
+                f"Loaded default filters configuration from {config_path}"
+            )  # pragma: no mutate
             return config
     except FileNotFoundError:
-        debug_print(f"Warning: {config_path} not found, no defaults will be applied")
+        debug_print(
+            f"Warning: {config_path} not found, no defaults will be applied"
+        )  # pragma: no mutate
         return {}
     except yaml.YAMLError as e:
-        debug_print(f"Warning: Could not parse {config_path}: {e}")
+        debug_print(f"Warning: Could not parse {config_path}: {e}")  # pragma: no mutate
         return {}
     except Exception as e:
-        debug_print(f"Warning: Could not load default filters from {config_path}: {e}")
+        debug_print(
+            f"Warning: Could not load default filters from {config_path}: {e}"
+        )  # pragma: no mutate
         return {}
 
 
@@ -39,9 +45,9 @@ def get_default_columns(service, action):
 
     columns = action_config.get("columns", [])
     if columns:
-        debug_print(f"Found default columns for {service}.{action}: {columns}")
+        debug_print(f"Found default columns for {service}.{action}: {columns}")  # pragma: no mutate
     else:
-        debug_print(f"No default columns configured for {service}.{action}")
+        debug_print(f"No default columns configured for {service}.{action}")  # pragma: no mutate
 
     return columns
 
@@ -49,13 +55,15 @@ def get_default_columns(service, action):
 def apply_default_filters(service, action, user_columns=None):
     """Apply default filters if no user columns specified"""
     if user_columns:
-        debug_print("User specified columns, skipping defaults")
+        debug_print("User specified columns, skipping defaults")  # pragma: no mutate
         return user_columns
 
     defaults = get_default_columns(service, action)
     if defaults:
-        debug_print(f"Using default columns for {service}.{action}: {defaults}")
+        debug_print(
+            f"Using default columns for {service}.{action}: {defaults}"
+        )  # pragma: no mutate
         return defaults
 
-    debug_print(f"No default columns found for {service}.{action}")
+    debug_print(f"No default columns found for {service}.{action}")  # pragma: no mutate
     return None  # No filtering applied

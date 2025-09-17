@@ -7,11 +7,10 @@ from unittest.mock import Mock, mock_open, patch
 import pytest
 import yaml
 
-from src.awsquery.config import load_default_filters
-from src.awsquery.security import load_security_policy
+from awsquery.config import load_default_filters
+from awsquery.security import load_security_policy
 
 
-@pytest.mark.unit
 class TestConfigFileLoading:
     """Test that configuration files are loaded from package directory."""
 
@@ -352,13 +351,13 @@ class TestConfigFileLoading:
 
     def test_get_default_columns_integration(self):
         """Test get_default_columns function."""
-        from src.awsquery.config import get_default_columns
+        from awsquery.config import get_default_columns
 
         load_default_filters.cache_clear()
 
         mock_config = {"ec2": {"describe_instances": {"columns": ["InstanceId", "State.Name"]}}}
 
-        with patch("src.awsquery.config.load_default_filters", return_value=mock_config):
+        with patch("awsquery.config.load_default_filters", return_value=mock_config):
             # Test exact match
             columns = get_default_columns("ec2", "describe_instances")
             assert columns == ["InstanceId", "State.Name"]

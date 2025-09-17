@@ -1,5 +1,9 @@
 FROM python:3.11-slim as production
 
+# Production Dockerfile with minimal file copying
+# Only includes essential files needed for production deployment
+# Excludes all development, testing, and analysis files
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     curl \
@@ -29,20 +33,18 @@ WORKDIR /app
 COPY pyproject.toml .
 COPY policy.json .
 COPY src/ ./src/
-COPY awsquery.py .
 
 # Install only production dependencies
 RUN pip install --no-cache-dir .
 
-# Make original awsquery.py executable for backward compatibility
-RUN chmod +x awsquery.py
-
-# Create symlinks for access methods
-RUN ln -sf /app/awsquery.py /usr/local/bin/awsquery-legacy \
-    && ln -sf /usr/local/bin/awsquery /usr/local/bin/awsquery-cli
-
 # Create non-root user for security
 RUN useradd -m -u 1000 awsquery
+
+# Configure bash autocomplete for awsquery user
+RUN echo '# Enable awsquery autocomplete' >> /home/awsquery/.bashrc \
+    && echo 'eval "$(register-python-argcomplete awsquery)"' >> /home/awsquery/.bashrc \
+    && chown awsquery:awsquery /home/awsquery/.bashrc
+
 USER awsquery
 
 # Set default command to the CLI tool

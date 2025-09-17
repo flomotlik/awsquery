@@ -7,7 +7,7 @@ import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 
 # Import the functions under test
-from src.awsquery.core import (
+from awsquery.core import (
     convert_parameter_name,
     execute_aws_call,
     execute_multi_level_call,
@@ -18,13 +18,10 @@ from src.awsquery.core import (
 )
 
 
-@pytest.mark.unit
-@pytest.mark.aws
-@pytest.mark.critical
 class TestExecuteAwsCall:
 
     def test_successful_paginated_call(self, sample_ec2_response):
-        from src.awsquery import utils
+        from awsquery import utils
 
         mock_client = Mock()
         mock_paginator = Mock()
@@ -43,7 +40,7 @@ class TestExecuteAwsCall:
         mock_paginator.paginate.assert_called_once_with()
 
     def test_successful_paginated_call_with_parameters(self, sample_ec2_response):
-        from src.awsquery import utils
+        from awsquery import utils
 
         mock_client = Mock()
         mock_paginator = Mock()
@@ -71,7 +68,7 @@ class TestExecuteAwsCall:
             operation_name="describe_instances"
         )
 
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.return_value = mock_client
 
@@ -93,7 +90,7 @@ class TestExecuteAwsCall:
         # Mock paginator to fail for both normalized and original
         mock_client.get_paginator.side_effect = Exception("OperationNotPageableError")
 
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.return_value = mock_client
 
@@ -110,7 +107,7 @@ class TestExecuteAwsCall:
         mock_client.describe_nonexistent = None
         setattr(mock_client, "describe-nonexistent", None)
 
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.return_value = mock_client
 
@@ -123,7 +120,7 @@ class TestExecuteAwsCall:
 
     def test_no_credentials_error_exits(self, capsys):
         """Test NoCredentialsError causes system exit with error message."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.side_effect = NoCredentialsError()
 
@@ -133,7 +130,7 @@ class TestExecuteAwsCall:
         captured = capsys.readouterr()
         assert "AWS credentials not found" in captured.err
 
-    @patch("src.awsquery.core.parse_validation_error")
+    @patch("awsquery.core.parse_validation_error")
     def test_param_validation_error_handling(self, mock_parse):
         """Test parameter validation error is parsed and returned."""
 
@@ -147,7 +144,7 @@ class TestExecuteAwsCall:
 
         mock_client = Mock()
         mock_client.get_paginator.side_effect = param_error
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.return_value = mock_client
 
@@ -164,12 +161,12 @@ class TestExecuteAwsCall:
         assert result == {"validation_error": error_info, "original_error": param_error}
         mock_parse.assert_called_once_with(param_error)
 
-    @patch("src.awsquery.core.parse_validation_error")
+    @patch("awsquery.core.parse_validation_error")
     def test_client_error_validation_handling(self, mock_parse, validation_error_fixtures):
         """Test ClientError with validation exception is parsed."""
         mock_client = Mock()
         mock_client.get_paginator.side_effect = validation_error_fixtures["missing_parameter"]
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.return_value = mock_client
 
@@ -198,7 +195,7 @@ class TestExecuteAwsCall:
         mock_operation = Mock(return_value=sample_ec2_response)
         mock_client.describe_instances = mock_operation
         mock_client.get_paginator.side_effect = access_denied_error
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.return_value = mock_client
 
@@ -209,7 +206,7 @@ class TestExecuteAwsCall:
 
     def test_generic_client_error_exits(self, mock_client_error, capsys):
         """Test generic ClientError causes system exit."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.side_effect = mock_client_error
 
@@ -219,7 +216,7 @@ class TestExecuteAwsCall:
         captured = capsys.readouterr()
         assert "AWS API call failed" in captured.err
 
-    @patch("src.awsquery.core.parse_validation_error")
+    @patch("awsquery.core.parse_validation_error")
     def test_unparseable_validation_error_exits(self, mock_parse, capsys):
         """Test unparseable validation error causes system exit."""
 
@@ -232,7 +229,7 @@ class TestExecuteAwsCall:
 
         mock_client = Mock()
         mock_client.get_paginator.side_effect = param_error
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.return_value = mock_client
         mock_parse.return_value = None  # Cannot parse
@@ -245,7 +242,7 @@ class TestExecuteAwsCall:
 
     def test_unexpected_error_exits(self, capsys):
         """Test unexpected error causes system exit."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.side_effect = RuntimeError("Unexpected error")
 
@@ -271,7 +268,7 @@ class TestExecuteAwsCall:
         mock_paginator = Mock()
         mock_paginator.paginate.return_value = [sample_ec2_response]
         mock_client.get_paginator.return_value = mock_paginator
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.return_value = mock_client
 
@@ -280,15 +277,12 @@ class TestExecuteAwsCall:
         mock_client.get_paginator.assert_called_once_with(expected_normalized)
 
 
-@pytest.mark.unit
-@pytest.mark.aws
-@pytest.mark.critical
 class TestExecuteMultiLevelCall:
     """Test suite for execute_multi_level_call() function."""
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
     def test_successful_simple_call(self, mock_filter, mock_flatten, mock_execute):
         """Test successful multi-level call without parameter resolution."""
         # Mock successful direct call
@@ -308,12 +302,12 @@ class TestExecuteMultiLevelCall:
         # (Testing the integration rather than the exact mock call)
         assert len(result) == 1
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_parameter_resolution_workflow(
         self, mock_get_param, mock_extract, mock_filter, mock_flatten, mock_infer, mock_execute
     ):
@@ -365,8 +359,8 @@ class TestExecuteMultiLevelCall:
         # Third call with resolved parameter
         assert calls[2] == call("eks", "describe-cluster", {"ClusterName": "test-cluster"}, None)
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
     def test_no_working_list_operation_exits(self, mock_infer, mock_execute, capsys):
         """Test system exit when no working list operation is found."""
         validation_error = {
@@ -387,10 +381,10 @@ class TestExecuteMultiLevelCall:
         captured = capsys.readouterr()
         assert "Could not find a working list operation" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
     def test_no_resources_after_filtering_exits(
         self, mock_filter, mock_flatten, mock_infer, mock_execute, capsys
     ):
@@ -415,11 +409,11 @@ class TestExecuteMultiLevelCall:
         captured = capsys.readouterr()
         assert "No resources found matching resource filters" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
     def test_no_parameter_values_extracted_exits(
         self, mock_extract, mock_filter, mock_flatten, mock_infer, mock_execute, capsys
     ):
@@ -452,13 +446,13 @@ class TestExecuteMultiLevelCall:
         captured = capsys.readouterr()
         assert "Could not extract parameter" in captured.err
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.parameter_expects_list")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.parameter_expects_list")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_multiple_parameter_values_handling(
         self,
         mock_get_param,
@@ -515,13 +509,13 @@ class TestExecuteMultiLevelCall:
         assert parameter_expects_list("clusterName") == False
         assert parameter_expects_list("bucketArn") == False
 
-    @patch("src.awsquery.core.execute_aws_call")
-    @patch("src.awsquery.core.infer_list_operation")
-    @patch("src.awsquery.formatters.flatten_response")
-    @patch("src.awsquery.filters.filter_resources")
-    @patch("src.awsquery.filters.extract_parameter_values")
-    @patch("src.awsquery.core.parameter_expects_list")
-    @patch("src.awsquery.core.get_correct_parameter_name")
+    @patch("awsquery.core.execute_aws_call")
+    @patch("awsquery.core.infer_list_operation")
+    @patch("awsquery.formatters.flatten_response")
+    @patch("awsquery.filters.filter_resources")
+    @patch("awsquery.filters.extract_parameter_values")
+    @patch("awsquery.core.parameter_expects_list")
+    @patch("awsquery.core.get_correct_parameter_name")
     def test_persistent_validation_error_exits(
         self,
         mock_get_param,
@@ -568,7 +562,6 @@ class TestExecuteMultiLevelCall:
         assert "Still getting validation error after parameter resolution" in captured.err
 
 
-@pytest.mark.unit
 class TestParameterResolution:
     """Test suite for parameter resolution and validation functions."""
 
@@ -829,10 +822,10 @@ class TestParameterResolution:
 
         assert result == "someParam"  # Returns original
 
-    @patch("src.awsquery.core.convert_parameter_name")
+    @patch("awsquery.core.convert_parameter_name")
     def test_get_correct_parameter_name_exception_fallback(self, mock_convert):
         """Test parameter name introspection exception handling."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         utils.boto3.client.side_effect = Exception("Service model error")
         mock_convert.return_value = "ConvertedParam"
@@ -843,14 +836,12 @@ class TestParameterResolution:
         mock_convert.assert_called_once_with("originalParam")
 
 
-@pytest.mark.unit
-@pytest.mark.aws
 class TestResponseFlattening:
     """Test suite for response flattening functions (imported from formatters)."""
 
     def test_extract_parameter_values_simple_strings(self):
         """Test parameter value extraction from simple string list."""
-        from src.awsquery.filters import extract_parameter_values
+        from awsquery.filters import extract_parameter_values
 
         resources = ["cluster1", "cluster2", "cluster3"]
         result = extract_parameter_values(resources, "clusterName")
@@ -859,7 +850,7 @@ class TestResponseFlattening:
 
     def test_extract_parameter_values_exact_match(self):
         """Test parameter value extraction with exact key match."""
-        from src.awsquery.filters import extract_parameter_values
+        from awsquery.filters import extract_parameter_values
 
         resources = [
             {"ClusterName": "cluster1", "Status": "ACTIVE"},
@@ -871,7 +862,7 @@ class TestResponseFlattening:
 
     def test_extract_parameter_values_case_insensitive_match(self):
         """Test parameter value extraction with case-insensitive matching."""
-        from src.awsquery.filters import extract_parameter_values
+        from awsquery.filters import extract_parameter_values
 
         resources = [{"clustername": "cluster1"}, {"ClusterName": "cluster2"}]
         result = extract_parameter_values(resources, "ClusterName")
@@ -880,7 +871,7 @@ class TestResponseFlattening:
 
     def test_extract_parameter_values_partial_match(self):
         """Test parameter value extraction with partial key matching."""
-        from src.awsquery.filters import extract_parameter_values
+        from awsquery.filters import extract_parameter_values
 
         resources = [{"Cluster.ClusterName": "cluster1"}, {"Resource.ClusterName": "cluster2"}]
         result = extract_parameter_values(resources, "ClusterName")
@@ -889,7 +880,7 @@ class TestResponseFlattening:
 
     def test_extract_parameter_values_standard_field_fallback(self):
         """Test parameter value extraction with standard field fallback."""
-        from src.awsquery.filters import extract_parameter_values
+        from awsquery.filters import extract_parameter_values
 
         # Test Name field fallback for resource-type parameters
         resources = [
@@ -917,7 +908,7 @@ class TestResponseFlattening:
         self, parameter, expected_standard_field
     ):
         """Test standard field fallback patterns."""
-        from src.awsquery.filters import extract_parameter_values
+        from awsquery.filters import extract_parameter_values
 
         resources = [{expected_standard_field: "test-value"}]
         result = extract_parameter_values(resources, parameter)
@@ -926,14 +917,14 @@ class TestResponseFlattening:
 
     def test_extract_parameter_values_empty_resources(self):
         """Test parameter value extraction with empty resources."""
-        from src.awsquery.filters import extract_parameter_values
+        from awsquery.filters import extract_parameter_values
 
         result = extract_parameter_values([], "clusterName")
         assert result == []
 
     def test_extract_parameter_values_no_matches(self):
         """Test parameter value extraction when no matches found."""
-        from src.awsquery.filters import extract_parameter_values
+        from awsquery.filters import extract_parameter_values
 
         resources = [{"DifferentField": "value1"}, {"AnotherField": "value2"}]
         result = extract_parameter_values(resources, "clusterName")
@@ -942,7 +933,7 @@ class TestResponseFlattening:
 
     def test_extract_parameter_values_filters_empty_values(self):
         """Test parameter value extraction filters out empty values."""
-        from src.awsquery.filters import extract_parameter_values
+        from awsquery.filters import extract_parameter_values
 
         resources = [
             {"ClusterName": "cluster1"},

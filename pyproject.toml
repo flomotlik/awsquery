@@ -58,6 +58,7 @@ dev = [
     "tox>=4.0.0",
     "twine>=4.0.0",
     "build>=0.10.0",
+    "mutmut>=2.4.0",
 ]
 docs = [
     "sphinx>=7.0.0",
@@ -156,10 +157,15 @@ disable = [
     "R0801", # duplicate-code
 ]
 
+[tool.mutmut]
+paths_to_mutate = ["src/awsquery/"]
+runner = "python -m pytest -x --no-cov -q"
+src_root = "src"
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 testpaths = ["tests"]
-addopts = "-ra -q --strict-markers"
+addopts = "-ra -q"
 filterwarnings = [
     "ignore::DeprecationWarning",
     "ignore::PendingDeprecationWarning",

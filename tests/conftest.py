@@ -259,7 +259,7 @@ def validation_error_fixtures():
 @pytest.fixture(autouse=True)
 def reset_debug_mode():
     """Auto-reset debug state for all tests to ensure isolation."""
-    from src.awsquery import utils
+    from awsquery import utils
 
     original_debug_state = getattr(utils, "debug_enabled", False)
     utils.debug_enabled = False
@@ -273,7 +273,7 @@ def reset_debug_mode():
 @pytest.fixture
 def debug_mode():
     """Fixture to temporarily enable debug mode for specific tests."""
-    from src.awsquery import utils
+    from awsquery import utils
 
     original_debug_state = getattr(utils, "debug_enabled", False)
     utils.debug_enabled = True
@@ -287,7 +287,7 @@ def debug_mode():
 @pytest.fixture
 def debug_disabled():
     """Fixture to explicitly disable debug mode for specific tests."""
-    from src.awsquery import utils
+    from awsquery import utils
 
     original_debug_state = getattr(utils, "debug_enabled", False)
     utils.debug_enabled = False
@@ -492,7 +492,7 @@ def workflow_validator():
 
     def _validate_parsing_workflow(argv, expected_base, expected_filters):
         """Validate command parsing workflow."""
-        from src.awsquery.filters import parse_multi_level_filters_for_mode
+        from awsquery.filters import parse_multi_level_filters_for_mode
 
         base_cmd, res_filters, val_filters, col_filters = parse_multi_level_filters_for_mode(
             argv, mode="single"
@@ -510,8 +510,8 @@ def workflow_validator():
 
     def _validate_security_workflow(service, action, policy):
         """Validate security workflow."""
-        from src.awsquery.security import validate_security
-        from src.awsquery.utils import normalize_action_name
+        from awsquery.security import validate_security
+        from awsquery.utils import normalize_action_name
 
         normalized = normalize_action_name(action)
         assert validate_security(service, action.replace("-", "").title().replace(" ", ""), policy)
@@ -519,7 +519,7 @@ def workflow_validator():
 
     def _validate_formatting_workflow(response, filters, expected_content):
         """Validate response formatting workflow."""
-        from src.awsquery.formatters import flatten_response, format_table_output
+        from awsquery.formatters import flatten_response, format_table_output
 
         flattened = flatten_response(response)
         assert len(flattened) > 0

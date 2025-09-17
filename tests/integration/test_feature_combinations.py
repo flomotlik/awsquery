@@ -5,19 +5,17 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from src.awsquery.cli import main
-from src.awsquery.core import CallResult
+from awsquery.cli import main
+from awsquery.core import CallResult
 
 
-@pytest.mark.integration
-@pytest.mark.critical
 class TestAllFeaturesIntegration:
     """Integration tests for all TodoPlan.md features working together."""
 
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_region_profile_with_default_columns(
         self, mock_create_session, mock_services, mock_policy, mock_execute
     ):
@@ -67,7 +65,7 @@ class TestAllFeaturesIntegration:
         ]
 
         with patch.object(sys, "argv", test_args), patch(
-            "src.awsquery.cli.format_table_output"
+            "awsquery.cli.format_table_output"
         ) as mock_format:
 
             mock_format.return_value = "Formatted table output"
@@ -87,12 +85,13 @@ class TestAllFeaturesIntegration:
 
         # Should have default columns for ec2.describe_instances
         expected_defaults = [
-            "Tags.Name",
-            "InstanceId",
-            "InstanceType",
-            "State.Name",
-            "PublicIpAddress",
-            "PrivateIpAddress",
+            "InstanceId$",
+            "InstanceType$",
+            "State.Name$",
+            "PrivateIpAddress$",
+            "PublicIpAddress$",
+            "LaunchTime$",
+            "Tags.Name$",
         ]
         assert column_filters == expected_defaults
 
@@ -105,10 +104,10 @@ class TestAllFeaturesIntegration:
         # Just verify we got some data
         assert len(resources[0]) > 0
 
-    @patch("src.awsquery.cli.execute_with_tracking")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_with_tracking")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_keys_mode_with_session_and_transformed_tags(
         self, mock_create_session, mock_services, mock_policy, mock_tracking
     ):
@@ -155,7 +154,7 @@ class TestAllFeaturesIntegration:
         ]
 
         with patch.object(sys, "argv", test_args), patch(
-            "src.awsquery.cli.show_keys_from_result"
+            "awsquery.cli.show_keys_from_result"
         ) as mock_show_keys:
 
             # Mock keys that should include transformed tag keys
@@ -182,10 +181,10 @@ class TestAllFeaturesIntegration:
         # Verify keys were extracted from successful response
         mock_show_keys.assert_called_once_with(successful_result)
 
-    @patch("src.awsquery.cli.execute_multi_level_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_multi_level_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_multi_level_with_session_defaults_and_tag_transformation(
         self, mock_create_session, mock_services, mock_policy, mock_multi_level
     ):
@@ -216,7 +215,7 @@ class TestAllFeaturesIntegration:
         mock_multi_level.return_value = mock_resources
 
         # Mock initial call failure to trigger multi-level
-        with patch("src.awsquery.cli.execute_aws_call") as mock_execute:
+        with patch("awsquery.cli.execute_aws_call") as mock_execute:
             validation_error = {
                 "validation_error": {
                     "parameter_name": "clusterName",
@@ -237,7 +236,7 @@ class TestAllFeaturesIntegration:
             ]
 
             with patch.object(sys, "argv", test_args), patch(
-                "src.awsquery.cli.format_table_output"
+                "awsquery.cli.format_table_output"
             ) as mock_format:
 
                 mock_format.return_value = "Multi-level formatted output"
@@ -272,11 +271,11 @@ class TestAllFeaturesIntegration:
         assert resource["Tags"]["Team"] == "platform"
         assert resource["Tags"]["ManagedBy"] == "terraform"
 
-    @patch("src.awsquery.cli.execute_multi_level_call_with_tracking")
-    @patch("src.awsquery.cli.execute_with_tracking")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_multi_level_call_with_tracking")
+    @patch("awsquery.cli.execute_with_tracking")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_keys_mode_fallback_preserves_all_features(
         self, mock_create_session, mock_services, mock_policy, mock_tracking, mock_multi_level
     ):
@@ -338,7 +337,7 @@ class TestAllFeaturesIntegration:
         ]
 
         with patch.object(sys, "argv", test_args), patch(
-            "src.awsquery.cli.show_keys_from_result"
+            "awsquery.cli.show_keys_from_result"
         ) as mock_show_keys:
 
             # Keys should show RDS-specific fields with transformed TagList
@@ -383,7 +382,7 @@ class TestAllFeaturesIntegration:
 
     def test_tag_transformation_with_column_selection(self):
         """Test that transformed tags work correctly with column selection."""
-        from src.awsquery.formatters import format_table_output
+        from awsquery.formatters import format_table_output
 
         # Mock resources with both original and transformed tag structures
         resources = [
@@ -436,22 +435,30 @@ class TestAllFeaturesIntegration:
         assert "dev-team" in output
         assert "web-app" in output
 
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.create_session")
     def test_session_integration_with_default_filters(self, mock_create_session):
         """Test that session arguments work with default column filter application."""
-        from src.awsquery.cli import determine_column_filters
+        from awsquery.cli import determine_column_filters
 
         mock_session = Mock()
         mock_create_session.return_value = mock_session
 
         # Test with no user columns - should get defaults
         result = determine_column_filters(None, "s3", "list_buckets")
-        expected = ["Name", "CreationDate"]
+        expected = ["Name$", "CreationDate$"]
         assert result == expected
 
         # Test with empty user columns - should get defaults
         result = determine_column_filters([], "lambda", "list_functions")
-        expected = ["FunctionName", "Runtime", "LastModified", "CodeSize", "Description"]
+        expected = [
+            "FunctionName$",
+            "Runtime$",
+            "Handler$",
+            "CodeSize$",
+            "MemorySize$",
+            "Timeout$",
+            "LastModified$",
+        ]
         assert result == expected
 
         # Test with user columns - should use user columns, not defaults
@@ -464,14 +471,12 @@ class TestAllFeaturesIntegration:
         assert result is None
 
 
-@pytest.mark.integration
-@pytest.mark.critical
 class TestErrorHandlingAcrossFeatures:
     """Test error handling when multiple features are used together."""
 
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
     def test_session_error_with_other_features(
         self, mock_services, mock_policy, mock_create_session
     ):
@@ -498,7 +503,7 @@ class TestErrorHandlingAcrossFeatures:
 
     def test_malformed_tags_with_column_selection(self):
         """Test that malformed tags don't break column selection."""
-        from src.awsquery.formatters import format_table_output, transform_tags_structure
+        from awsquery.formatters import format_table_output, transform_tags_structure
 
         # Create data with mixed valid/invalid tag structures
         data = [
@@ -535,8 +540,8 @@ class TestErrorHandlingAcrossFeatures:
 
     def test_feature_combination_performance(self):
         """Test that combining all features doesn't cause performance issues."""
-        from src.awsquery.config import get_default_columns
-        from src.awsquery.formatters import transform_tags_structure
+        from awsquery.config import get_default_columns
+        from awsquery.formatters import transform_tags_structure
 
         # Create a reasonably large dataset
         large_response = []
@@ -580,8 +585,6 @@ class TestErrorHandlingAcrossFeatures:
         assert len(defaults) > 0
 
 
-@pytest.mark.integration
-@pytest.mark.critical
 class TestRegressionPrevention:
     """Integration tests to prevent regressions in existing functionality."""
 
@@ -589,7 +592,7 @@ class TestRegressionPrevention:
         """Test that existing commands still work after adding new features."""
         # This test ensures that the new features don't break existing usage patterns
 
-        from src.awsquery.filters import parse_multi_level_filters_for_mode
+        from awsquery.filters import parse_multi_level_filters_for_mode
 
         # Test existing command patterns
         test_cases = [
@@ -627,8 +630,8 @@ class TestRegressionPrevention:
 
     def test_default_behavior_unchanged(self):
         """Test that default behavior is unchanged when new features aren't used."""
-        from src.awsquery.config import apply_default_filters
-        from src.awsquery.utils import create_session, get_client
+        from awsquery.config import apply_default_filters
+        from awsquery.utils import create_session, get_client
 
         # Session creation without arguments should work as before
         with patch("boto3.Session") as mock_session:
@@ -645,9 +648,9 @@ class TestRegressionPrevention:
         result = apply_default_filters("any_service", "any_action", user_cols)
         assert result == user_cols
 
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
     def test_simple_commands_still_work(self, mock_services, mock_policy, mock_execute):
         """Test that simple commands work exactly as before."""
         mock_services.return_value = ["s3"]
@@ -660,7 +663,7 @@ class TestRegressionPrevention:
         test_args = ["awsquery", "s3", "list-buckets"]
 
         with patch.object(sys, "argv", test_args), patch(
-            "src.awsquery.cli.format_table_output"
+            "awsquery.cli.format_table_output"
         ) as mock_format:
 
             mock_format.return_value = "Simple table output"

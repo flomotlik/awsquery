@@ -6,12 +6,11 @@ from unittest.mock import Mock, call, patch
 import pytest
 from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound
 
-from src.awsquery.cli import main
-from src.awsquery.core import execute_aws_call, execute_multi_level_call
-from src.awsquery.utils import create_session, get_client
+from awsquery.cli import main
+from awsquery.core import execute_aws_call, execute_multi_level_call
+from awsquery.utils import create_session, get_client
 
 
-@pytest.mark.integration
 class TestSessionManagementIntegration:
     """Integration tests for session management across the application."""
 
@@ -112,7 +111,7 @@ class TestSessionManagementIntegration:
         # Return different clients to track calls
         mock_session.client.side_effect = [mock_client, list_client, final_client]
 
-        with patch("src.awsquery.core.execute_aws_call") as mock_execute:
+        with patch("awsquery.core.execute_aws_call") as mock_execute:
             # Mock the call sequence
             mock_execute.side_effect = [
                 validation_error,  # Initial call fails
@@ -178,7 +177,6 @@ class TestSessionManagementIntegration:
             assert eu_result == [eu_response]
 
 
-@pytest.mark.integration
 class TestSessionErrorScenarios:
     """Integration tests for session error scenarios."""
 
@@ -244,7 +242,6 @@ class TestSessionErrorScenarios:
             assert session is not None
 
 
-@pytest.mark.integration
 class TestSessionEnvironmentIntegration:
     """Integration tests for session interaction with environment variables."""
 
@@ -287,14 +284,13 @@ class TestSessionEnvironmentIntegration:
                 mock_session.assert_called_once_with(region_name="us-east-1")
 
 
-@pytest.mark.integration
 class TestCLISessionIntegration:
     """Integration tests for CLI session argument handling."""
 
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_cli_region_profile_integration(
         self, mock_create_session, mock_services, mock_policy, mock_execute
     ):
@@ -338,10 +334,10 @@ class TestCLISessionIntegration:
         elif "session" in call_args[1]:
             assert call_args[1]["session"] == mock_session
 
-    @patch("src.awsquery.cli.execute_multi_level_call")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_multi_level_call")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_cli_multi_level_session_passing(
         self, mock_create_session, mock_services, mock_policy, mock_multi_level
     ):
@@ -354,7 +350,7 @@ class TestCLISessionIntegration:
         # Mock initial call failure to trigger multi-level
         validation_error = {"validation_error": {"parameter_name": "clusterName"}}
 
-        with patch("src.awsquery.cli.execute_aws_call") as mock_execute:
+        with patch("awsquery.cli.execute_aws_call") as mock_execute:
             mock_execute.return_value = validation_error
             mock_multi_level.return_value = [{"Cluster": {"Name": "test"}}]
 
@@ -380,7 +376,7 @@ class TestCLISessionIntegration:
         elif "session" in call_args[1]:
             assert call_args[1]["session"] == mock_session
 
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.create_session")
     def test_cli_session_creation_failure(self, mock_create_session):
         """Test CLI handling of session creation failures."""
         mock_create_session.side_effect = ProfileNotFound(profile="invalid-profile")
@@ -394,7 +390,6 @@ class TestCLISessionIntegration:
                 main()
 
 
-@pytest.mark.integration
 class TestSessionMultiServiceIntegration:
     """Integration tests for session usage across multiple services."""
 
@@ -476,19 +471,18 @@ class TestSessionMultiServiceIntegration:
                 execute_aws_call("someservice", "describe-something", session=session)
 
 
-@pytest.mark.integration
 class TestSessionWithKeysModeIntegration:
     """Integration tests for session management with keys mode."""
 
-    @patch("src.awsquery.cli.execute_with_tracking")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_with_tracking")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.create_session")
     def test_keys_mode_with_session(
         self, mock_create_session, mock_services, mock_policy, mock_tracking
     ):
         """Test that keys mode works correctly with session arguments."""
-        from src.awsquery.core import CallResult
+        from awsquery.core import CallResult
 
         mock_services.return_value = ["ec2"]
         mock_policy.return_value = {"ec2:DescribeInstances"}
@@ -508,7 +502,7 @@ class TestSessionWithKeysModeIntegration:
         import sys
 
         with patch.object(sys, "argv", test_args), patch(
-            "src.awsquery.cli.show_keys_from_result"
+            "awsquery.cli.show_keys_from_result"
         ) as mock_show_keys:
 
             mock_show_keys.return_value = "  InstanceId\n  State"

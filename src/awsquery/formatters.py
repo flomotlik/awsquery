@@ -7,6 +7,51 @@ from tabulate import tabulate
 from .utils import debug_print, simplify_key
 
 
+def filter_columns(flattened_data, column_filters):
+    """Filter columns based on filter patterns with ! operators.
+
+    Args:
+        flattened_data: Dictionary with flattened keys
+        column_filters: List of column filter patterns
+
+    Returns:
+        Dictionary with only the columns that match the filters, in filter order
+    """
+    # Import here to avoid circular dependency
+    from .filters import matches_pattern, parse_filter_pattern
+
+    if not column_filters:
+        return flattened_data
+
+    # Parse filter patterns
+    parsed_filters = []
+    for filter_text in column_filters:
+        pattern, mode = parse_filter_pattern(filter_text)
+        parsed_filters.append((pattern, mode))
+        debug_print(f"Applying column filter: {filter_text} (mode: {mode})")  # pragma: no mutate
+
+    # Preserve order by processing filters in sequence
+    filtered_columns = {}
+    matched_keys = set()
+
+    # Process each filter in order
+    for pattern, mode in parsed_filters:
+        for key, value in flattened_data.items():
+            # Skip keys already matched by previous filters
+            if key in matched_keys:
+                continue
+
+            if not pattern or matches_pattern(key, pattern, mode):
+                filtered_columns[key] = value
+                matched_keys.add(key)
+                if pattern:
+                    debug_print(
+                        f"Column '{key}' matched filter '{pattern}' (mode: {mode})"
+                    )  # pragma: no mutate
+
+    return filtered_columns
+
+
 def detect_aws_tags(obj):
     """Detect if object contains AWS Tag structure"""
     if isinstance(obj, dict) and "Tags" in obj:
@@ -65,7 +110,9 @@ def transform_tags_structure(data, visited=None):
                 result[key] = tag_map
                 # Preserve original for debugging
                 result[f"{key}_Original"] = value
-                debug_print(f"Transformed {len(tag_map)} AWS Tags to map format")
+                debug_print(
+                    f"Transformed {len(tag_map)} AWS Tags to map format"
+                )  # pragma: no mutate
             else:
                 # Recursively transform nested structures
                 result[key] = transform_tags_structure(value, visited)
@@ -86,48 +133,52 @@ def flatten_response(data):
     transformed_data = transform_tags_structure(data)
 
     if isinstance(transformed_data, list):
-        debug_print(f"Paginated response with {len(transformed_data)} pages")
+        debug_print(f"Paginated response with {len(transformed_data)} pages")  # pragma: no mutate
         all_items = []
         for i, page in enumerate(transformed_data):
-            debug_print(f"Processing page {i+1}")
+            debug_print(f"Processing page {i+1}")  # pragma: no mutate
             items = flatten_single_response(page)
             all_items.extend(items)
-        debug_print(f"Total resources extracted from all pages: {len(all_items)}")
+        debug_print(
+            f"Total resources extracted from all pages: {len(all_items)}"
+        )  # pragma: no mutate
         return all_items
     else:
-        debug_print("Single response (not paginated)")
+        debug_print("Single response (not paginated)")  # pragma: no mutate
         result = flatten_single_response(transformed_data)
-        debug_print(f"Total resources extracted: {len(result)}")
+        debug_print(f"Total resources extracted: {len(result)}")  # pragma: no mutate
         return result
 
 
 def flatten_single_response(response):
     """Simple extraction of data from AWS API responses"""
     if not response:
-        debug_print("Empty response, returning empty list")
+        debug_print("Empty response, returning empty list")  # pragma: no mutate
         return []
 
     if isinstance(response, list):
-        debug_print(f"Direct list response with {len(response)} items")
+        debug_print(f"Direct list response with {len(response)} items")  # pragma: no mutate
         return response
 
     if not isinstance(response, dict):
-        debug_print(f"Non-dict response ({type(response)}), wrapping in list")
+        debug_print(f"Non-dict response ({type(response)}), wrapping in list")  # pragma: no mutate
         return [response]
 
     original_keys = list(response.keys())
-    debug_print(f"Original response keys: {original_keys}")
+    debug_print(f"Original response keys: {original_keys}")  # pragma: no mutate
 
     filtered_response = {k: v for k, v in response.items() if k != "ResponseMetadata"}
-    filtered_keys = list(filtered_response.keys())
+    filtered_keys = list(filtered_response.keys())  # pragma: no mutate
 
     if "ResponseMetadata" in response:
-        debug_print(f"Removed ResponseMetadata. Filtered keys: {filtered_keys}")
+        debug_print(
+            f"Removed ResponseMetadata. Filtered keys: {filtered_keys}"
+        )  # pragma: no mutate
     else:
-        debug_print(f"No ResponseMetadata found. Keys remain: {filtered_keys}")
+        debug_print(f"No ResponseMetadata found. Keys remain: {filtered_keys}")  # pragma: no mutate
 
     if len(filtered_response) == 0:
-        debug_print("Only ResponseMetadata present -> RETURNING EMPTY LIST")
+        debug_print("Only ResponseMetadata present -> RETURNING EMPTY LIST")  # pragma: no mutate
         return []
 
     list_keys = []
@@ -138,11 +189,13 @@ def flatten_single_response(response):
         else:
             non_list_keys.append(key)
 
-    debug_print(f"Found {len(list_keys)} list keys and {len(non_list_keys)} non-list keys")
+    debug_print(
+        f"Found {len(list_keys)} list keys and {len(non_list_keys)} non-list keys"
+    )  # pragma: no mutate
     if list_keys:
-        debug_print(f"List keys: {[(k, l) for k, l in list_keys]}")
+        debug_print(f"List keys: {[(k, l) for k, l in list_keys]}")  # pragma: no mutate
     if non_list_keys:
-        debug_print(f"Non-list keys: {non_list_keys}")
+        debug_print(f"Non-list keys: {non_list_keys}")  # pragma: no mutate
 
     if len(list_keys) == 1:
         list_key, list_length = list_keys[0]
@@ -151,9 +204,11 @@ def flatten_single_response(response):
             debug_print(
                 f"Single list key '{list_key}' with {list_length} items, "
                 f"ignoring metadata {non_list_keys} -> EXTRACTING LIST ONLY"
-            )
+            )  # pragma: no mutate
         else:
-            debug_print(f"Single list key '{list_key}' with {list_length} items -> EXTRACTING LIST")
+            debug_print(
+                f"Single list key '{list_key}' with {list_length} items -> EXTRACTING LIST"
+            )  # pragma: no mutate
         return list_value
     elif len(list_keys) > 1:
         list_keys.sort(key=lambda x: x[1], reverse=True)
@@ -162,10 +217,12 @@ def flatten_single_response(response):
         debug_print(
             f"Multiple list keys found, using '{largest_key}' with {largest_length} "
             f"items (largest) -> EXTRACTING LARGEST LIST"
-        )
+        )  # pragma: no mutate
         return largest_list
     else:
-        debug_print(f"No list keys found among {non_list_keys} -> USING WHOLE RESPONSE")
+        debug_print(
+            f"No list keys found among {non_list_keys} -> USING WHOLE RESPONSE"
+        )  # pragma: no mutate
         return [filtered_response]
 
 
@@ -203,35 +260,31 @@ def format_table_output(resources, column_filters=None):
         transformed_resources.append(transformed)
 
     flattened_resources = []
-    all_keys = set()
+    all_keys_list = []  # Use list instead of set to preserve order
 
     for resource in transformed_resources:
         flat = flatten_dict_keys(resource)
         flattened_resources.append(flat)
-        all_keys.update(flat.keys())
+        # Collect keys preserving order
+        for key in flat.keys():
+            if key not in all_keys_list:
+                all_keys_list.append(key)
 
     if column_filters:
-        for filter_word in column_filters:
-            debug_print(f"Applying column filter: {filter_word}")
+        # Use filter_columns to apply pattern matching with ! operators
+        # Create a dummy dict with all keys to test which ones match
+        all_keys_dict = {key: True for key in all_keys_list}
+        filtered_dict = filter_columns(all_keys_dict, column_filters)
+        selected_keys = list(filtered_dict.keys())
 
-        selected_keys = []
-        for filter_word in column_filters:
-            matching_keys = []
-            for key in all_keys:
-                simplified = simplify_key(key)
-                if filter_word.lower() in key.lower() or filter_word.lower() in simplified.lower():
-                    matching_keys.append(key)
-            selected_keys.extend(matching_keys)
-            if matching_keys:
-                debug_print(
-                    f"Column filter '{filter_word}' matched: "
-                    f"{', '.join(matching_keys[:5])}{'...' if len(matching_keys) > 5 else ''}"
-                )
-            else:
-                debug_print(f"Column filter '{filter_word}' matched no columns")
-        selected_keys = list(dict.fromkeys(selected_keys))
+        if not selected_keys:
+            debug_print(f"No columns matched filters: {column_filters}")  # pragma: no mutate
+        else:
+            debug_print(
+                f"Selected {len(selected_keys)} columns from {len(all_keys_list)} available"
+            )  # pragma: no mutate
     else:
-        selected_keys = sorted(list(all_keys))
+        selected_keys = sorted(all_keys_list, key=str.lower)
 
     if not selected_keys:
         return "No matching columns found."
@@ -272,6 +325,45 @@ def format_table_output(resources, column_filters=None):
     return tabulate(table_data, headers=unique_headers, tablefmt="grid")
 
 
+def _process_json_resource_with_filters(resource, column_filters):
+    """Process a single resource with column filters for JSON output."""
+    from collections import OrderedDict
+
+    flat = flatten_dict_keys(resource)
+
+    # Use filter_columns to apply pattern matching with ! operators
+    filtered_flat = filter_columns(flat, column_filters)
+
+    # Preserve order by using ordered dictionary
+    simplified_ordered: OrderedDict[str, list[str]] = OrderedDict()
+
+    # Process keys in the order they appear in filtered_flat
+    for key, value in filtered_flat.items():
+        simplified = simplify_key(key)
+        if simplified not in simplified_ordered:
+            simplified_ordered[simplified] = []
+        if value:
+            simplified_ordered[simplified].append(str(value))
+
+    # Build final filtered dict preserving order
+    filtered: OrderedDict[str, str] = OrderedDict()
+    for simplified_key, values in simplified_ordered.items():
+        if not values:
+            continue
+        # Deduplicate values while preserving order
+        unique_values = []
+        seen = set()
+        for v in values:
+            if v not in seen:
+                unique_values.append(v)
+                seen.add(v)
+        filtered[simplified_key] = (
+            ", ".join(unique_values) if len(unique_values) > 1 else unique_values[0]
+        )
+
+    return dict(filtered) if filtered else None
+
+
 def format_json_output(resources, column_filters=None):
     """Format resources as JSON output"""
     if not resources:
@@ -284,32 +376,11 @@ def format_json_output(resources, column_filters=None):
         transformed_resources.append(transformed)
 
     if column_filters:
-        for filter_word in column_filters:
-            debug_print(f"Applying column filter to JSON: {filter_word}")
+        debug_print(f"Applying column filters to JSON: {column_filters}")  # pragma: no mutate
 
         filtered_resources = []
         for resource in transformed_resources:
-            flat = flatten_dict_keys(resource)
-
-            simplified_groups: dict[str, set[str]] = {}
-            for key, value in flat.items():
-                simplified = simplify_key(key)
-                if any(
-                    cf.lower() in key.lower() or cf.lower() in simplified.lower()
-                    for cf in column_filters
-                ):
-                    if simplified not in simplified_groups:
-                        simplified_groups[simplified] = set()
-                    if value:
-                        simplified_groups[simplified].add(str(value))
-
-            filtered = {}
-            for simplified_key, values in simplified_groups.items():
-                if values:
-                    filtered[simplified_key] = (
-                        ", ".join(sorted(values)) if len(values) > 1 else list(values)[0]
-                    )
-
+            filtered = _process_json_resource_with_filters(resource, column_filters)
             if filtered:
                 filtered_resources.append(filtered)
         return json.dumps({"results": filtered_resources}, indent=2, default=str)

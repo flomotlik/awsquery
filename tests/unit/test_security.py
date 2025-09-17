@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
-from src.awsquery.security import action_to_policy_format, load_security_policy, validate_security
+from awsquery.security import action_to_policy_format, load_security_policy, validate_security
 from tests.fixtures.policy_samples import (
     get_deny_policy,
     get_legacy_policy_formats,
@@ -21,8 +21,6 @@ from tests.fixtures.policy_samples import (
 
 class TestLoadSecurityPolicy:
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_load_policy_with_policyversion_structure(self):
         policy_content = get_readonly_policy()
         policy_json = json.dumps(policy_content)
@@ -35,8 +33,6 @@ class TestLoadSecurityPolicy:
         assert "iam:Get*" in allowed_actions
         assert "cloudformation:Describe*" in allowed_actions
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_load_policy_with_direct_statement_structure(self):
         policy_content = get_legacy_policy_formats()["direct_statement"]
         policy_json = json.dumps(policy_content)
@@ -48,7 +44,6 @@ class TestLoadSecurityPolicy:
         assert "ec2:DescribeInstances" in allowed_actions
         assert "s3:ListBuckets" in allowed_actions
 
-    @pytest.mark.unit
     def test_load_policy_with_single_action_string(self):
         policy_content = get_legacy_policy_formats()["single_action_string"]
         policy_json = json.dumps(policy_content)
@@ -59,7 +54,6 @@ class TestLoadSecurityPolicy:
         assert len(allowed_actions) == 1
         assert "ec2:DescribeInstances" in allowed_actions
 
-    @pytest.mark.unit
     def test_load_policy_with_multiple_statements(self):
         policy_content = get_legacy_policy_formats()["multiple_statements"]
         policy_json = json.dumps(policy_content)
@@ -71,7 +65,6 @@ class TestLoadSecurityPolicy:
         assert "s3:Get*" in allowed_actions
         assert "ec2:TerminateInstances" not in allowed_actions
 
-    @pytest.mark.unit
     def test_load_policy_ignores_deny_statements(self):
         policy_content = {
             "Statement": [
@@ -87,7 +80,6 @@ class TestLoadSecurityPolicy:
         assert "ec2:DescribeInstances" in allowed_actions
         assert "ec2:TerminateInstances" not in allowed_actions
 
-    @pytest.mark.unit
     def test_load_policy_with_empty_statements(self):
         policy_content = get_malformed_policies()["empty_statement"]
         policy_json = json.dumps(policy_content)
@@ -97,7 +89,6 @@ class TestLoadSecurityPolicy:
 
         assert len(allowed_actions) == 0
 
-    @pytest.mark.unit
     def test_load_policy_with_missing_statement(self):
         policy_content = {"PolicyVersion": {"Document": {"Version": "2012-10-17"}}}
         policy_json = json.dumps(policy_content)
@@ -107,7 +98,6 @@ class TestLoadSecurityPolicy:
 
         assert len(allowed_actions) == 0
 
-    @pytest.mark.unit
     def test_load_policy_with_missing_action_field(self):
         """Test loading policy statement with missing Action field."""
         policy_content = {
@@ -125,16 +115,12 @@ class TestLoadSecurityPolicy:
 
         assert len(allowed_actions) == 0
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_load_policy_file_not_found_error(self):
         """Test proper error handling when policy.json file is not found."""
         with patch("builtins.open", side_effect=FileNotFoundError()):
             with pytest.raises(SystemExit):
                 load_security_policy()
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_load_policy_invalid_json_error(self):
         """Test proper error handling when policy.json contains invalid JSON."""
         invalid_json = '{"PolicyVersion": {"Document": {invalid json}'
@@ -143,44 +129,40 @@ class TestLoadSecurityPolicy:
             with pytest.raises(SystemExit):
                 load_security_policy()
 
-    @pytest.mark.unit
     def test_load_policy_empty_file(self):
         """Test loading completely empty policy file."""
         with patch("builtins.open", mock_open(read_data="")):
             with pytest.raises(SystemExit):
                 load_security_policy()
 
-    @pytest.mark.unit
-    @pytest.mark.parametrize(
-        "policy_scenario,expected_actions",
-        [
+    def test_load_various_policy_formats(self):
+        """Test loading various policy format scenarios."""
+        test_cases = [
             ("readonly", ["ec2:Describe*", "s3:List*", "iam:Get*"]),
             ("restrictive", ["ec2:DescribeInstances", "s3:ListBuckets", "iam:GetUser"]),
             ("wildcard", ["*:Describe*", "*:List*", "ec2:Get*"]),
-        ],
-    )
-    def test_load_various_policy_formats(self, policy_scenario, expected_actions):
-        """Test loading various policy format scenarios."""
+        ]
+
         policy_functions = {
             "readonly": get_readonly_policy,
             "restrictive": get_restrictive_policy,
             "wildcard": get_wildcard_policy,
         }
 
-        policy_content = policy_functions[policy_scenario]()
-        policy_json = json.dumps(policy_content)
+        for policy_scenario, expected_actions in test_cases:
+            policy_content = policy_functions[policy_scenario]()
+            policy_json = json.dumps(policy_content)
 
-        with patch("builtins.open", mock_open(read_data=policy_json)):
-            allowed_actions = load_security_policy()
+            with patch("builtins.open", mock_open(read_data=policy_json)):
+                allowed_actions = load_security_policy()
 
-        for expected_action in expected_actions:
-            assert expected_action in allowed_actions
+            for expected_action in expected_actions:
+                assert expected_action in allowed_actions
 
-    @pytest.mark.unit
     def test_load_policy_debug_output(self, capsys):
         """Test debug output during policy loading."""
         # Enable debug mode
-        with patch("src.awsquery.utils.debug_enabled", True):
+        with patch("awsquery.utils.debug_enabled", True):
             policy_content = get_restrictive_policy()
             policy_json = json.dumps(policy_content)
 
@@ -196,8 +178,6 @@ class TestLoadSecurityPolicy:
 class TestValidateSecurity:
     """Test security validation with different policy patterns."""
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_validate_security_direct_match(self, mock_security_policy):
         """Test validation with direct action matches."""
         # Test exact matches from the mock policy
@@ -205,8 +185,6 @@ class TestValidateSecurity:
         assert validate_security("s3", "ListBuckets", mock_security_policy) is True
         assert validate_security("iam", "GetUser", mock_security_policy) is True
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_validate_security_wildcard_service_match(self, mock_security_policy):
         """Test validation with service-level wildcard patterns."""
         # These should match wildcard patterns like "ec2:Describe*"
@@ -214,8 +192,6 @@ class TestValidateSecurity:
         assert validate_security("ec2", "DescribeSecurityGroups", mock_security_policy) is True
         assert validate_security("s3", "ListObjects", mock_security_policy) is True
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_validate_security_wildcard_action_match(self, mock_security_policy):
         """Test validation with action-level wildcard patterns."""
         # These should match service-specific patterns like "s3:List*", "iam:List*"
@@ -226,8 +202,6 @@ class TestValidateSecurity:
         assert validate_security("rds", "ListDatabases", mock_security_policy) is False
         assert validate_security("lambda", "ListFunctions", mock_security_policy) is False
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_validate_security_case_sensitivity(self, mock_security_policy):
         """Test case sensitivity in security validation."""
         # Should be case-sensitive
@@ -237,7 +211,6 @@ class TestValidateSecurity:
         # Correct case should work
         assert validate_security("ec2", "DescribeInstances", mock_security_policy) is True
 
-    @pytest.mark.unit
     def test_validate_security_empty_allowed_actions(self):
         """Test validation with empty allowed_actions set (default allow behavior)."""
         empty_actions = set()
@@ -247,15 +220,12 @@ class TestValidateSecurity:
         assert validate_security("s3", "DeleteBucket", empty_actions) is True
         assert validate_security("iam", "CreateUser", empty_actions) is True
 
-    @pytest.mark.unit
     def test_validate_security_none_allowed_actions(self):
         """Test validation with None allowed_actions (default allow behavior)."""
         # Should return True for any action when allowed_actions is None
         assert validate_security("ec2", "DescribeInstances", None) is True
         assert validate_security("s3", "DeleteBucket", None) is True
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_validate_security_no_matches(self, mock_security_policy):
         """Test validation when no policy matches are found (should deny)."""
         # These actions should not match any patterns in the mock policy
@@ -264,7 +234,6 @@ class TestValidateSecurity:
         assert validate_security("iam", "CreateUser", mock_security_policy) is False
         assert validate_security("unknown", "SomeAction", mock_security_policy) is False
 
-    @pytest.mark.unit
     def test_validate_security_complex_wildcard_patterns(self):
         """Test validation with complex wildcard patterns."""
         complex_policy = {
@@ -285,7 +254,6 @@ class TestValidateSecurity:
         assert validate_security("ec2", "CreateVolume", complex_policy) is False
         assert validate_security("s3", "GetObject", complex_policy) is False
 
-    @pytest.mark.unit
     def test_validate_security_service_action_format_validation(self, mock_security_policy):
         """Test that service:action format is properly constructed."""
         # These tests ensure the service:action string is built correctly
@@ -295,7 +263,6 @@ class TestValidateSecurity:
         )  # Empty service
         assert validate_security("ec2", "", mock_security_policy) is False  # Empty action
 
-    @pytest.mark.unit
     @pytest.mark.parametrize(
         "service,action,expected",
         [
@@ -317,10 +284,9 @@ class TestValidateSecurity:
         result = validate_security(service, action, mock_security_policy)
         assert result is expected
 
-    @pytest.mark.unit
     def test_validate_security_debug_output(self, mock_security_policy, capsys):
         """Test debug output during security validation."""
-        with patch("src.awsquery.utils.debug_enabled", True):
+        with patch("awsquery.utils.debug_enabled", True):
             # Test successful validation
             validate_security("ec2", "DescribeInstances", mock_security_policy)
 
@@ -336,7 +302,6 @@ class TestValidateSecurity:
 class TestActionToPolicyFormat:
     """Test action name conversion to PascalCase."""
 
-    @pytest.mark.unit
     @pytest.mark.parametrize(
         "input_action,expected_output",
         [
@@ -376,20 +341,17 @@ class TestActionToPolicyFormat:
         result = action_to_policy_format(input_action)
         assert result == expected_output
 
-    @pytest.mark.unit
     def test_action_to_policy_format_empty_string(self):
         """Test conversion of empty string."""
         result = action_to_policy_format("")
         assert result == ""
 
-    @pytest.mark.unit
     def test_action_to_policy_format_single_character(self):
         """Test conversion of single characters."""
         assert action_to_policy_format("a") == "A"
         assert action_to_policy_format("-") == ""
         assert action_to_policy_format("_") == ""
 
-    @pytest.mark.unit
     @pytest.mark.parametrize(
         "special_input,expected",
         [
@@ -412,7 +374,6 @@ class TestActionToPolicyFormat:
         result = action_to_policy_format(special_input)
         assert result == expected
 
-    @pytest.mark.unit
     def test_action_to_policy_format_complex_real_world_examples(self):
         """Test conversion with real-world AWS action names."""
         test_cases = [
@@ -435,7 +396,6 @@ class TestActionToPolicyFormat:
             result = action_to_policy_format(input_action)
             assert result == expected, f"Expected {expected}, got {result} for input {input_action}"
 
-    @pytest.mark.unit
     def test_action_to_policy_format_idempotency(self):
         """Test that converting already converted names gives consistent results."""
         # Note: PascalCase gets split by the function, so it's not truly idempotent
@@ -450,7 +410,6 @@ class TestActionToPolicyFormat:
         assert first_conversion == "DescribeInstances"
         assert second_conversion == "Describeinstances"  # Gets split again
 
-    @pytest.mark.unit
     def test_action_to_policy_format_case_preservation(self):
         """Test that case is properly handled in various scenarios."""
         test_cases = [
@@ -469,7 +428,6 @@ class TestActionToPolicyFormat:
             result = action_to_policy_format(input_action)
             assert result == expected
 
-    @pytest.mark.unit
     @pytest.mark.parametrize(
         "input_str",
         [
@@ -493,8 +451,6 @@ class TestActionToPolicyFormat:
 class TestSecurityIntegration:
     """Integration tests combining policy loading and validation."""
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_end_to_end_security_validation_workflow(self, tmp_path):
         """Test complete workflow from policy loading to validation."""
         # Create a test policy file
@@ -503,7 +459,7 @@ class TestSecurityIntegration:
         policy_file.write_text(json.dumps(policy_content))
 
         # Mock the file path
-        with patch("src.awsquery.security.open", mock_open(read_data=json.dumps(policy_content))):
+        with patch("awsquery.security.open", mock_open(read_data=json.dumps(policy_content))):
             # Load the policy
             allowed_actions = load_security_policy()
 
@@ -516,7 +472,6 @@ class TestSecurityIntegration:
             assert validate_security("ec2", "TerminateInstances", allowed_actions) is False
             assert validate_security("s3", "DeleteBucket", allowed_actions) is False
 
-    @pytest.mark.unit
     def test_action_conversion_with_validation(self, mock_security_policy):
         """Test action name conversion integrated with validation."""
         # Convert kebab-case action to policy format
@@ -531,8 +486,6 @@ class TestSecurityIntegration:
         assert converted_deny_action == "TerminateInstances"
         assert validate_security("ec2", converted_deny_action, mock_security_policy) is False
 
-    @pytest.mark.unit
-    @pytest.mark.critical
     def test_policy_loading_error_recovery(self):
         """Test error recovery scenarios in policy loading."""
         # Test that system exits on policy load failure don't crash validation
@@ -544,7 +497,6 @@ class TestSecurityIntegration:
         empty_policy = set()
         assert validate_security("ec2", "DescribeInstances", empty_policy) is True
 
-    @pytest.mark.unit
     def test_comprehensive_wildcard_scenarios(self):
         """Test comprehensive wildcard matching scenarios."""
         wildcard_policy = get_wildcard_policy()

@@ -6,11 +6,10 @@ from unittest.mock import Mock, call, patch
 
 import pytest
 
-from src.awsquery.cli import determine_column_filters, main
-from src.awsquery.utils import create_session, get_client
+from awsquery.cli import determine_column_filters, main
+from awsquery.utils import create_session, get_client
 
 
-@pytest.mark.unit
 class TestSessionCreation:
     """Test session creation with region and profile arguments."""
 
@@ -60,7 +59,6 @@ class TestSessionCreation:
             mock_session.assert_called_once_with()
 
 
-@pytest.mark.unit
 class TestClientCreation:
     """Test client creation with and without sessions."""
 
@@ -83,15 +81,14 @@ class TestClientCreation:
         mock_session.client.assert_called_once_with("s3")
 
 
-@pytest.mark.unit
 class TestCLIArgumentParsing:
     """Test CLI argument parsing for region and profile."""
 
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.format_table_output")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.format_table_output")
     def test_region_argument_passed_to_session(
         self, mock_format, mock_services, mock_policy, mock_create_session, mock_execute
     ):
@@ -113,11 +110,11 @@ class TestCLIArgumentParsing:
 
         mock_create_session.assert_called_once_with(region="us-west-2", profile=None)
 
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.format_table_output")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.format_table_output")
     def test_profile_argument_passed_to_session(
         self, mock_format, mock_services, mock_policy, mock_create_session, mock_execute
     ):
@@ -139,11 +136,11 @@ class TestCLIArgumentParsing:
 
         mock_create_session.assert_called_once_with(region=None, profile="test-profile")
 
-    @patch("src.awsquery.cli.execute_aws_call")
-    @patch("src.awsquery.cli.create_session")
-    @patch("src.awsquery.cli.load_security_policy")
-    @patch("src.awsquery.cli.get_aws_services")
-    @patch("src.awsquery.cli.format_table_output")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.load_security_policy")
+    @patch("awsquery.cli.get_aws_services")
+    @patch("awsquery.cli.format_table_output")
     def test_both_region_and_profile_arguments(
         self, mock_format, mock_services, mock_policy, mock_create_session, mock_execute
     ):
@@ -207,14 +204,13 @@ class TestCLIArgumentParsing:
         assert cleaned_argv == expected
 
 
-@pytest.mark.unit
 class TestSessionIntegration:
     """Test session integration with AWS calls."""
 
-    @patch("src.awsquery.core.get_client")
+    @patch("awsquery.core.get_client")
     def test_execute_aws_call_uses_session(self, mock_get_client):
         """Test that execute_aws_call passes session to get_client."""
-        from src.awsquery.core import execute_aws_call
+        from awsquery.core import execute_aws_call
 
         mock_client = Mock()
         mock_client.describe_instances.return_value = {"Instances": []}
@@ -228,10 +224,10 @@ class TestSessionIntegration:
 
         mock_get_client.assert_called_once_with("ec2", mock_session)
 
-    @patch("src.awsquery.core.get_client")
+    @patch("awsquery.core.get_client")
     def test_multi_level_call_uses_session(self, mock_get_client):
         """Test that multi-level calls preserve session throughout."""
-        from src.awsquery.core import execute_multi_level_call
+        from awsquery.core import execute_multi_level_call
 
         mock_client = Mock()
         mock_client.describe_instances.return_value = {"Instances": []}
@@ -239,7 +235,7 @@ class TestSessionIntegration:
         mock_session = Mock()
 
         # Mock successful direct call (no validation error)
-        with patch("src.awsquery.core.execute_aws_call") as mock_execute:
+        with patch("awsquery.core.execute_aws_call") as mock_execute:
             mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
 
             execute_multi_level_call("ec2", "describe-instances", [], [], [], session=mock_session)
@@ -248,7 +244,6 @@ class TestSessionIntegration:
             mock_execute.assert_called_once_with("ec2", "describe-instances", session=mock_session)
 
 
-@pytest.mark.unit
 class TestSessionErrorHandling:
     """Test error handling for session-related issues."""
 
@@ -269,12 +264,12 @@ class TestSessionErrorHandling:
             with pytest.raises(Exception):
                 create_session(profile="non-existent-profile")
 
-    @patch("src.awsquery.cli.create_session")
+    @patch("awsquery.cli.create_session")
     def test_session_creation_error_propagates(self, mock_create_session):
         """Test that session creation errors are properly propagated."""
         mock_create_session.side_effect = Exception("Session creation failed")
 
-        with patch("src.awsquery.cli.load_security_policy") as mock_policy:
+        with patch("awsquery.cli.load_security_policy") as mock_policy:
             mock_policy.return_value = {"ec2:DescribeInstances"}
 
             test_args = ["awsquery", "--region", "invalid", "ec2", "describe-instances"]
@@ -284,14 +279,13 @@ class TestSessionErrorHandling:
                     main()
 
 
-@pytest.mark.unit
 class TestSessionDebugOutput:
     """Test debug output for session creation."""
 
-    @patch("src.awsquery.utils.debug_print")
+    @patch("awsquery.utils.debug_print")
     def test_session_creation_debug_output(self, mock_debug):
         """Test that session creation produces debug output when enabled."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         # Enable debug mode
         original_debug = utils.debug_enabled
@@ -314,10 +308,10 @@ class TestSessionDebugOutput:
         finally:
             utils.debug_enabled = original_debug
 
-    @patch("src.awsquery.utils.debug_print")
+    @patch("awsquery.utils.debug_print")
     def test_session_debug_with_empty_values(self, mock_debug):
         """Test debug output when empty values are provided."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         original_debug = utils.debug_enabled
         utils.debug_enabled = True

@@ -7,7 +7,7 @@ import pytest
 from tabulate import tabulate
 
 # Import the functions under test
-from src.awsquery.formatters import (
+from awsquery.formatters import (
     detect_aws_tags,
     extract_and_sort_keys,
     flatten_dict_keys,
@@ -18,10 +18,9 @@ from src.awsquery.formatters import (
     show_keys,
     transform_tags_structure,
 )
-from src.awsquery.utils import simplify_key
+from awsquery.utils import simplify_key
 
 
-@pytest.mark.unit
 class TestFlattenResponse:
 
     def test_flatten_response_empty_list(self):
@@ -78,7 +77,6 @@ class TestFlattenResponse:
         assert result[1]["InstanceId"] == "i-direct2"
 
 
-@pytest.mark.unit
 class TestFlattenSingleResponse:
     """Test suite for flatten_single_response() function.
 
@@ -186,7 +184,6 @@ class TestFlattenSingleResponse:
         assert "development-assets" in bucket_names
 
 
-@pytest.mark.unit
 class TestFlattenDictKeys:
     """Test suite for flatten_dict_keys() function.
 
@@ -337,7 +334,6 @@ class TestFlattenDictKeys:
         assert result == expected
 
 
-@pytest.mark.unit
 class TestSimplifyKey:
     """Test suite for simplify_key() function - extract the last non-numeric part."""
 
@@ -388,7 +384,6 @@ class TestSimplifyKey:
         assert result == "123"
 
 
-@pytest.mark.unit
 class TestTableOutput:
     """Test suite for format_table_output() function - format resources as table."""
 
@@ -536,7 +531,6 @@ class TestTableOutput:
             assert expected_col in result
 
 
-@pytest.mark.unit
 class TestJsonOutput:
     """Test suite for format_json_output() function - format resources as JSON."""
 
@@ -679,7 +673,6 @@ class TestJsonOutput:
         assert len(indented_lines) > 0
 
 
-@pytest.mark.unit
 class TestUtilityFunctions:
     """Test suite for utility functions - extract_and_sort_keys and show_keys."""
 
@@ -761,7 +754,7 @@ class TestUtilityFunctions:
         )
         assert result == expected_keys
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_show_keys_no_data(self, mock_execute):
         """Test show_keys when no data is available."""
         mock_execute.return_value = {"ResponseMetadata": {"RequestId": "test"}}
@@ -771,7 +764,7 @@ class TestUtilityFunctions:
         assert result == "No data to extract keys from."
         mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_show_keys_with_data(self, mock_execute):
         """Test show_keys with actual data."""
         mock_execute.return_value = {
@@ -798,7 +791,7 @@ class TestUtilityFunctions:
         assert "Key" in content  # From Tags.0.Key
         assert "Value" in content  # From Tags.0.Value
 
-    @patch("src.awsquery.core.execute_aws_call")
+    @patch("awsquery.core.execute_aws_call")
     def test_show_keys_integration(self, mock_execute):
         """Test show_keys integration with extract_and_sort_keys."""
         mock_execute.return_value = {"Instances": [{"InstanceId": "i-123", "Status": "running"}]}
@@ -813,7 +806,6 @@ class TestUtilityFunctions:
         mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
 
 
-@pytest.mark.unit
 class TestComplexScenarios:
     """Test suite for complex real-world formatting scenarios."""
 
@@ -1041,7 +1033,6 @@ class TestComplexScenarios:
         assert len(keys) > 0
 
 
-@pytest.mark.unit
 class TestTagTransformation:
     """Test suite for AWS Tags transformation functionality."""
 

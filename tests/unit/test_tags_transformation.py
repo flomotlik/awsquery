@@ -4,10 +4,9 @@ from unittest.mock import patch
 
 import pytest
 
-from src.awsquery.formatters import detect_aws_tags, flatten_response, transform_tags_structure
+from awsquery.formatters import detect_aws_tags, flatten_response, transform_tags_structure
 
 
-@pytest.mark.unit
 class TestDetectAwsTags:
     """Test AWS Tags structure detection."""
 
@@ -81,7 +80,6 @@ class TestDetectAwsTags:
         assert detect_aws_tags(obj) is False
 
 
-@pytest.mark.unit
 class TestTransformTagsStructure:
     """Test AWS Tags structure transformation."""
 
@@ -248,10 +246,10 @@ class TestTransformTagsStructure:
         assert result["Tags"]["Environment"] == "production"
         assert result["Tags"]["Name"] == "web-server"
 
-    @patch("src.awsquery.formatters.debug_print")
+    @patch("awsquery.formatters.debug_print")
     def test_transform_debug_output(self, mock_debug):
         """Test that transformation produces debug output."""
-        from src.awsquery import utils
+        from awsquery import utils
 
         original_debug = utils.debug_enabled
         utils.debug_enabled = True
@@ -270,14 +268,13 @@ class TestTransformTagsStructure:
             utils.debug_enabled = original_debug
 
 
-@pytest.mark.unit
 class TestTagsIntegrationWithFormatters:
     """Test tags transformation integration with response formatting."""
 
-    @patch("src.awsquery.formatters.transform_tags_structure")
+    @patch("awsquery.formatters.transform_tags_structure")
     def test_flatten_response_calls_transform_tags(self, mock_transform):
         """Test that flatten_response calls transform_tags_structure."""
-        from src.awsquery.formatters import flatten_response
+        from awsquery.formatters import flatten_response
 
         mock_response = [{"Instances": [{"InstanceId": "i-123"}]}]
         mock_transform.return_value = mock_response
@@ -313,7 +310,7 @@ class TestTagsIntegrationWithFormatters:
 
     def test_tags_column_selection_after_transformation(self):
         """Test that tag-based column selection works after transformation."""
-        from src.awsquery.formatters import format_table_output
+        from awsquery.formatters import format_table_output
 
         resources = [
             {
@@ -365,7 +362,6 @@ class TestTagsIntegrationWithFormatters:
         assert stack["Tags"]["CostCenter"] == "1234"
 
 
-@pytest.mark.unit
 class TestTagsPerformance:
     """Test performance characteristics of tags transformation."""
 
@@ -438,7 +434,6 @@ class TestTagsPerformance:
             assert instance["Tags"]["Batch"] == "performance-test"
 
 
-@pytest.mark.unit
 class TestTagsErrorHandling:
     """Test error handling in tags transformation."""
 

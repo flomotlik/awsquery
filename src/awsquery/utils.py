@@ -28,7 +28,8 @@ def sanitize_input(value):
     """Basic input sanitization"""
     if not isinstance(value, str):
         return str(value)
-    dangerous = ["|", ";", "&", "`", "$", "(", ")", "[", "]", "{", "}"]
+    # Note: $ is not included as it's used for suffix matching in filters
+    dangerous = ["|", ";", "&", "`", "(", ")", "[", "]", "{", "}"]
     for char in dangerous:
         value = value.replace(char, "")
     return value.strip()
@@ -96,15 +97,17 @@ def get_service_actions(service):
 
 def create_session(region=None, profile=None):
     """Create boto3 session with optional region/profile"""
-    debug_print(f"create_session called with region={repr(region)}, profile={repr(profile)}")
+    debug_print(
+        f"create_session called with region={repr(region)}, profile={repr(profile)}"
+    )  # pragma: no mutate
     session_kwargs = {}
     if region and region.strip():
         session_kwargs["region_name"] = region
-        debug_print(f"Added region_name={region} to session")
+        debug_print(f"Added region_name={region} to session")  # pragma: no mutate
     if profile and profile.strip():
         session_kwargs["profile_name"] = profile
-        debug_print(f"Added profile_name={profile} to session")
-    debug_print(f"Creating session with kwargs: {session_kwargs}")
+        debug_print(f"Added profile_name={profile} to session")  # pragma: no mutate
+    debug_print(f"Creating session with kwargs: {session_kwargs}")  # pragma: no mutate
     return boto3.Session(**session_kwargs)
 
 
