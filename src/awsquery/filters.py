@@ -1,6 +1,9 @@
 """Filtering logic for AWS Query Tool."""
 
+from __future__ import annotations
+
 import sys
+from typing import Dict, List
 
 from .formatters import convert_parameter_name, flatten_dict_keys, transform_tags_structure
 from .utils import debug_print, simplify_key
@@ -85,7 +88,7 @@ def filter_resources(resources, value_filters):
         transformed = transform_tags_structure(resource)
         transformed_resources.append(transformed)
 
-    filtered: list[dict] = []
+    filtered: List[Dict] = []
     for resource in transformed_resources:
         flattened = flatten_dict_keys(resource)
 
@@ -156,7 +159,7 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
 
     first_segment = segments[0] if segments else []
 
-    third_segment: list[str]
+    third_segment: List[str]
     if len(segments) == 1:
         second_segment = []
         third_segment = []
@@ -185,7 +188,7 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
             extra_args.append(arg)
 
     if mode == "single":
-        resource_filters: list[str] = []
+        resource_filters: List[str] = []
 
         if len(segments) == 1:
             value_filters = extra_args

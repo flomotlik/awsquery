@@ -5,15 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from awsquery.core import (
-    execute_multi_level_call_with_tracking,
-    infer_list_operation,
-)
+from awsquery.core import execute_multi_level_call_with_tracking, infer_list_operation
 from awsquery.filters import parse_filter_pattern
-from awsquery.formatters import (
-    filter_columns,
-    flatten_single_response,
-)
+from awsquery.formatters import filter_columns, flatten_single_response
 from awsquery.security import load_security_policy
 
 

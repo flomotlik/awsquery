@@ -339,7 +339,7 @@ class TestCLIArgumentParsing:
         # Mock botocore session for the action completer
         mock_session = Mock()
         mock_session_class.return_value = mock_session
-        mock_session.get_available_services.return_value = ['ec2', 's3']
+        mock_session.get_available_services.return_value = ["ec2", "s3"]
 
         # Mock service model
         mock_service_model = Mock()

@@ -1,6 +1,10 @@
 """Output formatting for AWS Query Tool."""
 
+from __future__ import annotations
+
 import json
+from collections import OrderedDict
+from typing import Dict, List
 
 from tabulate import tabulate
 
@@ -289,7 +293,7 @@ def format_table_output(resources, column_filters=None):
     if not selected_keys:
         return "No matching columns found."
 
-    simplified_to_full_keys: dict[str, list[str]] = {}
+    simplified_to_full_keys: Dict[str, List[str]] = {}
     unique_headers_ordered = []
 
     for key in selected_keys:
@@ -327,15 +331,13 @@ def format_table_output(resources, column_filters=None):
 
 def _process_json_resource_with_filters(resource, column_filters):
     """Process a single resource with column filters for JSON output."""
-    from collections import OrderedDict
-
     flat = flatten_dict_keys(resource)
 
     # Use filter_columns to apply pattern matching with ! operators
     filtered_flat = filter_columns(flat, column_filters)
 
     # Preserve order by using ordered dictionary
-    simplified_ordered: OrderedDict[str, list[str]] = OrderedDict()
+    simplified_ordered: Dict[str, List[str]] = OrderedDict()
 
     # Process keys in the order they appear in filtered_flat
     for key, value in filtered_flat.items():
@@ -346,7 +348,7 @@ def _process_json_resource_with_filters(resource, column_filters):
             simplified_ordered[simplified].append(str(value))
 
     # Build final filtered dict preserving order
-    filtered: OrderedDict[str, str] = OrderedDict()
+    filtered: Dict[str, str] = OrderedDict()
     for simplified_key, values in simplified_ordered.items():
         if not values:
             continue

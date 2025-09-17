@@ -2,11 +2,7 @@
 
 import pytest
 
-from awsquery.filters import (
-    filter_resources,
-    matches_pattern,
-    parse_filter_pattern,
-)
+from awsquery.filters import filter_resources, matches_pattern, parse_filter_pattern
 from awsquery.formatters import filter_columns
 
 

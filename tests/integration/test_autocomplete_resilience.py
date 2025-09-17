@@ -34,12 +34,18 @@ class TestAutocompleteWithoutCredentials:
     def test_service_completer_without_credentials(self):
         """Test service completer works without AWS credentials."""
         # Mock botocore.session at the module level where it's imported
-        with patch('botocore.session.Session') as mock_session_class:
+        with patch("botocore.session.Session") as mock_session_class:
             # Mock botocore session
             mock_session = Mock()
             mock_session_class.return_value = mock_session
             mock_session.get_available_services.return_value = [
-                'ec2', 'ecs', 'ecr', 's3', 'lambda', 'iam', 'dynamodb'
+                "ec2",
+                "ecs",
+                "ecr",
+                "s3",
+                "lambda",
+                "iam",
+                "dynamodb",
             ]
 
             result = service_completer("ec", None)
@@ -53,12 +59,17 @@ class TestAutocompleteWithoutCredentials:
 
     def test_service_completer_various_prefixes(self):
         """Test service completer with different prefixes."""
-        with patch('botocore.session.Session') as mock_session_class:
+        with patch("botocore.session.Session") as mock_session_class:
             # Mock botocore session
             mock_session = Mock()
             mock_session_class.return_value = mock_session
             mock_session.get_available_services.return_value = [
-                's3', 'sqs', 'sns', 'cloudformation', 'cloudwatch', 'cloudtrail'
+                "s3",
+                "sqs",
+                "sns",
+                "cloudformation",
+                "cloudwatch",
+                "cloudtrail",
             ]
 
             # Test single character
@@ -79,19 +90,20 @@ class TestAutocompleteWithoutCredentials:
 
     def test_action_completer_without_credentials(self):
         """Test action completer works without AWS credentials."""
-        with patch('awsquery.security.load_security_policy') as mock_load_security, \
-             patch('botocore.session.Session') as mock_session_class:
+        with patch("awsquery.security.load_security_policy") as mock_load_security, patch(
+            "botocore.session.Session"
+        ) as mock_session_class:
             # Mock security policy
-            mock_load_security.return_value = set(['ec2:Describe*'])
+            mock_load_security.return_value = set(["ec2:Describe*"])
 
             # Mock botocore session and service model
             mock_session = Mock()
             mock_session_class.return_value = mock_session
-            mock_session.get_available_services.return_value = ['ec2']
+            mock_session.get_available_services.return_value = ["ec2"]
 
             # Create extensive describe operations list
-            describe_ops = [f'Describe{x}' for x in range(110)]  # More than 100 operations
-            describe_ops.extend(['DescribeInstances', 'DescribeVolumes', 'DescribeSecurityGroups'])
+            describe_ops = [f"Describe{x}" for x in range(110)]  # More than 100 operations
+            describe_ops.extend(["DescribeInstances", "DescribeVolumes", "DescribeSecurityGroups"])
 
             mock_service_model = Mock()
             mock_service_model.operation_names = describe_ops
@@ -109,20 +121,26 @@ class TestAutocompleteWithoutCredentials:
 
     def test_action_completer_different_services(self):
         """Test action completer for various AWS services."""
-        with patch('awsquery.security.load_security_policy') as mock_load_security, \
-             patch('botocore.session.Session') as mock_session_class:
+        with patch("awsquery.security.load_security_policy") as mock_load_security, patch(
+            "botocore.session.Session"
+        ) as mock_session_class:
             # Mock security policy
-            mock_load_security.return_value = set(['s3:List*', 's3:Get*', 'iam:Get*', 'lambda:List*'])
+            mock_load_security.return_value = set(
+                ["s3:List*", "s3:Get*", "iam:Get*", "lambda:List*"]
+            )
 
             # Mock botocore session
             mock_session = Mock()
             mock_session_class.return_value = mock_session
-            mock_session.get_available_services.return_value = ['s3', 'iam', 'lambda']
+            mock_session.get_available_services.return_value = ["s3", "iam", "lambda"]
 
             # Test S3
             mock_service_model_s3 = Mock()
             mock_service_model_s3.operation_names = [
-                'ListBuckets', 'ListObjects', 'ListObjectsV2', 'GetBucketPolicy'
+                "ListBuckets",
+                "ListObjects",
+                "ListObjectsV2",
+                "GetBucketPolicy",
             ]
             mock_session.get_service_model.return_value = mock_service_model_s3
 
@@ -134,9 +152,7 @@ class TestAutocompleteWithoutCredentials:
 
             # Test IAM
             mock_service_model_iam = Mock()
-            mock_service_model_iam.operation_names = [
-                'GetUser', 'GetRole', 'GetPolicy', 'GetGroup'
-            ]
+            mock_service_model_iam.operation_names = ["GetUser", "GetRole", "GetPolicy", "GetGroup"]
             mock_session.get_service_model.return_value = mock_service_model_iam
 
             parsed_args = Namespace(service="iam")
@@ -148,7 +164,9 @@ class TestAutocompleteWithoutCredentials:
             # Test Lambda
             mock_service_model_lambda = Mock()
             mock_service_model_lambda.operation_names = [
-                'ListFunctions', 'ListLayers', 'ListVersionsByFunction'
+                "ListFunctions",
+                "ListLayers",
+                "ListVersionsByFunction",
             ]
             mock_session.get_service_model.return_value = mock_service_model_lambda
 
@@ -159,11 +177,11 @@ class TestAutocompleteWithoutCredentials:
 
     def test_action_completer_nonexistent_service(self):
         """Test action completer with non-existent service."""
-        with patch('botocore.session.Session') as mock_session_class:
+        with patch("botocore.session.Session") as mock_session_class:
             # Mock botocore session
             mock_session = Mock()
             mock_session_class.return_value = mock_session
-            mock_session.get_available_services.return_value = ['ec2', 's3', 'iam']
+            mock_session.get_available_services.return_value = ["ec2", "s3", "iam"]
 
             parsed_args = Namespace(service="nonexistent-service-12345")
             result = action_completer("describe", parsed_args)
@@ -171,7 +189,7 @@ class TestAutocompleteWithoutCredentials:
 
     def test_action_completer_no_service(self):
         """Test action completer when no service is specified."""
-        with patch('botocore.session.Session') as mock_session_class:
+        with patch("botocore.session.Session") as mock_session_class:
             # Mock botocore session
             mock_session = Mock()
             mock_session_class.return_value = mock_session
@@ -184,15 +202,16 @@ class TestAutocompleteWithoutCredentials:
         """Test autocomplete still works with invalid AWS_PROFILE."""
         os.environ["AWS_PROFILE"] = "nonexistent-profile-99999"
 
-        with patch('awsquery.security.load_security_policy') as mock_load_security, \
-             patch('botocore.session.Session') as mock_session_class:
+        with patch("awsquery.security.load_security_policy") as mock_load_security, patch(
+            "botocore.session.Session"
+        ) as mock_session_class:
             # Mock security policy
-            mock_load_security.return_value = set(['dynamodb:Describe*'])
+            mock_load_security.return_value = set(["dynamodb:Describe*"])
 
             # Mock botocore session
             mock_session = Mock()
             mock_session_class.return_value = mock_session
-            mock_session.get_available_services.return_value = ['rds', 'dynamodb', 's3']
+            mock_session.get_available_services.return_value = ["rds", "dynamodb", "s3"]
 
             # Service completer should still work
             services = service_completer("rds", None)
@@ -200,7 +219,7 @@ class TestAutocompleteWithoutCredentials:
 
             # Mock service model for DynamoDB
             mock_service_model = Mock()
-            mock_service_model.operation_names = ['DescribeTable', 'DescribeBackup', 'ListTables']
+            mock_service_model.operation_names = ["DescribeTable", "DescribeBackup", "ListTables"]
             mock_session.get_service_model.return_value = mock_service_model
 
             # Action completer should still work
@@ -210,21 +229,22 @@ class TestAutocompleteWithoutCredentials:
 
     def test_autocomplete_filters_by_security_policy(self):
         """Test that autocomplete respects security policy filtering."""
-        with patch('awsquery.security.load_security_policy') as mock_load_security, \
-             patch('botocore.session.Session') as mock_session_class:
+        with patch("awsquery.security.load_security_policy") as mock_load_security, patch(
+            "botocore.session.Session"
+        ) as mock_session_class:
             # Mock security policy to allow only read operations
-            mock_load_security.return_value = set(['ec2:Describe*', 'ec2:Get*'])
+            mock_load_security.return_value = set(["ec2:Describe*", "ec2:Get*"])
 
             # Mock botocore session and service model
             mock_session = Mock()
             mock_session_class.return_value = mock_session
-            mock_session.get_available_services.return_value = ['ec2']
+            mock_session.get_available_services.return_value = ["ec2"]
 
             # Include write operations that should be filtered out
             all_operations = (
-                [f'Describe{x}' for x in range(55)] +  # 55 describe operations
-                ['GetConsoleOutput', 'GetPasswordData'] +  # Some get operations
-                ['CreateInstance', 'DeleteInstance', 'TerminateInstances']  # Write operations
+                [f"Describe{x}" for x in range(55)]  # 55 describe operations
+                + ["GetConsoleOutput", "GetPasswordData"]  # Some get operations
+                + ["CreateInstance", "DeleteInstance", "TerminateInstances"]  # Write operations
             )
             mock_service_model = Mock()
             mock_service_model.operation_names = all_operations
@@ -294,12 +314,12 @@ class TestRealBotocoreIntegration:
         assert "AWS_ACCESS_KEY_ID" not in os.environ
         assert "AWS_PROFILE" not in os.environ
 
-    @patch('awsquery.security.load_security_policy')
+    @patch("awsquery.security.load_security_policy")
     def test_real_action_completer_small_service(self, mock_load_security):
         """Test action completer with real botocore using STS (smallest service)."""
         # Use STS - it has only 9 operations so loads very fast
         # This ensures we have at least one test that verifies real botocore integration
-        mock_load_security.return_value = set(['sts:*'])
+        mock_load_security.return_value = set(["sts:*"])
 
         parsed_args = Namespace(service="sts")
         result = action_completer("get", parsed_args)
@@ -308,7 +328,9 @@ class TestRealBotocoreIntegration:
         assert len(result) > 0
         assert "get-caller-identity" in result
         assert "get-session-token" in result
-        assert all(a.startswith("get") or a.startswith("assume") or a.startswith("decode") for a in result)
+        assert all(
+            a.startswith("get") or a.startswith("assume") or a.startswith("decode") for a in result
+        )
 
     def test_real_botocore_full_integration(self):
         """Full integration test with real botocore - verifies the complete flow."""
