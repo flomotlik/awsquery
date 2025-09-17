@@ -38,12 +38,46 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run tests
+      - name: Run tests (fast, no coverage)
         run: |
-          make test
+          # Run tests without coverage for speed on older Python versions
+          python -m pytest tests/ -n auto -q
+
+      - name: Archive test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.python-version }}
+          path: |
+            .pytest_cache/
+
+  coverage:
+    runs-on: ubuntu-latest
+    needs: test  # Run after tests pass
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python 3.12 (latest)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
 
       - name: Generate coverage report
         run: |
+          # Run with coverage on latest Python where it's fast
           make coverage
 
       - name: Upload coverage to Codecov
@@ -54,11 +88,10 @@ jobs:
           name: codecov-umbrella
           fail_ci_if_error: false
 
-      - name: Archive test results
-        if: always()
+      - name: Archive coverage results
         uses: actions/upload-artifact@v4
         with:
-          name: test-results-${{ matrix.python-version }}
+          name: coverage-report
           path: |
             htmlcov/
             .coverage

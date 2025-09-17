@@ -11,10 +11,10 @@ NC := \033[0m
 # Default target
 .DEFAULT_GOAL := help
 
-.PHONY: help clean install-dev test test-unit test-integration test-critical test-slow coverage \
-        coverage-report lint format format-check type-check security-check ci build publish-test \
-        publish watch-tests version release update-policy validate-policy all ec2-instances s3-buckets iam-users \
-        iam-roles lambda-functions cloudformation-stacks dynamodb-tables ec2-volumes \
+.PHONY: help clean install-dev test test-unit test-integration test-critical test-slow test-fast test-unit-fast \
+        test-integration-fast coverage coverage-report lint format format-check type-check security-check ci build \
+        publish-test publish watch-tests version release update-policy validate-policy all ec2-instances s3-buckets \
+        iam-users iam-roles lambda-functions cloudformation-stacks dynamodb-tables ec2-volumes \
         ec2-security-groups s3-bucket-versioning cloudwatch-alarms route53-zones shell \
         docker-build docker-clean test-in-docker test-awsquery
 
@@ -47,6 +47,15 @@ test-integration: ## Run integration tests only
 
 test-slow: ## Run slow tests
 	python3 -m pytest tests/ -v -m "slow"
+
+test-fast: ## Run all tests with parallel execution (optimized for Python 3.8-3.10)
+	python3 -m pytest tests/ -n auto -q
+
+test-unit-fast: ## Run unit tests with parallel execution (2-5 seconds)
+	python3 -m pytest tests/unit/ -n auto -q
+
+test-integration-fast: ## Run integration tests with parallel execution
+	python3 -m pytest tests/integration/ -n auto -q
 
 test-critical: ## Run critical path tests
 	python3 -m pytest tests/ -v -m "critical"
