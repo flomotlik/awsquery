@@ -65,14 +65,10 @@ class TestCLIParserSeparator:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_main_with_column_filters(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    @patch("awsquery.cli.validate_readonly")
+    def test_main_with_column_filters(self, mock_validate, mock_execute, mock_session):
         """Test main() function correctly processes -- separator with column filters."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": []}]
         mock_session.return_value = Mock()
 
@@ -97,14 +93,10 @@ class TestCLIParserSeparator:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_main_with_flags_and_filters(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    @patch("awsquery.cli.validate_readonly")
+    def test_main_with_flags_and_filters(self, mock_validate, mock_execute, mock_session):
         """Test main() with flags like --region and -- separator."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": []}]
         mock_session.return_value = Mock()
 
@@ -137,14 +129,10 @@ class TestCLIParserSeparator:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_main_with_json_flag_and_filters(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    @patch("awsquery.cli.validate_readonly")
+    def test_main_with_json_flag_and_filters(self, mock_validate, mock_execute, mock_session):
         """Test main() with -j flag and column filters."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
         mock_session.return_value = Mock()
 
@@ -201,14 +189,10 @@ class TestCLIParserEdgeCases:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_main_with_all_flags_combined(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    @patch("awsquery.cli.validate_readonly")
+    def test_main_with_all_flags_combined(self, mock_validate, mock_execute, mock_session):
         """Test main() with all possible flags and filters combined."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": []}]
         mock_session.return_value = Mock()
 
@@ -273,14 +257,12 @@ class TestParserRegressionPrevention:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
+    @patch("awsquery.cli.validate_readonly")
     def test_main_never_fails_with_unrecognized_arguments(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
+        self, mock_validate, mock_execute, mock_session
     ):
         """Test main() doesn't raise 'unrecognized arguments' error."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": []}]
         mock_session.return_value = None
 
@@ -317,15 +299,13 @@ class TestParserRegressionPrevention:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
+    @patch("awsquery.cli.validate_readonly")
     @patch("awsquery.cli.format_table_output")
     def test_column_filters_propagate_to_formatter(
-        self, mock_format, mock_validate, mock_load_policy, mock_execute, mock_session
+        self, mock_format, mock_validate, mock_execute, mock_session
     ):
         """Test that column filters after -- are passed to the formatter."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [
             {"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}
         ]
@@ -356,14 +336,12 @@ class TestCLIParserRegression:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
+    @patch("awsquery.cli.validate_readonly")
     def test_parser_does_not_fail_on_column_filters(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
+        self, mock_validate, mock_execute, mock_session
     ):
         """Test parser doesn't fail with 'unrecognized arguments' for column filters."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Buckets": []}]
         mock_session.return_value = Mock()
 

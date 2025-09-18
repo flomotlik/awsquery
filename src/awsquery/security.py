@@ -1,108 +1,120 @@
-"""Security policy validation for AWS Query Tool."""
+"""Security validation for AWS Query Tool using simple prefix matching."""
 
-import fnmatch
-import json
-import os
 import sys
+from typing import Optional
 
 from .utils import debug_print
 
-
-def load_security_policy():
-    """Load and parse AWS ReadOnly policy from policy.json"""
-    # Load policy.json from the package directory, not current directory
-    policy_path = os.path.join(os.path.dirname(__file__), "policy.json")
-
-    try:
-        with open(policy_path, "r") as f:
-            policy = json.load(f)
-
-        debug_print(f"DEBUG: Loaded policy with keys: {list(policy.keys())}")  # pragma: no mutate
-
-        allowed_actions = set()
-
-        if "PolicyVersion" in policy:
-            debug_print(f"DEBUG: Found PolicyVersion structure")  # pragma: no mutate
-            policy_doc = policy["PolicyVersion"].get("Document", {})
-            # Fix: Handle None Document gracefully
-            if policy_doc is None:
-                policy_doc = {}
-            statements = policy_doc.get("Statement", [])
-        else:
-            statements = policy.get("Statement", [])
-
-        debug_print(f"DEBUG: Found {len(statements)} statements in policy")  # pragma: no mutate
-
-        for i, statement in enumerate(statements):
-            effect = statement.get("Effect")
-            actions = statement.get("Action", [])
-            debug_print(
-                f"DEBUG: Statement {i}: Effect={effect}, "
-                f"Actions count={len(actions) if isinstance(actions, list) else 1}"
-            )  # pragma: no mutate
-
-            if effect == "Allow":
-                if isinstance(actions, str):
-                    actions = [actions]
-                allowed_actions.update(actions)
-                debug_print(
-                    f"DEBUG: Added {len(actions)} actions from statement {i}"
-                )  # pragma: no mutate
-
-        debug_print(
-            f"DEBUG: Total allowed actions loaded: {len(allowed_actions)}"
-        )  # pragma: no mutate
-        if len(allowed_actions) < 10:
-            debug_print(f"DEBUG: Sample actions: {list(allowed_actions)[:5]}")  # pragma: no mutate
-
-        return allowed_actions
-    except FileNotFoundError:
-        print(
-            f"ERROR: {policy_path} not found. This file is required for security validation.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    except json.JSONDecodeError:
-        print(
-            f"ERROR: Invalid JSON in {policy_path}. This file is required for security validation.",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+# Common read-only operation prefixes based on AWS ReadOnly policy analysis
+# These prefixes appear 20+ times across AWS services
+SAFE_READONLY_PREFIXES = [
+    "List",
+    "Get",
+    "Describe",
+    "Batch",
+    "Search",
+    "Query",
+    "View",
+    "Lookup",
+    "Read",
+    "Scan",
+    "Select",
+    "Check",
+    "Validate",
+    "Test",
+    "Preview",
+    "Verify",
+    "Estimate",
+    "Discover",
+    "Retrieve",
+    "Is",
+    "Has",
+    "Can",
+]
 
 
-def validate_security(service, action, allowed_actions):
-    """Validate service:action against security policy"""
-    service_action = f"{service}:{action}"
+def is_readonly_operation(action: str) -> bool:
+    """Check if an operation is read-only based on common prefixes."""
+    # Convert kebab-case to PascalCase for checking
+    if "-" in action:
+        parts = action.split("-")
+        action = "".join(part.capitalize() for part in parts)
 
-    if not allowed_actions:
-        debug_print(
-            f"DEBUG: No allowed_actions provided, allowing {service_action} by default"
-        )  # pragma: no mutate
-        return True
-
-    debug_print(
-        f"DEBUG: Validating {service_action} against {len(allowed_actions)} policy rules"
-    )  # pragma: no mutate
-
-    if service_action in allowed_actions:
-        debug_print(f"DEBUG: Direct match found for {service_action}")  # pragma: no mutate
-        return True
-
-    for allowed in allowed_actions:
-        if fnmatch.fnmatch(service_action, allowed):
-            debug_print(
-                f"DEBUG: Wildcard match: {service_action} matches {allowed}"
-            )  # pragma: no mutate
+    # Check if action starts with any safe prefix
+    for prefix in SAFE_READONLY_PREFIXES:
+        if action.startswith(prefix):
+            debug_print(f"DEBUG: Operation {action} matches safe prefix {prefix}")
             return True
 
-    debug_print(f"DEBUG: No match found for {service_action}")  # pragma: no mutate
+    debug_print(f"DEBUG: Operation {action} does not match any safe prefix")
     return False
 
 
-def action_to_policy_format(action):
-    """Convert CLI-style action name to PascalCase format used in security policy"""
-    words = action.replace("-", " ").replace("_", " ").split()
+def prompt_unsafe_operation(service: str, action: str) -> bool:
+    """Prompt user to confirm unsafe operation."""
+    print(f"\nWARNING: Operation '{service}:{action}' may not be read-only.", file=sys.stderr)
+    print("This operation could potentially modify AWS resources.", file=sys.stderr)
 
-    pascal_case = "".join(word.capitalize() for word in words)
+    while True:
+        response = input("Do you want to proceed? (yes/no): ").lower().strip()
+        if response in ["yes", "y"]:
+            return True
+        elif response in ["no", "n"]:
+            return False
+        else:
+            print("Please answer 'yes' or 'no'.", file=sys.stderr)
 
-    return pascal_case
+
+def validate_readonly(service: str, action: str, allow_unsafe: bool = False) -> bool:
+    """Validate if an operation is safe to execute.
+
+    Args:
+        service: AWS service name
+        action: Action/operation name
+        allow_unsafe: If True, allow all operations without prompting
+
+    Returns:
+        True if operation should proceed, False otherwise
+    """
+    # If allow_unsafe flag is set, allow everything
+    if allow_unsafe:
+        debug_print(f"DEBUG: --allow-unsafe flag set, allowing {service}:{action}")
+        return True
+
+    # Check if operation matches read-only prefixes
+    if is_readonly_operation(action):
+        return True
+
+    # For non-readonly operations, prompt the user
+    return prompt_unsafe_operation(service, action)
+
+
+# Legacy functions for backward compatibility (will be removed later)
+def load_security_policy():
+    """Legacy function - returns empty set to avoid breaking existing code."""
+    return set()
+
+
+def validate_security(service: str, action: str, allowed_actions) -> bool:
+    """Legacy function - always returns True to avoid breaking existing code."""
+    return True
+
+
+def action_to_policy_format(action: str) -> str:
+    """Convert kebab-case or snake_case action to PascalCase."""
+    if "-" in action:
+        parts = action.split("-")
+        return "".join(part.capitalize() for part in parts)
+    elif "_" in action:
+        parts = action.split("_")
+        return "".join(part.capitalize() for part in parts)
+    return action
+
+
+def get_service_valid_operations(service: str, all_operations: list) -> set:
+    """Get operations that match read-only prefixes."""
+    valid_ops = set()
+    for op in all_operations:
+        if is_readonly_operation(op):
+            valid_ops.add(op)
+    return valid_ops

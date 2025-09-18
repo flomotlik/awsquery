@@ -14,7 +14,7 @@ from awsquery.filters import (
     parse_multi_level_filters_for_mode,
 )
 from awsquery.formatters import flatten_response, format_json_output, format_table_output
-from awsquery.security import load_security_policy, validate_security
+from awsquery.security import validate_readonly
 from awsquery.utils import debug_print, normalize_action_name
 
 
@@ -863,7 +863,7 @@ class TestModuleInteractions:
     """Test interactions between core, filters, formatters, security, and utils modules."""
 
     @patch("awsquery.core.execute_aws_call")
-    @patch("awsquery.security.validate_security")
+    @patch("awsquery.security.validate_readonly")
     @patch("awsquery.core.get_correct_parameter_name")
     def test_core_and_security_integration(self, mock_get_param, mock_validate, mock_execute):
         """Test integration between core execution and security validation."""

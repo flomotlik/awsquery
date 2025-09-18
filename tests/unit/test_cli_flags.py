@@ -18,14 +18,10 @@ class TestCLIFlagHandling:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_debug_flag_positions(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    @patch("awsquery.cli.validate_readonly")
+    def test_debug_flag_positions(self, mock_validate, mock_execute, mock_session):
         """Test -d flag works in various positions."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": []}]
         mock_session.return_value = Mock()
 
@@ -57,12 +53,10 @@ class TestCLIFlagHandling:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_json_flag_positions(self, mock_validate, mock_load_policy, mock_execute, mock_session):
+    @patch("awsquery.cli.validate_readonly")
+    def test_json_flag_positions(self, mock_validate, mock_execute, mock_session):
         """Test -j flag works in various positions."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
         mock_session.return_value = Mock()
 
@@ -92,12 +86,10 @@ class TestCLIFlagHandling:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_keys_flag_positions(self, mock_validate, mock_load_policy, mock_execute, mock_session):
+    @patch("awsquery.cli.validate_readonly")
+    def test_keys_flag_positions(self, mock_validate, mock_execute, mock_session):
         """Test -k flag works in various positions."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_session.return_value = Mock()
 
         test_cases = [
@@ -129,14 +121,10 @@ class TestCLIFlagHandling:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_region_profile_flags(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    @patch("awsquery.cli.validate_readonly")
+    def test_region_profile_flags(self, mock_validate, mock_execute, mock_session):
         """Test --region and --profile flags in various positions."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": []}]
         mock_session.return_value = Mock()
 
@@ -189,14 +177,10 @@ class TestCLIFlagHandling:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_multiple_flags_after_separator(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    @patch("awsquery.cli.validate_readonly")
+    def test_multiple_flags_after_separator(self, mock_validate, mock_execute, mock_session):
         """Test multiple flags work when placed after -- separator."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
         mock_session.return_value = Mock()
 
@@ -240,14 +224,10 @@ class TestCLIFlagHandling:
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
-    def test_flags_with_value_and_column_filters(
-        self, mock_validate, mock_load_policy, mock_execute, mock_session
-    ):
+    @patch("awsquery.cli.validate_readonly")
+    def test_flags_with_value_and_column_filters(self, mock_validate, mock_execute, mock_session):
         """Test flags work correctly with both value and column filters."""
         mock_validate.return_value = True
-        mock_load_policy.return_value = set()
         mock_execute.return_value = [
             {"Instances": [{"InstanceId": "i-123", "State": {"Name": "running"}}]}
         ]

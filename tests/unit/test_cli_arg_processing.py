@@ -319,11 +319,10 @@ class TestServiceCompleter:
 class TestActionCompleter:
     """Test action_completer function."""
 
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
+    @patch("awsquery.cli.validate_readonly")
     @patch("botocore.session.Session")
     @patch.dict("os.environ", {}, clear=True)
-    def test_action_completer_returns_actions(self, mock_session_class, mock_validate, mock_policy):
+    def test_action_completer_returns_actions(self, mock_session_class, mock_validate):
         """Test action completer returns available actions."""
         mock_session = MagicMock()
         mock_session.get_available_services.return_value = ["ec2"]
@@ -332,14 +331,13 @@ class TestActionCompleter:
         mock_session.get_service_model.return_value = mock_service_model
         mock_session_class.return_value = mock_session
 
-        mock_policy.return_value = {"ec2:DescribeInstances"}
         mock_validate.return_value = True
 
         parsed_args = argparse.Namespace(service="ec2")
         result = action_completer("", parsed_args)
 
         assert "describe-instances" in result
-        assert "run-instances" in result
+        assert "run-instances" not in result  # Unsafe operation is filtered out
 
     def test_action_completer_no_service(self):
         """Test action completer with no service."""
@@ -347,11 +345,10 @@ class TestActionCompleter:
         result = action_completer("", parsed_args)
         assert result == []
 
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
+    @patch("awsquery.cli.validate_readonly")
     @patch("botocore.session.Session")
     @patch.dict("os.environ", {}, clear=True)
-    def test_action_completer_with_prefix(self, mock_session_class, mock_validate, mock_policy):
+    def test_action_completer_with_prefix(self, mock_session_class, mock_validate):
         """Test action completer with prefix filtering."""
         mock_session = MagicMock()
         mock_session.get_available_services.return_value = ["ec2"]
@@ -360,7 +357,6 @@ class TestActionCompleter:
         mock_session.get_service_model.return_value = mock_service_model
         mock_session_class.return_value = mock_session
 
-        mock_policy.return_value = set()
         mock_validate.return_value = True
 
         parsed_args = argparse.Namespace(service="ec2")
@@ -374,6 +370,7 @@ class TestActionCompleter:
     @patch.dict("os.environ", {}, clear=True)
     def test_action_completer_exception(self, mock_session_class):
         """Test action completer handles exceptions."""
+
         mock_session_class.side_effect = Exception("Botocore error")
 
         parsed_args = argparse.Namespace(service="ec2")
@@ -384,6 +381,7 @@ class TestActionCompleter:
     @patch.dict("os.environ", {}, clear=True)
     def test_action_completer_service_not_available(self, mock_session_class):
         """Test action completer with unavailable service."""
+
         mock_session = MagicMock()
         mock_session.get_available_services.return_value = ["s3"]  # ec2 not available
         mock_session_class.return_value = mock_session
@@ -392,14 +390,11 @@ class TestActionCompleter:
         result = action_completer("", parsed_args)
         assert result == []
 
-    @patch("awsquery.cli.load_security_policy")
-    @patch("awsquery.cli.validate_security")
+    @patch("awsquery.cli.validate_readonly")
     @patch("botocore.session.Session")
     @patch.dict("os.environ", {}, clear=True)
-    def test_action_completer_security_policy_failure(
-        self, mock_session_class, mock_validate, mock_policy
-    ):
-        """Test action completer when security policy loading fails."""
+    def test_action_completer_security_policy_failure(self, mock_session_class, mock_validate):
+        """Test action completer when validation fails."""
         mock_session = MagicMock()
         mock_session.get_available_services.return_value = ["ec2"]
         mock_service_model = MagicMock()
@@ -407,8 +402,6 @@ class TestActionCompleter:
         mock_session.get_service_model.return_value = mock_service_model
         mock_session_class.return_value = mock_session
 
-        # Policy loading fails
-        mock_policy.side_effect = Exception("Policy error")
         mock_validate.return_value = True
 
         parsed_args = argparse.Namespace(service="ec2")

@@ -369,16 +369,14 @@ class TestKeysModeBehavior:
 
     @patch("awsquery.cli.execute_with_tracking")
     @patch("awsquery.cli.execute_multi_level_call_with_tracking")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.create_session")
     def test_keys_mode_successful_initial_call(
-        self, mock_create_session, mock_services, mock_policy, mock_multi_level, mock_tracking
+        self, mock_create_session, mock_services, mock_multi_level, mock_tracking
     ):
         """Test keys mode when initial call succeeds."""
         # Setup mocks
         mock_services.return_value = ["ec2"]
-        mock_policy.return_value = {"ec2:DescribeInstances"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
 
@@ -411,16 +409,14 @@ class TestKeysModeBehavior:
 
     @patch("awsquery.cli.execute_with_tracking")
     @patch("awsquery.cli.execute_multi_level_call_with_tracking")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.create_session")
     def test_keys_mode_fallback_to_multi_level(
-        self, mock_create_session, mock_services, mock_policy, mock_multi_level, mock_tracking
+        self, mock_create_session, mock_services, mock_multi_level, mock_tracking
     ):
         """Test keys mode falls back to multi-level when initial call fails."""
         # Setup mocks
         mock_services.return_value = ["eks"]
-        mock_policy.return_value = {"eks:DescribeCluster"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
 

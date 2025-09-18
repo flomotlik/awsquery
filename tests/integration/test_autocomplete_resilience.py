@@ -229,6 +229,7 @@ class TestAutocompleteWithoutCredentials:
 
     def test_autocomplete_filters_by_security_policy(self):
         """Test that autocomplete respects security policy filtering."""
+
         with patch("awsquery.security.load_security_policy") as mock_load_security, patch(
             "botocore.session.Session"
         ) as mock_session_class:

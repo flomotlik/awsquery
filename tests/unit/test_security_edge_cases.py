@@ -1,4 +1,4 @@
-"""Edge case tests for security policy validation."""
+"""Edge case tests for security validation."""
 
 import json
 import tempfile
@@ -6,185 +6,209 @@ from unittest.mock import mock_open, patch
 
 import pytest
 
-from awsquery.security import load_security_policy, validate_security
+from awsquery.security import is_readonly_operation, validate_readonly
 
 
-class TestLoadSecurityPolicyEdgeCases:
-    """Test load_security_policy with edge cases."""
+class TestReadOnlyEdgeCases:
+    """Test edge cases for read-only operation detection."""
 
-    @patch("builtins.open", new_callable=mock_open, read_data="{}")
-    def test_empty_policy_file(self, mock_file):
-        """Test loading empty policy file."""
-        allowed = load_security_policy()
-        assert allowed == set()
+    def test_empty_operation(self):
+        """Test with empty operation string."""
+        assert not is_readonly_operation("")
 
-    @patch("builtins.open", new_callable=mock_open, read_data='{"Statement": []}')
-    def test_empty_statements(self, mock_file):
-        """Test policy with empty statements list."""
-        allowed = load_security_policy()
-        assert allowed == set()
+    def test_none_operation(self):
+        """Test with None operation."""
+        with pytest.raises((TypeError, AttributeError)):
+            is_readonly_operation(None)
 
-    @patch("builtins.open", new_callable=mock_open)
-    def test_policy_with_deny_only(self, mock_file):
-        """Test policy with only Deny statements."""
-        policy = {"Statement": [{"Effect": "Deny", "Action": ["s3:*", "ec2:*"]}]}
-        mock_file.return_value.read.return_value = json.dumps(policy)
+    def test_mixed_case_operations(self):
+        """Test operations with mixed case."""
+        # PascalCase should work
+        assert is_readonly_operation("DescribeInstances")
+        assert is_readonly_operation("ListBuckets")
+        assert is_readonly_operation("GetObject")
 
-        allowed = load_security_policy()
-        assert allowed == set()
+        # kebab-case should work
+        assert is_readonly_operation("describe-instances")
+        assert is_readonly_operation("list-buckets")
+        assert is_readonly_operation("get-object")
 
-    @patch("builtins.open", new_callable=mock_open)
-    def test_policy_with_single_action_string(self, mock_file):
-        """Test policy with Action as string instead of list."""
-        policy = {"Statement": [{"Effect": "Allow", "Action": "ec2:DescribeInstances"}]}
-        mock_file.return_value.read.return_value = json.dumps(policy)
+        # camelCase might not work (starts with lowercase)
+        assert not is_readonly_operation("describeInstances")
 
-        allowed = load_security_policy()
-        assert "ec2:DescribeInstances" in allowed
+    def test_operations_with_numbers(self):
+        """Test operations containing numbers."""
+        assert is_readonly_operation("GetObjectV2")
+        assert is_readonly_operation("describe-instances-v2")
+        assert not is_readonly_operation("v2-describe-instances")
 
-    @patch("builtins.open", new_callable=mock_open)
-    def test_policy_version_structure(self, mock_file):
-        """Test policy with PolicyVersion structure."""
-        policy = {
-            "PolicyVersion": {
-                "Document": {
-                    "Statement": [{"Effect": "Allow", "Action": ["s3:ListBuckets", "s3:GetObject"]}]
-                }
-            }
-        }
-        mock_file.return_value.read.return_value = json.dumps(policy)
+    def test_operations_with_special_chars(self):
+        """Test operations with special characters."""
+        assert is_readonly_operation("Get-Object")
+        assert is_readonly_operation("Get_Object")
+        assert is_readonly_operation("Get.Object")
 
-        allowed = load_security_policy()
-        assert "s3:ListBuckets" in allowed
-        assert "s3:GetObject" in allowed
+    def test_very_long_operation_names(self):
+        """Test with very long operation names."""
+        long_op = "Describe" + "A" * 100 + "Resource"
+        assert is_readonly_operation(long_op)
 
-    @patch("builtins.open", new_callable=mock_open)
-    def test_policy_missing_effect(self, mock_file):
-        """Test policy statement missing Effect field."""
-        policy = {"Statement": [{"Action": ["ec2:DescribeInstances"]}]}
-        mock_file.return_value.read.return_value = json.dumps(policy)
-
-        allowed = load_security_policy()
-        # Should not add actions without explicit Allow
-        assert "ec2:DescribeInstances" not in allowed
-
-    @patch("builtins.open", new_callable=mock_open)
-    def test_policy_missing_action(self, mock_file):
-        """Test policy statement missing Action field."""
-        policy = {"Statement": [{"Effect": "Allow"}]}
-        mock_file.return_value.read.return_value = json.dumps(policy)
-
-        allowed = load_security_policy()
-        assert allowed == set()
-
-    @patch("builtins.open", new_callable=mock_open)
-    def test_policy_with_wildcards(self, mock_file):
-        """Test policy with wildcard actions."""
-        policy = {
-            "Statement": [{"Effect": "Allow", "Action": ["ec2:Describe*", "s3:Get*", "iam:List*"]}]
-        }
-        mock_file.return_value.read.return_value = json.dumps(policy)
-
-        allowed = load_security_policy()
-        assert "ec2:Describe*" in allowed
-        assert "s3:Get*" in allowed
-        assert "iam:List*" in allowed
-
-    @patch("builtins.open", new_callable=mock_open)
-    def test_policy_mixed_allow_deny(self, mock_file):
-        """Test policy with mixed Allow and Deny statements."""
-        policy = {
-            "Statement": [
-                {"Effect": "Allow", "Action": ["ec2:DescribeInstances", "ec2:DescribeVolumes"]},
-                {"Effect": "Deny", "Action": ["ec2:TerminateInstances"]},
-                {"Effect": "Allow", "Action": ["s3:ListBuckets"]},
-            ]
-        }
-        mock_file.return_value.read.return_value = json.dumps(policy)
-
-        allowed = load_security_policy()
-        assert "ec2:DescribeInstances" in allowed
-        assert "ec2:DescribeVolumes" in allowed
-        assert "s3:ListBuckets" in allowed
-        assert "ec2:TerminateInstances" not in allowed
+        long_unsafe_op = "Create" + "A" * 100 + "Resource"
+        assert not is_readonly_operation(long_unsafe_op)
 
 
-class TestValidateSecurityEdgeCases:
-    """Test validate_security with edge cases."""
+class TestValidateReadonlyEdgeCases:
+    """Test edge cases for validate_readonly function."""
 
-    def test_empty_allowed_actions(self):
-        """Test validation with empty allowed actions."""
-        # Empty allowed actions should allow by default
-        assert validate_security("ec2", "DescribeInstances", set())
-        assert validate_security("s3", "ListBuckets", set())
+    def test_with_allow_unsafe_flag(self):
+        """Test that allow_unsafe bypasses all checks."""
+        # Should allow everything
+        assert validate_readonly("ec2", "terminate-instances", allow_unsafe=True)
+        assert validate_readonly("s3", "delete-bucket", allow_unsafe=True)
+        assert validate_readonly("iam", "delete-user", allow_unsafe=True)
+        assert validate_readonly("", "", allow_unsafe=True)
 
-    def test_none_allowed_actions(self):
-        """Test validation with None allowed actions."""
-        assert validate_security("ec2", "DescribeInstances", None)
+    @patch("awsquery.security.prompt_unsafe_operation")
+    def test_prompt_called_for_unsafe(self, mock_prompt):
+        """Test that prompt is called for unsafe operations."""
+        mock_prompt.return_value = True
 
-    def test_exact_match(self):
-        """Test exact action matching."""
-        allowed = {"ec2:DescribeInstances", "s3:ListBuckets"}
+        result = validate_readonly("ec2", "terminate-instances", allow_unsafe=False)
+        assert result is True
+        mock_prompt.assert_called_once_with("ec2", "terminate-instances")
 
-        assert validate_security("ec2", "DescribeInstances", allowed)
-        assert validate_security("s3", "ListBuckets", allowed)
-        assert not validate_security("ec2", "TerminateInstances", allowed)
-
-    def test_wildcard_service_match(self):
-        """Test wildcard service matching."""
-        allowed = {"*:DescribeInstances", "ec2:*"}
-
-        assert validate_security("ec2", "DescribeInstances", allowed)
-        assert validate_security("ec2", "TerminateInstances", allowed)
-        assert validate_security("rds", "DescribeInstances", allowed)
-
-    def test_wildcard_action_match(self):
-        """Test wildcard action matching."""
-        allowed = {"ec2:Describe*", "s3:Get*"}
-
-        assert validate_security("ec2", "DescribeInstances", allowed)
-        assert validate_security("ec2", "DescribeVolumes", allowed)
-        assert validate_security("s3", "GetObject", allowed)
-        assert not validate_security("ec2", "TerminateInstances", allowed)
-
-    def test_full_wildcard(self):
-        """Test full wildcard matching."""
-        allowed = {"*:*", "*"}
-
-        assert validate_security("ec2", "DescribeInstances", allowed)
-        assert validate_security("s3", "DeleteBucket", allowed)
-        assert validate_security("iam", "CreateUser", allowed)
-
-    def test_case_sensitivity(self):
-        """Test case sensitivity in matching."""
-        allowed = {"ec2:DescribeInstances"}
-
-        # Should handle matching case
-        assert validate_security("ec2", "DescribeInstances", allowed)
-        # May be case sensitive for service name
-        # assert validate_security("EC2", "DescribeInstances", allowed)
-
-    def test_special_characters_in_action(self):
-        """Test actions with special characters."""
-        allowed = {"service:Action-With-Dashes", "service:Action_With_Underscores"}
-
-        assert validate_security("service", "Action-With-Dashes", allowed)
-        assert validate_security("service", "Action_With_Underscores", allowed)
+    @patch("awsquery.security.prompt_unsafe_operation")
+    def test_prompt_not_called_for_safe(self, mock_prompt):
+        """Test that prompt is not called for safe operations."""
+        result = validate_readonly("ec2", "describe-instances", allow_unsafe=False)
+        assert result is True
+        mock_prompt.assert_not_called()
 
     def test_empty_service_or_action(self):
-        """Test with empty service or action."""
-        allowed = {"ec2:DescribeInstances"}
+        """Test with empty service or action strings."""
+        # Empty strings should be considered unsafe
+        assert not is_readonly_operation("")
 
-        assert not validate_security("", "DescribeInstances", allowed)
-        assert not validate_security("ec2", "", allowed)
-        assert not validate_security("", "", allowed)
+        # With allow_unsafe, should still work
+        assert validate_readonly("", "", allow_unsafe=True)
 
-    def test_complex_wildcard_patterns(self):
-        """Test complex wildcard patterns."""
-        allowed = {"ec2:Describe*Instances", "s3:*Bucket*", "*:List*"}
+    def test_whitespace_in_names(self):
+        """Test with whitespace in service/action names."""
+        assert not is_readonly_operation("  describe-instances  ")
+        assert not is_readonly_operation("describe instances")
+        assert not is_readonly_operation("describe\tinstances")
 
-        assert validate_security("ec2", "DescribeInstances", allowed)
-        assert validate_security("ec2", "DescribeSpotFleetInstances", allowed)
-        assert validate_security("s3", "ListBuckets", allowed)
-        assert validate_security("s3", "CreateBucketPolicy", allowed)
-        assert validate_security("iam", "ListUsers", allowed)
+    @patch("builtins.input")
+    def test_interactive_prompt_loop(self, mock_input):
+        """Test interactive prompt with invalid responses."""
+        # Mock the actual input function to return invalid then valid
+        mock_input.side_effect = ["maybe", "perhaps", "yes"]
+
+        # Call prompt directly
+        from awsquery.security import prompt_unsafe_operation
+
+        result = prompt_unsafe_operation("ec2", "terminate-instances")
+        assert result is True
+        assert mock_input.call_count == 3
+
+    def test_batch_operations(self):
+        """Test batch operations are detected as readonly."""
+        batch_ops = [
+            "BatchGet",
+            "BatchDescribe",
+            "batch-get",
+            "batch-describe",
+            "BatchGetItem",
+            "batch-get-item",
+        ]
+
+        for op in batch_ops:
+            assert is_readonly_operation(op), f"{op} should be readonly"
+
+    def test_scan_and_query_operations(self):
+        """Test scan and query operations are detected as readonly."""
+        # Note: lowercase operations won't match as they don't follow AWS naming
+        ops = ["Scan", "Query", "ScanTable", "QueryIndex", "scan-table", "query-index"]
+
+        for op in ops:
+            assert is_readonly_operation(op), f"{op} should be readonly"
+
+
+class TestCompatibility:
+    """Test compatibility functions."""
+
+    def test_validate_security_legacy(self):
+        """Test legacy validate_security always returns True."""
+        from awsquery.security import validate_security
+
+        # Should always return True regardless of inputs
+        assert validate_security("ec2", "DescribeInstances", set())
+        assert validate_security("ec2", "TerminateInstances", set())
+        assert validate_security("s3", "DeleteBucket", {"s3:ListBuckets"})
+        assert validate_security("", "", None)
+
+    def test_action_to_policy_format(self):
+        """Test action format conversion."""
+        from awsquery.security import action_to_policy_format
+
+        assert action_to_policy_format("describe-instances") == "DescribeInstances"
+        assert action_to_policy_format("list-buckets") == "ListBuckets"
+        assert action_to_policy_format("get-object-acl") == "GetObjectAcl"
+        assert action_to_policy_format("DescribeInstances") == "DescribeInstances"
+
+
+class TestGetServiceValidOperations:
+    """Test get_service_valid_operations function."""
+
+    def test_filters_operations(self):
+        """Test that operations are filtered by readonly status."""
+        from awsquery.security import get_service_valid_operations
+
+        operations = [
+            "DescribeInstances",
+            "RunInstances",
+            "TerminateInstances",
+            "ListBuckets",
+            "CreateBucket",
+            "DeleteBucket",
+            "GetObject",
+            "PutObject",
+            "DeleteObject",
+        ]
+
+        valid = get_service_valid_operations("ec2", operations)
+
+        # Should include read operations
+        assert "DescribeInstances" in valid
+        assert "ListBuckets" in valid
+        assert "GetObject" in valid
+
+        # Should exclude write operations
+        assert "RunInstances" not in valid
+        assert "TerminateInstances" not in valid
+        assert "CreateBucket" not in valid
+        assert "DeleteBucket" not in valid
+        assert "PutObject" not in valid
+        assert "DeleteObject" not in valid
+
+    def test_handles_various_formats(self):
+        """Test that it handles various operation name formats."""
+        from awsquery.security import get_service_valid_operations
+
+        operations = [
+            "describe-instances",  # kebab-case
+            "DescribeVolumes",  # PascalCase
+            "list_buckets",  # snake_case (shouldn't match)
+            "get-object",  # kebab-case
+            "terminate-instances",  # unsafe kebab
+            "CreateStack",  # unsafe Pascal
+        ]
+
+        valid = get_service_valid_operations("ec2", operations)
+
+        assert "describe-instances" in valid
+        assert "DescribeVolumes" in valid
+        assert "get-object" in valid
+        assert "list_buckets" not in valid  # wrong format
+        assert "terminate-instances" not in valid
+        assert "CreateStack" not in valid

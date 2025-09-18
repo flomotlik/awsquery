@@ -508,13 +508,13 @@ def workflow_validator():
 
         return base_cmd, res_filters, val_filters, col_filters
 
-    def _validate_security_workflow(service, action, policy):
+    def _validate_readonly_workflow(service, action, policy):
         """Validate security workflow."""
-        from awsquery.security import validate_security
+        from awsquery.security import validate_readonly
         from awsquery.utils import normalize_action_name
 
         normalized = normalize_action_name(action)
-        assert validate_security(service, action.replace("-", "").title().replace(" ", ""), policy)
+        assert validate_readonly(service, action.replace("-", "").title().replace(" ", ""), policy)
         return normalized
 
     def _validate_formatting_workflow(response, filters, expected_content):
@@ -535,7 +535,7 @@ def workflow_validator():
         (),
         {
             "validate_parsing": _validate_parsing_workflow,
-            "validate_security": _validate_security_workflow,
+            "validate_readonly": _validate_readonly_workflow,
             "validate_formatting": _validate_formatting_workflow,
         },
     )()

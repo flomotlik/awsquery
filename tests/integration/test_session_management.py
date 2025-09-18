@@ -288,16 +288,12 @@ class TestCLISessionIntegration:
     """Integration tests for CLI session argument handling."""
 
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.create_session")
-    def test_cli_region_profile_integration(
-        self, mock_create_session, mock_services, mock_policy, mock_execute
-    ):
+    def test_cli_region_profile_integration(self, mock_create_session, mock_services, mock_execute):
         """Test full CLI integration with region and profile arguments."""
         # Setup mocks
         mock_services.return_value = ["ec2", "s3"]
-        mock_policy.return_value = {"ec2:DescribeInstances"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
         mock_execute.return_value = [{"Instances": []}]
@@ -335,15 +331,13 @@ class TestCLISessionIntegration:
             assert call_args[1]["session"] == mock_session
 
     @patch("awsquery.cli.execute_multi_level_call")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.create_session")
     def test_cli_multi_level_session_passing(
-        self, mock_create_session, mock_services, mock_policy, mock_multi_level
+        self, mock_create_session, mock_services, mock_multi_level
     ):
         """Test that CLI passes session to multi-level calls."""
         mock_services.return_value = ["eks"]
-        mock_policy.return_value = {"eks:DescribeCluster"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
 
@@ -475,17 +469,13 @@ class TestSessionWithKeysModeIntegration:
     """Integration tests for session management with keys mode."""
 
     @patch("awsquery.cli.execute_with_tracking")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.create_session")
-    def test_keys_mode_with_session(
-        self, mock_create_session, mock_services, mock_policy, mock_tracking
-    ):
+    def test_keys_mode_with_session(self, mock_create_session, mock_services, mock_tracking):
         """Test that keys mode works correctly with session arguments."""
         from awsquery.core import CallResult
 
         mock_services.return_value = ["ec2"]
-        mock_policy.return_value = {"ec2:DescribeInstances"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
 
