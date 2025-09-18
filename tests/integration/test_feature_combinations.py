@@ -13,15 +13,13 @@ class TestAllFeaturesIntegration:
     """Integration tests for all TodoPlan.md features working together."""
 
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.create_session")
     def test_region_profile_with_default_columns(
-        self, mock_create_session, mock_services, mock_policy, mock_execute
+        self, mock_create_session, mock_services, mock_execute
     ):
         """Test region/profile arguments work with default column filters."""
         mock_services.return_value = ["ec2"]
-        mock_policy.return_value = {"ec2:DescribeInstances"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
 
@@ -105,15 +103,13 @@ class TestAllFeaturesIntegration:
         assert len(resources[0]) > 0
 
     @patch("awsquery.cli.execute_with_tracking")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.create_session")
     def test_keys_mode_with_session_and_transformed_tags(
-        self, mock_create_session, mock_services, mock_policy, mock_tracking
+        self, mock_create_session, mock_services, mock_tracking
     ):
         """Test keys mode shows transformed tag keys with session arguments."""
         mock_services.return_value = ["cloudformation"]
-        mock_policy.return_value = {"cloudformation:DescribeStacks"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
 
@@ -182,15 +178,13 @@ class TestAllFeaturesIntegration:
         mock_show_keys.assert_called_once_with(successful_result)
 
     @patch("awsquery.cli.execute_multi_level_call")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.create_session")
     def test_multi_level_with_session_defaults_and_tag_transformation(
-        self, mock_create_session, mock_services, mock_policy, mock_multi_level
+        self, mock_create_session, mock_services, mock_multi_level
     ):
         """Test multi-level calls with session, default columns, and tag transformation."""
         mock_services.return_value = ["eks"]
-        mock_policy.return_value = {"eks:DescribeCluster"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
 
@@ -273,15 +267,13 @@ class TestAllFeaturesIntegration:
 
     @patch("awsquery.cli.execute_multi_level_call_with_tracking")
     @patch("awsquery.cli.execute_with_tracking")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.create_session")
     def test_keys_mode_fallback_preserves_all_features(
-        self, mock_create_session, mock_services, mock_policy, mock_tracking, mock_multi_level
+        self, mock_create_session, mock_services, mock_tracking, mock_multi_level
     ):
         """Test that keys mode fallback preserves session and shows correct keys."""
         mock_services.return_value = ["rds"]
-        mock_policy.return_value = {"rds:DescribeDbInstances"}  # PascalCase version
         mock_session = Mock()
         mock_create_session.return_value = mock_session
 
@@ -475,16 +467,12 @@ class TestErrorHandlingAcrossFeatures:
     """Test error handling when multiple features are used together."""
 
     @patch("awsquery.cli.create_session")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
-    def test_session_error_with_other_features(
-        self, mock_services, mock_policy, mock_create_session
-    ):
+    def test_session_error_with_other_features(self, mock_services, mock_create_session):
         """Test that session creation errors don't interfere with other features."""
         from botocore.exceptions import ProfileNotFound
 
         mock_services.return_value = ["ec2"]
-        mock_policy.return_value = {"ec2:DescribeInstances"}
         mock_create_session.side_effect = ProfileNotFound(profile="invalid-profile")
 
         test_args = [
@@ -649,12 +637,10 @@ class TestRegressionPrevention:
         assert result == user_cols
 
     @patch("awsquery.cli.execute_aws_call")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
-    def test_simple_commands_still_work(self, mock_services, mock_policy, mock_execute):
+    def test_simple_commands_still_work(self, mock_services, mock_execute):
         """Test that simple commands work exactly as before."""
         mock_services.return_value = ["s3"]
-        mock_policy.return_value = {"s3:ListBuckets"}
         mock_execute.return_value = [
             {"Buckets": [{"Name": "test-bucket", "CreationDate": "2023-01-01T00:00:00Z"}]}
         ]

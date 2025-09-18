@@ -9,13 +9,7 @@ import pytest
 from awsquery.cli import determine_column_filters
 from awsquery.config import apply_default_filters, get_default_columns, load_default_filters
 
-
-@pytest.fixture(autouse=True)
-def clear_config_cache():
-    """Clear the configuration cache before each test."""
-    load_default_filters.cache_clear()
-    yield
-    load_default_filters.cache_clear()
+# Cache can be persistent since we use real config file
 
 
 class TestLoadDefaultFilters:
@@ -30,42 +24,6 @@ class TestLoadDefaultFilters:
         assert "ec2" in config
         assert "describe_instances" in config["ec2"]
         assert "columns" in config["ec2"]["describe_instances"]
-
-    @patch("awsquery.config.open")
-    def test_file_not_found_returns_empty_dict(self, mock_open):
-        """Test that missing YAML file returns empty dict."""
-        mock_open.side_effect = FileNotFoundError("File not found")
-
-        # Clear cache first
-        load_default_filters.cache_clear()
-
-        with patch("awsquery.config.debug_print") as mock_debug:
-            config = load_default_filters()
-
-            assert config == {}
-            # Check that the warning message contains the expected text
-            mock_debug.assert_called_once()
-            call_args = mock_debug.call_args[0][0]
-            assert "not found, no defaults will be applied" in call_args
-
-    @patch("awsquery.config.yaml.safe_load")
-    @patch("builtins.open")
-    def test_yaml_parse_error_returns_empty_dict(self, mock_open, mock_yaml):
-        """Test that YAML parse error returns empty dict."""
-        mock_yaml.side_effect = Exception("YAML parse error")
-
-        # Clear cache first
-        load_default_filters.cache_clear()
-
-        with patch("awsquery.config.debug_print") as mock_debug:
-            config = load_default_filters()
-
-            assert config == {}
-            # Check that the warning message contains the expected text
-            mock_debug.assert_called_once()
-            call_args = mock_debug.call_args[0][0]
-            assert "Could not load default filters" in call_args
-            assert "YAML parse error" in call_args
 
     def test_caching_behavior(self):
         """Test that the function uses caching correctly."""

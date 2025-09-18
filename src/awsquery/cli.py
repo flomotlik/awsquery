@@ -24,8 +24,17 @@ from .formatters import (
     format_table_output,
     show_keys,
 )
-from .security import action_to_policy_format, load_security_policy, validate_security
+from .security import (
+    action_to_policy_format,
+    get_service_valid_operations,
+    is_readonly_operation,
+    validate_readonly,
+)
 from .utils import create_session, debug_print, get_aws_services, sanitize_input
+
+# CLI flag constants
+SIMPLE_FLAGS = ["-d", "--debug", "-j", "--json", "-k", "--keys", "--allow-unsafe"]
+VALUE_FLAGS = ["--region", "--profile"]
 
 
 def _extract_flags_from_args(remaining_args):
@@ -35,9 +44,9 @@ def _extract_flags_from_args(remaining_args):
     i = 0
     while i < len(remaining_args):
         arg = remaining_args[i]
-        if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
+        if arg in SIMPLE_FLAGS:
             flags.append(arg)
-        elif arg in ["--region", "--profile"]:
+        elif arg in VALUE_FLAGS:
             flags.append(arg)
             # Check for value after the flag
             if i + 1 < len(remaining_args):
@@ -60,6 +69,8 @@ def _preserve_parsed_flags(args):
         flags.append("-j")
     if getattr(args, "keys", False):
         flags.append("-k")
+    if getattr(args, "allow_unsafe", False):
+        flags.append("--allow-unsafe")
     if getattr(args, "region", None):
         flags.extend(["--region", args.region])
     if getattr(args, "profile", None):
@@ -96,7 +107,7 @@ def _extract_flag_and_value(args, i):
     """Extract a flag and optionally its value from args list."""
     flags = []
     flags.append(args[i])
-    if args[i] in ["--region", "--profile"]:
+    if args[i] in VALUE_FLAGS:
         if i + 1 < len(args) and not args[i + 1].startswith("-") and args[i + 1] != "--":
             flags.append(args[i + 1])
             return flags, 2  # consumed 2 args
@@ -110,10 +121,10 @@ def _process_remaining_args_after_separator(remaining):
     i = 0
     while i < len(remaining):
         arg = remaining[i]
-        if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
+        if arg in SIMPLE_FLAGS:
             flags.append(arg)
             i += 1
-        elif arg in ["--region", "--profile"]:
+        elif arg in VALUE_FLAGS:
             extracted, consumed = _extract_flag_and_value(remaining, i)
             flags.extend(extracted)
             i += consumed
@@ -130,10 +141,10 @@ def _process_remaining_args(remaining):
     i = 0
     while i < len(remaining):
         arg = remaining[i]
-        if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
+        if arg in SIMPLE_FLAGS:
             flags.append(arg)
             i += 1
-        elif arg in ["--region", "--profile"]:
+        elif arg in VALUE_FLAGS:
             extracted, consumed = _extract_flag_and_value(remaining, i)
             flags.extend(extracted)
             i += consumed
@@ -154,10 +165,10 @@ def _build_filter_argv(args, remaining):
     i = 0
     while i < len(remaining):
         arg = remaining[i]
-        if arg in ["-d", "--debug", "-j", "--json", "-k", "--keys"]:
+        if arg in SIMPLE_FLAGS:
             i += 1
             continue
-        if arg in ["--region", "--profile"]:
+        if arg in VALUE_FLAGS:
             i += 1
             if i < len(remaining) and not remaining[i].startswith("-"):
                 i += 1
@@ -195,6 +206,8 @@ def action_completer(prefix, parsed_args, **kwargs):
     if not parsed_args.service:
         return []
 
+    service = parsed_args.service
+
     try:
         # Create a client with minimal configuration to get operation names
         # This doesn't require valid AWS credentials, just the service model
@@ -206,36 +219,29 @@ def action_completer(prefix, parsed_args, **kwargs):
             session = botocore.session.Session()
 
             # Check if service exists in botocore's data
-            if parsed_args.service not in session.get_available_services():
+            if service not in session.get_available_services():
                 return []
 
             # Load the service model to get operations
-            service_model = session.get_service_model(parsed_args.service)
+            service_model = session.get_service_model(service)
             operations = list(service_model.operation_names)
         finally:
             # Restore AWS_PROFILE if it existed
             if old_profile is not None:
                 os.environ["AWS_PROFILE"] = old_profile
 
-        try:
-            allowed_actions = load_security_policy()
-        except:
-            # If policy loading fails, allow common read operations
-            allowed_actions = set()
-            for op in operations:
-                if any(op.startswith(prefix) for prefix in ["Describe", "List", "Get"]):
-                    allowed_actions.add(f"{parsed_args.service}:{op}")
+        # Filter operations to only show read-only ones in autocomplete
+        valid_operations = get_service_valid_operations(service, operations)
 
+        # Convert to CLI format
         cli_operations = []
         for op in operations:
-            if not validate_security(parsed_args.service, op, allowed_actions):
-                continue
-
-            kebab_case = re.sub("([a-z0-9])([A-Z])", r"\1-\2", op).lower()
-            cli_operations.append(kebab_case)
+            if op in valid_operations:
+                kebab_case = re.sub("([a-z0-9])([A-Z])", r"\1-\2", op).lower()
+                cli_operations.append(kebab_case)
 
         matched_ops = [op for op in cli_operations if op.startswith(prefix)]
-        return sorted(list(set(matched_ops)))
+        return sorted(matched_ops)
     except Exception:
         # If we can't get operations, return empty
         return []
@@ -277,6 +283,11 @@ Examples:
     )  # pragma: no mutate
     parser.add_argument("--region", help="AWS region to use for requests")  # pragma: no mutate
     parser.add_argument("--profile", help="AWS profile to use for requests")  # pragma: no mutate
+    parser.add_argument(
+        "--allow-unsafe",
+        action="store_true",
+        help="Allow potentially unsafe (non-readonly) operations without prompting",
+    )  # pragma: no mutate
 
     service_arg = parser.add_argument(
         "service", nargs="?", help="AWS service name"
@@ -315,6 +326,8 @@ Examples:
             flags.append("-j")
         if getattr(args, "keys", False):
             flags.append("-k")
+        if getattr(args, "allow_unsafe", False):
+            flags.append("--allow-unsafe")
         if getattr(args, "region", None):
             flags.extend(["--region", args.region])
         if getattr(args, "profile", None):
@@ -373,23 +386,17 @@ Examples:
     value_filters = [sanitize_input(f) for f in value_filters] if value_filters else []
     column_filters = [sanitize_input(f) for f in column_filters] if column_filters else []
 
-    allowed_actions = load_security_policy()
-
-    policy_action = action_to_policy_format(action)
-
-    debug_print(
-        f"DEBUG: Checking security for service='{service}', "
-        f"action='{action}', policy_action='{policy_action}'"
-    )  # pragma: no mutate
-    debug_print(f"DEBUG: Policy has {len(allowed_actions)} allowed actions")  # pragma: no mutate
-
-    if not validate_security(service, policy_action, allowed_actions):
-        print(f"ERROR: Action {service}:{action} not permitted by security policy", file=sys.stderr)
+    # Validate operation safety (only if we have a non-empty action)
+    if (
+        action is not None
+        and action
+        and str(action).strip() != "None"
+        and not validate_readonly(service, action, allow_unsafe=args.allow_unsafe)
+    ):
+        print(f"ERROR: Operation {service}:{action} was not allowed", file=sys.stderr)
         sys.exit(1)
-    else:
-        debug_print(
-            f"DEBUG: Action {service}:{policy_action} IS ALLOWED by security policy"
-        )  # pragma: no mutate
+
+    debug_print(f"DEBUG: Operation {service}:{action} validated successfully")  # pragma: no mutate
 
     # Create session with region/profile if specified
     session = create_session(region=args.region, profile=args.profile)

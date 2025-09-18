@@ -86,15 +86,13 @@ class TestCLIArgumentParsing:
 
     @patch("awsquery.cli.execute_aws_call")
     @patch("awsquery.cli.create_session")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.format_table_output")
     def test_region_argument_passed_to_session(
-        self, mock_format, mock_services, mock_policy, mock_create_session, mock_execute
+        self, mock_format, mock_services, mock_create_session, mock_execute
     ):
         """Test that --region argument is passed to session creation."""
         mock_services.return_value = ["ec2", "s3"]
-        mock_policy.return_value = {"ec2:DescribeInstances"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
         mock_execute.return_value = [{"Reservations": [{"Instances": []}]}]
@@ -112,15 +110,13 @@ class TestCLIArgumentParsing:
 
     @patch("awsquery.cli.execute_aws_call")
     @patch("awsquery.cli.create_session")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.format_table_output")
     def test_profile_argument_passed_to_session(
-        self, mock_format, mock_services, mock_policy, mock_create_session, mock_execute
+        self, mock_format, mock_services, mock_create_session, mock_execute
     ):
         """Test that --profile argument is passed to session creation."""
         mock_services.return_value = ["ec2", "s3"]
-        mock_policy.return_value = {"ec2:DescribeInstances"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
         mock_execute.return_value = [{"Reservations": [{"Instances": []}]}]
@@ -138,15 +134,13 @@ class TestCLIArgumentParsing:
 
     @patch("awsquery.cli.execute_aws_call")
     @patch("awsquery.cli.create_session")
-    @patch("awsquery.cli.load_security_policy")
     @patch("awsquery.cli.get_aws_services")
     @patch("awsquery.cli.format_table_output")
     def test_both_region_and_profile_arguments(
-        self, mock_format, mock_services, mock_policy, mock_create_session, mock_execute
+        self, mock_format, mock_services, mock_create_session, mock_execute
     ):
         """Test that both --region and --profile are passed correctly."""
         mock_services.return_value = ["ec2", "s3"]
-        mock_policy.return_value = {"ec2:DescribeInstances"}
         mock_session = Mock()
         mock_create_session.return_value = mock_session
         mock_execute.return_value = [{"Reservations": [{"Instances": []}]}]
@@ -269,14 +263,11 @@ class TestSessionErrorHandling:
         """Test that session creation errors are properly propagated."""
         mock_create_session.side_effect = Exception("Session creation failed")
 
-        with patch("awsquery.cli.load_security_policy") as mock_policy:
-            mock_policy.return_value = {"ec2:DescribeInstances"}
+        test_args = ["awsquery", "--region", "invalid", "ec2", "describe-instances"]
 
-            test_args = ["awsquery", "--region", "invalid", "ec2", "describe-instances"]
-
-            with patch.object(sys, "argv", test_args):
-                with pytest.raises(Exception, match="Session creation failed"):
-                    main()
+        with patch.object(sys, "argv", test_args):
+            with pytest.raises(Exception, match="Session creation failed"):
+                main()
 
 
 class TestSessionDebugOutput:

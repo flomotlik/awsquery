@@ -16,7 +16,7 @@ from awsquery.cli import action_completer, main, service_completer
 from awsquery.core import execute_aws_call, execute_multi_level_call
 from awsquery.filters import parse_multi_level_filters_for_mode
 from awsquery.formatters import format_json_output, format_table_output, show_keys
-from awsquery.security import action_to_policy_format, load_security_policy, validate_security
+from awsquery.security import action_to_policy_format, validate_readonly
 from awsquery.utils import normalize_action_name
 
 
@@ -34,7 +34,7 @@ class TestEndToEndScenarios:
         assert val_filters == []
         assert col_filters == ["InstanceId", "State"]
 
-        assert validate_security("ec2", "DescribeInstances", mock_security_policy)
+        assert validate_readonly("ec2", "DescribeInstances", mock_security_policy)
 
         normalized = normalize_action_name("describe-instances")
         assert normalized == "describe_instances"
@@ -55,7 +55,7 @@ class TestEndToEndScenarios:
         base_cmd, _, _, _ = parse_multi_level_filters_for_mode(argv, mode="single")
 
         # 2. Security validation
-        assert validate_security("ec2", "DescribeInstances", mock_security_policy)
+        assert validate_readonly("ec2", "DescribeInstances", mock_security_policy)
 
         # 3. Format as JSON
         from awsquery.formatters import flatten_response
@@ -104,7 +104,7 @@ class TestEndToEndScenarios:
         assert col_filters == ["StackName", "ResourceType"]
 
         # 2. Security validation
-        assert validate_security("cloudformation", "DescribeStackResources", mock_security_policy)
+        assert validate_readonly("cloudformation", "DescribeStackResources", mock_security_policy)
 
         # 3. Test that we can format the output
         from awsquery.formatters import flatten_response
@@ -118,16 +118,17 @@ class TestEndToEndScenarios:
         # Just verify we have the stack name at least
         assert "production-infrastructure" in table_output or "staging-webapp" in table_output
 
-    def test_security_policy_enforcement_workflow(self, mock_security_policy):
+    @patch("awsquery.security.prompt_unsafe_operation")
+    def test_security_policy_enforcement_workflow(self, mock_prompt, mock_security_policy):
         """Test security policy enforcement in complete workflow."""
-        # Test with restrictive policy
-        restrictive_policy = {"ec2:DescribeInstances"}  # Only allow this action
 
-        # Should allow describe-instances
-        assert validate_security("ec2", "DescribeInstances", restrictive_policy)
+        # Should allow describe-instances (readonly prefix)
+        assert validate_readonly("ec2", "DescribeInstances", allow_unsafe=False)
 
-        # Should block terminate-instances
-        assert not validate_security("ec2", "TerminateInstances", restrictive_policy)
+        # Should prompt for terminate-instances (unsafe)
+        mock_prompt.return_value = False  # User says no
+        assert not validate_readonly("ec2", "TerminateInstances", allow_unsafe=False)
+        mock_prompt.assert_called_once_with("ec2", "TerminateInstances")
 
         # Test action format conversion
         assert action_to_policy_format("describe-instances") == "DescribeInstances"
@@ -217,9 +218,9 @@ class TestEndToEndScenarios:
 
         # 2. Test security validation errors
         empty_policy = set()
-        # validate_security might return True for empty policy (permissive) or False (restrictive)
+        # validate_readonly might return True for empty policy (permissive) or False (restrictive)
         # Let's test that it's consistent
-        result = validate_security("ec2", "DescribeInstances", empty_policy)
+        result = validate_readonly("ec2", "DescribeInstances", empty_policy)
         assert isinstance(result, bool)  # Should return a boolean
 
 
@@ -328,13 +329,8 @@ class TestCLIArgumentParsing:
         assert "lambda" not in result  # Should not match prefix 'e'
 
     @patch("botocore.session.Session")
-    @patch("awsquery.security.load_security_policy")
-    def test_autocomplete_action_completer(
-        self, mock_policy, mock_session_class, mock_security_policy
-    ):
+    def test_autocomplete_action_completer(self, mock_session_class, mock_security_policy):
         """Test action autocomplete functionality."""
-        # Setup mocks
-        mock_policy.return_value = mock_security_policy
 
         # Mock botocore session for the action completer
         mock_session = Mock()
@@ -448,9 +444,8 @@ class TestCLIArgumentParsing:
             mock_parsed_args.service = "ec2"
 
             with patch("awsquery.security.load_security_policy") as mock_load_policy:
-                mock_load_policy.return_value = {"ec2:DescribeInstances", "ec2:RunInstances"}
 
-                with patch("awsquery.security.validate_security") as mock_validate:
+                with patch("awsquery.security.validate_readonly") as mock_validate:
                     mock_validate.side_effect = lambda s, a, p: f"{s}:{a}" in p
 
                     # Test action completer
@@ -514,17 +509,19 @@ class TestCLIArgumentParsing:
 class TestCLIErrorHandling:
     """Test CLI error scenarios and exit codes."""
 
-    def test_security_policy_validation_failure(self):
+    @patch("awsquery.security.prompt_unsafe_operation")
+    def test_security_policy_validation_failure(self, mock_prompt):
         """Test security policy validation failure scenarios."""
-        # Test with restrictive policy
-        restrictive_policy = {"s3:ListBuckets"}  # Only allow S3 list buckets
 
-        # Should fail for EC2 operations
-        assert not validate_security("ec2", "DescribeInstances", restrictive_policy)
-        assert not validate_security("ec2", "TerminateInstances", restrictive_policy)
+        # DescribeInstances has a safe prefix, so it's allowed
+        assert validate_readonly("ec2", "DescribeInstances", allow_unsafe=False)
 
-        # Should succeed for allowed operations
-        assert validate_security("s3", "ListBuckets", restrictive_policy)
+        # TerminateInstances doesn't have a safe prefix, so it prompts
+        mock_prompt.return_value = False  # User denies
+        assert not validate_readonly("ec2", "TerminateInstances", allow_unsafe=False)
+
+        # ListBuckets has a safe prefix
+        assert validate_readonly("s3", "ListBuckets", allow_unsafe=False)
 
     def test_validation_error_scenarios(self, validation_error_fixtures):
         """Test various AWS validation error scenarios."""
@@ -577,20 +574,24 @@ class TestCLIErrorHandling:
         """Test argparse SystemExit handling in main function."""
         from awsquery.cli import main
 
-        # Test invalid arguments that cause argparse to exit
-        with patch("sys.argv", ["awsquery", "--invalid-flag"]):
-            with patch("sys.exit") as mock_exit:
-                with redirect_stderr(io.StringIO()):
-                    try:
+        # Test service listing which causes SystemExit(0)
+        with patch("sys.argv", ["awsquery", "--unknown-option", "value"]):
+            # Mock botocore session to prevent actual AWS calls
+            with patch("botocore.session.Session") as mock_session_class:
+                mock_session = Mock()
+                mock_session_class.return_value = mock_session
+                mock_session.get_available_services.return_value = ["ec2", "s3"]
+
+                with redirect_stdout(io.StringIO()):
+                    # The function exits with 0 when showing services
+                    with pytest.raises(SystemExit) as exc_info:
                         main()
-                    except SystemExit:
-                        pass  # Expected from argparse
+                    assert exc_info.value.code == 0
 
     def test_aws_credential_errors(self):
         """Test AWS credential and authentication error scenarios."""
         with patch("sys.argv", ["awsquery", "ec2", "describe-instances"]):
             with patch("awsquery.security.load_security_policy") as mock_load_policy:
-                mock_load_policy.return_value = {"ec2:DescribeInstances"}
 
                 with patch("awsquery.core.execute_aws_call") as mock_execute:
                     # Test NoCredentialsError
@@ -629,23 +630,6 @@ class TestCLIErrorHandling:
                     # Just verify that sys.exit was called with 0 at some point
                     exit_calls = mock_exit.call_args_list
                     assert any(call.args == (0,) for call in exit_calls)
-
-    def test_security_policy_loading_failures(self):
-        """Test security policy loading failure scenarios."""
-        from awsquery.security import load_security_policy
-
-        # Test when policy file is missing - should call sys.exit(1)
-        with patch("builtins.open") as mock_open:
-            mock_open.side_effect = FileNotFoundError("Policy file not found")
-
-            with patch("sys.exit") as mock_exit:
-                with redirect_stderr(io.StringIO()) as captured_stderr:
-                    load_security_policy()
-
-                # Should print error and exit
-                error_output = captured_stderr.getvalue()
-                assert "policy.json not found" in error_output
-                mock_exit.assert_called_once_with(1)
 
     def test_service_model_introspection_errors(self):
         """Test service model introspection error scenarios."""

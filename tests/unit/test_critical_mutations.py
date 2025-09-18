@@ -1,6 +1,5 @@
 """Critical tests for survived mutations identified by mutmut."""
 
-import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,7 +7,6 @@ import pytest
 from awsquery.core import execute_multi_level_call_with_tracking, infer_list_operation
 from awsquery.filters import parse_filter_pattern
 from awsquery.formatters import filter_columns, flatten_single_response
-from awsquery.security import load_security_policy
 
 
 class TestFilterColumnsCritical:
@@ -164,47 +162,3 @@ class TestExecuteMultiLevelCallCritical:
         # filtered_resources contains the actual result when successful
         assert filtered_resources is not None
         assert mock_execute.called
-
-
-class TestLoadSecurityPolicyCritical:
-    """Critical tests for load_security_policy survived mutations."""
-
-    @patch("builtins.open", create=True)
-    def test_policy_version_none_document(self, mock_open):
-        """Test PolicyVersion with None Document is handled gracefully (bug fixed!)."""
-        policy = {
-            "PolicyVersion": {"Document": None}  # This was a bug that mutmut found - now fixed!
-        }
-        mock_open.return_value.__enter__.return_value.read.return_value = json.dumps(policy)
-
-        # After the fix, should handle None Document gracefully
-        allowed = load_security_policy()
-        assert allowed == set()  # Should return empty set, not crash
-
-    @patch("builtins.open", create=True)
-    def test_policy_version_missing_document_key(self, mock_open):
-        """Test PolicyVersion without Document key."""
-        policy = {
-            "PolicyVersion": {
-                # No Document key at all
-                "Version": "2012-10-17"
-            }
-        }
-        mock_open.return_value.__enter__.return_value.read.return_value = json.dumps(policy)
-
-        allowed = load_security_policy()
-        assert allowed == set()  # Should return empty set
-
-    @patch("builtins.open", create=True)
-    def test_get_with_different_defaults(self, mock_open):
-        """Test that .get() default values matter."""
-        policy = {
-            "PolicyVersion": {
-                "Document": {"Statement": [{"Effect": "Allow", "Action": ["s3:GetObject"]}]}
-            }
-        }
-        mock_open.return_value.__enter__.return_value.read.return_value = json.dumps(policy)
-
-        allowed = load_security_policy()
-        assert "s3:GetObject" in allowed
-        # Ensures the get("Document", {}) vs get("Document", None) matters
