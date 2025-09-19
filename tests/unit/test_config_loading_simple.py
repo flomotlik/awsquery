@@ -26,14 +26,16 @@ class TestDefaultFiltersConfig:
         ec2_columns = result["ec2"]["describe_instances"]["columns"]
         assert ec2_columns == [
             "InstanceId$",
+            "InstanceLifecycle$",
             "InstanceType$",
-            "State.Name$",
-            "PrivateIpAddress$",
-            "PublicIpAddress$",
             "LaunchTime$",
+            "Placement.AvailabilityZone$",
+            "0.PrivateIpAddress$",
+            "0.PublicIpAddress$",
+            "State.Name$",
             "Tags.Name$",
         ]
-        assert result["s3"]["list_buckets"]["columns"] == ["Name$", "CreationDate$"]
+        assert result["s3"]["list_buckets"]["columns"] == ["CreationDate$", "Name$"]
 
     def test_get_default_columns_with_real_config(self):
         """Test get_default_columns function with real configuration."""
