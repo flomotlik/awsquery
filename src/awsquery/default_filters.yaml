@@ -1,14 +1,4 @@
 acm:
-  list_certificates:
-    columns:
-    - DomainName$
-    - Status$
-    - Type$
-    - InUse$
-    - NotAfter$
-    - KeyAlgorithm$
-    - CreatedAt$
-    - CertificateArn$
   describe_certificate:
     columns:
     - DomainName$
@@ -19,6 +9,16 @@ acm:
     - KeyAlgorithm$
     - NotAfter$
     - CertificateArn$
+  list_certificates:
+    columns:
+    - CertificateArn$
+    - CreatedAt$
+    - DomainName$
+    - InUse$
+    - KeyAlgorithm$
+    - NotAfter$
+    - Status$
+    - Type$
 apigateway:
   describe_deployment:
     columns:
@@ -35,21 +35,62 @@ apigateway:
   describe_stage:
     columns:
     - ^deploymentId$
+  get_authorizers:
+    columns:
+    - Id$
+    - authorizerResultTtlInSeconds$
+    - authorizerUri$
+    - id$
+    - identitySource$
+    - name$
+    - type$
+  get_client_certificates:
+    columns:
+    - clientCertificateId$
+    - createdDate$
+    - description$
+    - expirationDate$
+  get_deployments:
+    columns:
+    - createdDate$
+    - description$
+    - id$
+  get_domain_names:
+    columns:
+    - domainName$
+    - domainNameStatus$
+    - regionalDomainName$
+    - securityPolicy$
+  get_models:
+    columns:
+    - contentType$
+    - description$
+    - id$
+    - name$
   get_resources:
     columns:
-    - path$
-    - httpMethod$
-    - authorizationType$
     - apiKeyRequired$
+    - authorizationType$
+    - httpMethod$
     - id$
+    - parentId$
+    - path$
+    - pathPart$
+    - resourceMethods$
   get_rest_apis:
     columns:
-    - name$
-    - id$
-    - createdDate$
     - apiKeySource$
+    - createdDate$
+    - description$
     - endpointConfiguration$
+    - id$
+    - name$
     - version$
+  get_stages:
+    columns:
+    - deploymentId$
+    - lastUpdatedDate$
+    - stageName$
   list_api_keys:
     columns:
     - name$
@@ -96,14 +137,61 @@ apigatewayv2:
     - ^StageName$
   get_apis:
     columns:
-    - apiId$
-    - name$
-    - ipAddressType$
-    - protocolType$
-    - corsConfiguration$
-    - items$
+    - ApiEndpoint$
+    - ApiId$
+    - CreatedDate$
+    - Description$
+    - Name$
+    - ProtocolType$
     - apiEndpoint$
     - apiGatewayManaged$
+    - apiId$
+    - corsConfiguration$
+    - ipAddressType$
+    - items$
+    - name$
+    - protocolType$
+  get_authorizers:
+    columns:
+    - AuthorizerId$
+    - AuthorizerType$
+    - Name$
+  get_deployments:
+    columns:
+    - AutoDeployed$
+    - CreatedDate$
+    - DeploymentId$
+    - DeploymentStatus$
+    - Description$
+  get_domain_names:
+    columns:
+    - DomainName$
+    - DomainNameConfigurations$
+  get_integrations:
+    columns:
+    - ConnectionType$
+    - Description$
+    - IntegrationId$
+    - IntegrationMethod$
+    - IntegrationType$
+  get_models:
+    columns:
+    - ContentType$
+    - Description$
+    - ModelId$
+  get_routes:
+    columns:
+    - ApiKeyRequired$
+    - AuthorizationType$
+    - RouteId$
+    - RouteKey$
+    - Target$
+  get_stages:
+    columns:
+    - AutoDeploy$
+    - DeploymentId$
+    - LastUpdatedDate$
+    - StageName$
   list_authorizers:
     columns:
     - ^Name$
@@ -132,6 +220,31 @@ apigatewayv2:
     columns:
     - ^StageName$
 appautoscaling:
+  describe_scalable_targets:
+    columns:
+    - CreationTime$
+    - MaxCapacity$
+    - MinCapacity$
+    - ResourceId$
+    - ScalableDimension$
+  describe_scaling_activities:
+    columns:
+    - Cause$
+    - ResourceId$
+    - ScalableDimension$
+    - StartTime$
+    - StatusCode$
+  describe_scaling_policies:
+    columns:
+    - PolicyName$
+    - ResourceId$
+    - ScalableDimension$
+  describe_scheduled_actions:
+    columns:
+    - ResourceId$
+    - ScalableDimension$
+    - Schedule$
+    - ScheduledActionName$
   list_policies:
     columns:
     - ScalableDimension$
@@ -145,20 +258,36 @@ appsync:
   describe_schema:
     columns:
     - name$
+  list_data_sources:
+    columns:
+    - dataSourceArn$
+    - dynamodbConfig$
+    - elasticsearchConfig$
+    - lambdaConfig$
+    - name$
+    - serviceRoleArn$
+    - type$
   list_datasources:
     columns:
     - name$
+  list_graphql_apis:
+    columns:
+    - apiId$
+    - authenticationType$
+    - name$
+    - uris.GRAPHQL$
   list_resolvers:
     columns:
-    - typeName$
-    - fieldName$
     - dataSourceName$
+    - fieldName$
     - resolverArn$
+    - typeName$
   list_types:
     columns:
-    - name$
-    - format$
     - description$
+    - format$
+    - name$
+    - typeName$
 athena:
   get_query_execution:
     columns:
@@ -223,14 +352,15 @@ athena:
 autoscaling:
   describe_auto_scaling_groups:
     columns:
+    - AutoScalingGroupARN$
+    - AutoScalingGroupName$
+    - DesiredCapacity$
+    - Identifier$
     - InstanceId$
     - LaunchTemplateId$
     - ResourceId$
-    - Identifier$
-    - VPCZoneIdentifier$
-    - AutoScalingGroupARN$
     - ServiceLinkedRoleARN$
-    - AutoScalingGroupName$
+    - VPCZoneIdentifier$
 backup:
   describe_backup_vault:
     columns:
@@ -293,16 +423,30 @@ batch:
     - computeEnvironmentName$
     - status$
     - state$
+  describe_compute_environments:
+    columns:
+    - computeEnvironmentName$
+    - computeResources.desiredvCpus$
+    - computeResources.imageId$
+    - computeResources.instanceTypes$
+    - computeResources.maxvCpus$
+    - computeResources.minvCpus$
+    - computeResources.type$
+    - state$
+    - status$
+    - type$
   list_jobs:
     columns:
-    - jobId$
-    - jobArn$
-    - jobName$
-    - status$
-    - size$
-    - createdAt$
-    - jobSummaryList$
     - arrayProperties$
+    - container.exitCode$
+    - createdAt$
+    - jobArn$
+    - jobId$
+    - jobName$
+    - jobSummaryList$
+    - size$
+    - status$
+    - statusReason$
 budgets:
   describe_budget:
     columns:
@@ -326,25 +470,34 @@ budgets:
     - BudgetedAmount$
   describe_budgets:
     columns:
+    - AutoAdjustType$
     - BillingViewArn$
     - BudgetName$
-    - HealthStatus$
-    - Status$
-    - AutoAdjustType$
     - BudgetType$
-    - IncludeDiscount$
     - Budgets$
+    - HealthStatus$
+    - IncludeDiscount$
+    - Status$
+    - TimeUnit$
 ce:
   get_cost_and_usage:
     columns:
-    - Type$
-    - DimensionValueAttributes$
     - Attributes$
-    - Value$
+    - Attributes.description$
+    - DimensionValueAttributes$
+    - DimensionValueAttributes[$$
     - GroupDefinitions$
+    - Groups$
     - Key$
+    - Keys$
+    - Metrics$
+    - Metrics.UnblendedCost.Amount$
     - NextPageToken$
     - ResultsByTime$
+    - ResultsByTime.Groups.$
+    - Total$
+    - Type$
+    - Value$
   get_cost_forecast:
     columns:
     - ForecastResultsByTime$
@@ -388,24 +541,41 @@ ce:
 cloudformation:
   describe_change_set:
     columns:
+    - Arn$
     - ChangeSetId$
+    - ChangeSetName$
+    - Changes$
+    - CreationTime$
+    - ExecutionStatus$
     - LogicalResourceId$
-    - PhysicalResourceId$
+    - Parameters$
     - ParentChangeSetId$
+    - PhysicalResourceId$
+    - ResourceChange.Action$
+    - ResourceChange.Details$
+    - ResourceChange.LogicalResourceId$
+    - ResourceChange.Replacement$
+    - ResourceChange.ResourceType$
+    - ResourceChange.Scope$
     - RootChangeSetId$
     - StackId$
-    - Arn$
-    - ChangeSetName$
+    - StackName$
+    - Status$
   describe_stack_events:
     columns:
+    - DetailedStatus$
     - EventId$
     - HookInvocationId$
+    - HookStatus$
     - LogicalResourceId$
     - PhysicalResourceId$
+    - ResourceProperties$
+    - ResourceStatus$
+    - ResourceStatusReason$
+    - ResourceType$
     - StackId$
     - StackName$
-    - DetailedStatus$
-    - HookStatus$
+    - Timestamp$
   describe_stack_resources:
     columns:
     - LogicalResourceId$
@@ -418,23 +588,33 @@ cloudformation:
     - LastCheckTimestamp$
   describe_stack_set:
     columns:
-    - StackSetId$
     - AdministrationRoleARN$
-    - StackSetARN$
-    - ExecutionRoleName$
-    - StackSetName$
+    - Capabilities$
+    - Description$
     - DriftDetectionStatus$
     - DriftStatus$
+    - ExecutionRoleName$
+    - Parameters$
+    - StackSetARN$
+    - StackSetId$
+    - StackSetName$
+    - Status$
+    - Tags.Name$
+  describe_stack_set_operations:
+    columns:
+    - CreationTimestamp$
+    - OperationId$
     - Status$
   describe_stack_set_template:
     columns:
     - ^StackSetName$
   describe_stacks:
     columns:
-    - StackName$
-    - StackStatus$
     - CreationTime$
     - LastUpdatedTime$
+    - RoleARN$
+    - StackName$
+    - StackStatus$
     - StackStatusReason$
   describe_template:
     columns:
@@ -442,20 +622,21 @@ cloudformation:
   list_change_sets:
     columns:
     - ChangeSetId$
+    - ChangeSetName$
+    - CreationTime$
+    - ExecutionStatus$
     - ParentChangeSetId$
     - RootChangeSetId$
     - StackId$
-    - ChangeSetName$
     - StackName$
-    - ExecutionStatus$
     - Status$
   list_exports:
     columns:
     - ExportingStackId$
-    - Name$
     - Exports$
-    - Value$
+    - Name$
     - NextToken$
+    - Value$
   list_imports:
     columns:
     - Imports$
@@ -464,30 +645,44 @@ cloudformation:
     columns:
     - ^StackName$
     - ^OutputKey$
+  list_stack_resources:
+    columns:
+    - LastUpdatedTimestamp$
+    - LogicalResourceId$
+    - PhysicalResourceId$
+    - ResourceStatus$
+    - ResourceType$
   list_stack_set_instances:
     columns:
     - ^StackSetName$
     - Account$
   list_stack_set_operations:
     columns:
-    - OperationId$
-    - Status$
-    - RegionConcurrencyType$
-    - FailureToleranceCount$
-    - MaxConcurrentCount$
-    - FailedStackInstancesCount$
+    - Action$
     - CreationTimestamp$
     - EndTimestamp$
+    - FailedStackInstancesCount$
+    - FailureToleranceCount$
+    - MaxConcurrentCount$
+    - OperationId$
+    - RegionConcurrencyType$
+    - Status$
   list_stack_sets:
     columns:
-    - StackSetId$
-    - StackSetName$
+    - AutoDeployment$
+    - Description$
     - DriftStatus$
-    - Status$
     - LastDriftCheckTimestamp$
     - NextToken$
+    - StackSetId$
+    - StackSetName$
+    - Status$
     - Summaries$
-    - AutoDeployment$
+  list_stacks:
+    columns:
+    - CreationTime$
+    - StackName$
+    - StackStatus$
 cloudfront:
   describe_distribution:
     columns:
@@ -520,14 +715,17 @@ cloudfront:
     - DefaultTTL$
   list_distributions:
     columns:
-    - Id$
-    - DomainName$
-    - Status$
-    - PriceClass$
+    - Aliases$
+    - CacheBehaviors.Quantity$
     - DistributionList$
+    - DomainName$
+    - Enabled$
+    - Id$
     - IsTruncated$
     - Items$
-    - Aliases$
+    - Origins.Quantity$
+    - PriceClass$
+    - Status$
   list_invalidations:
     columns:
     - Id$
@@ -550,13 +748,15 @@ cloudwatch:
   describe_alarms:
     columns:
     - AccountId$
-    - Id$
-    - ThresholdMetricId$
     - AlarmArn$
     - AlarmName$
-    - Name$
-    - MetricName$
+    - Dimensions.join$
     - EvaluationState$
+    - Id$
+    - MetricName$
+    - Name$
+    - StateValue$
+    - ThresholdMetricId$
   describe_alarms_for_metric:
     columns:
     - AccountId$
@@ -596,6 +796,15 @@ cloudwatch:
     - NextToken$
     - OwningAccounts$
 codebuild:
+  batch_get_builds:
+    columns:
+    - buildNumber$
+    - buildStatus$
+    - currentPhase$
+    - endTime$
+    - environment$
+    - id$
+    - startTime$
   batch_get_projects:
     columns:
     - artifactIdentifier$
@@ -627,6 +836,10 @@ codecommit:
     columns:
     - branches$
     - nextToken$
+  list_repositories:
+    columns:
+    - repositoryId$
+    - repositoryName$
 codepipeline:
   describe_execution:
     columns:
@@ -649,16 +862,26 @@ codepipeline:
     - pipelineType$
     - providerType$
     - gitConfiguration$
+  get_pipeline_state:
+    columns:
+    - actionName$
+    - actionStates$
+    - actionStates.$
+    - currentRevision.revisionId$
+    - latestExecution.pipelineExecutionId$
+    - latestExecution.status$
+    - stageName$
   list_action_executions:
     columns:
     - actionExecutionId$
+    - actionName$
     - actionTypeId$
+    - configuration$
     - pipelineExecutionId$
     - roleArn$
-    - actionName$
     - stageName$
+    - startTime$
     - status$
-    - configuration$
   list_actions:
     columns:
     - name$
@@ -667,11 +890,17 @@ codepipeline:
     columns:
     - name$
     - ^pipelineExecutionId$
+  list_pipeline_executions:
+    columns:
+    - pipelineExecutionId$
+    - startTime$
+    - status$
+    - trigger$
   list_pipelines:
     columns:
+    - created$
     - name$
     - pipelineType$
-    - created$
     - updated$
     - version$
 cognito:
@@ -682,18 +911,25 @@ cognito:
     columns:
     - ^IdentityPoolId$
     - ^IdentityPoolName$
+  list_user_pool_clients:
+    columns:
+    - ClientId$
+    - ClientName$
+    - UserPoolId$
   list_user_pools:
     columns:
+    - CreationDate$
     - Id$
     - Name$
     - Status$
-    - CreationDate$
   list_users:
     columns:
-    - Username$
-    - UserStatus$
+    - Attributes$
     - Enabled$
     - UserCreateDate$
+    - UserLastModifiedDate$
+    - UserStatus$
+    - Username$
 directconnect:
   describe_connections:
     columns:
@@ -758,12 +994,17 @@ dynamodb:
     - CreationDateTime$
   describe_table:
     columns:
-    - TableName$
-    - TableStatus$
-    - ItemCount$
-    - TableSizeBytes$
-    - CreationDateTime$
+    - AttributeDefinitions$
     - BillingMode$
+    - CreationDateTime$
+    - GlobalSecondaryIndexes$
+    - ItemCount$
+    - KeySchema$
+    - LocalSecondaryIndexes$
+    - ProvisionedThroughput.NumberOfDecreasesToday$
+    - TableName$
+    - TableSizeBytes$
+    - TableStatus$
   describe_time_to_live:
     columns:
     - AttributeName$
@@ -811,33 +1052,42 @@ ec2:
     - AssociationId$
   describe_images:
     columns:
-    - imageId$
-    - name$
-    - imageState$
-    - imageOwnerAlias$
-    - platform$
+    - Architecture$
+    - ImageId$
+    - PlatformDetails$
     - architecture$
-    - virtualizationType$
+    - imageId$
+    - imageOwnerAlias$
+    - imageState$
     - isPublic$
+    - name$
+    - platform$
+    - virtualizationType$
   describe_instances:
     columns:
     - InstanceId$
+    - InstanceLifecycle$
     - InstanceType$
-    - State.Name$
-    - PrivateIpAddress$
-    - PublicIpAddress$
     - LaunchTime$
+    - Placement.AvailabilityZone$
+    - 0.PrivateIpAddress$
+    - 0.PublicIpAddress$
+    - State.Name$
     - Tags.Name$
   describe_internet_gateways:
     columns:
+    - InternetGatewayId$
+    - OwnerId$
     - internetGatewayId$
-    - vpcId$
     - state$
+    - vpcId$
   describe_key_pairs:
     columns:
+    - KeyFingerprint$
+    - KeyName$
+    - keyFingerprint$
     - keyName$
     - keySet$
-    - keyFingerprint$
   describe_load_balancers:
     columns:
     - LoadBalancerName$
@@ -848,21 +1098,35 @@ ec2:
     - CreatedTime$
   describe_nat_gateways:
     columns:
+    - CreateTime$
+    - NatGatewayAddresses.NetworkInterfaceId$
+    - NatGatewayAddresses.PrivateIp$
+    - NatGatewayAddresses.PublicIp$
     - NatGatewayId$
+    - PublicIp$
     - State$
     - SubnetId$
     - VpcId$
-    - PublicIp$
-    - CreateTime$
+  describe_network_acls:
+    columns:
+    - IsDefault$
+    - NetworkAclId$
+    - VpcId$
   describe_network_interfaces:
     columns:
+    - AvailabilityZone$
+    - NetworkInterfaceId$
+    - PrivateIpAddress$
+    - RequesterId$
+    - SubnetId$
+    - VpcId$
     - allocationId$
     - associationId$
-    - ipOwnerId$
     - attachmentId$
+    - groupId$
     - instanceId$
     - instanceOwnerId$
-    - groupId$
+    - ipOwnerId$
     - networkInterfaceId$
   describe_regions:
     columns:
@@ -871,13 +1135,16 @@ ec2:
     - regionEndpoint$
   describe_route_tables:
     columns:
-    - routeTableAssociationId$
-    - routeTableId$
-    - subnetId$
+    - Associations.SubnetId$
+    - RouteTableId$
+    - VpcId$
     - gatewayId$
     - instanceId$
     - instanceOwnerId$
     - networkInterfaceId$
+    - routeTableAssociationId$
+    - routeTableId$
+    - subnetId$
     - vpcPeeringConnectionId$
   describe_security_group_rules:
     columns:
@@ -891,9 +1158,9 @@ ec2:
     - IsEgress$
   describe_security_groups:
     columns:
+    - Description$
     - GroupId$
     - GroupName$
-    - Description$
     - VpcId$
   describe_snapshots:
     columns:
@@ -906,12 +1173,12 @@ ec2:
     - Encrypted$
   describe_subnets:
     columns:
-    - SubnetId$
-    - VpcId$
-    - CidrBlock$
     - AvailabilityZone$
     - AvailableIpAddressCount$
+    - CidrBlock$
     - State$
+    - SubnetId$
+    - VpcId$
   describe_target_groups:
     columns:
     - TargetGroupName$
@@ -944,52 +1211,67 @@ ec2:
     - Encrypted$
     - AvailabilityZone$
     - Attachments.InstanceId$
+  describe_vpc_endpoint_services:
+    columns:
+    - Owner$
+    - ServiceName$
   describe_vpc_endpoints:
     columns:
-    - VpcEndpointId$
-    - VpcEndpointType$
-    - VpcId$
     - ServiceName$
     - State$
     - SubnetIds$
+    - VpcEndpointId$
+    - VpcEndpointType$
+    - VpcId$
   describe_vpc_peering_connections:
     columns:
-    - ownerId$
-    - vpcId$
-    - vpcPeeringConnectionId$
-    - status$
-    - vpcPeeringConnectionSet$
+    - AccepterVpcInfo.CidrBlock$
+    - AccepterVpcInfo.VpcId$
+    - RequesterVpcInfo.CidrBlock$
+    - RequesterVpcInfo.VpcId$
+    - Status.Message$
+    - VpcPeeringConnectionId$
     - accepterVpcInfo$
     - cidrBlock$
     - expirationTime$
+    - ownerId$
+    - status$
+    - vpcId$
+    - vpcPeeringConnectionId$
+    - vpcPeeringConnectionSet$
   describe_vpcs:
     columns:
-    - VpcId$
-    - State$
     - CidrBlock$
+    - InstanceTenancy$
     - IsDefault$
+    - State$
     - Tags.Name$
+    - VpcId$
 ecr:
   describe_images:
     columns:
-    - registryId$
-    - repositoryName$
-    - imageScanStatus$
-    - status$
     - artifactMediaType$
-    - imageManifestMediaType$
     - imageDetails$
     - imageDigest$
+    - imageManifestMediaType$
+    - imagePushedAt$
+    - imageScanStatus$
+    - imageSizeInBytes$
+    - imageTags$
+    - registryId$
+    - repositoryName$
+    - status$
   describe_repositories:
     columns:
+    - createdAt$
+    - encryptionConfiguration$
+    - encryptionType$
+    - filterType$
+    - imageScanningConfiguration$
     - registryId$
     - repositoryArn$
     - repositoryName$
-    - encryptionType$
-    - filterType$
-    - createdAt$
-    - encryptionConfiguration$
-    - imageScanningConfiguration$
+    - repositoryUri$
   get_lifecycle_policy:
     columns:
     - registryId$
@@ -1010,33 +1292,48 @@ ecr:
 ecs:
   describe_clusters:
     columns:
-    - id$
-    - clusterArn$
+    - activeServicesCount$
     - arn$
-    - clusterName$
-    - name$
     - attachmentsStatus$
+    - clusterArn$
+    - clusterName$
+    - id$
+    - name$
+    - pendingTasksCount$
+    - registeredContainerInstancesCount$
+    - runningTasksCount$
     - status$
     - type$
   describe_container_instances:
     columns:
-    - id$
-    - targetId$
-    - ec2InstanceId$
-    - containerInstanceArn$
-    - arn$
-    - name$
-    - capacityProviderName$
+    - agentConnected$
     - agentUpdateStatus$
+    - arn$
+    - attachments$
+    - attributes$
+    - capacityProviderName$
+    - containerInstanceArn$
+    - ec2InstanceId$
+    - id$
+    - name$
+    - pendingTasksCount$
+    - registeredResources$
+    - remainingResources$
+    - runningTasksCount$
+    - status$
+    - targetId$
+    - versionInfo$
   describe_services:
     columns:
-    - serviceName$
-    - serviceArn$
-    - status$
-    - desiredCount$
-    - runningCount$
-    - pendingCount$
     - clusterArn$
+    - createdAt$
+    - desiredCount$
+    - message$
+    - pendingCount$
+    - runningCount$
+    - serviceArn$
+    - serviceName$
+    - status$
   describe_task_definition:
     columns:
     - targetId$
@@ -1097,13 +1394,17 @@ efs:
   describe_file_systems:
     columns:
     - AvailabilityZoneId$
+    - AvailabilityZoneName$
+    - FileSystemArn$
     - FileSystemId$
     - KmsKeyId$
-    - OwnerId$
-    - FileSystemArn$
-    - AvailabilityZoneName$
-    - Name$
     - LifeCycleState$
+    - Name$
+    - NumberOfMountTargets$
+    - OwnerId$
+    - PerformanceMode$
+    - SizeInBytes.Value$
+    - ThroughputMode$
   describe_lifecycle_configuration:
     columns:
     - TransitionToPrimaryStorageClass$
@@ -1116,13 +1417,15 @@ efs:
   describe_mount_targets:
     columns:
     - AvailabilityZoneId$
+    - AvailabilityZoneName$
     - FileSystemId$
+    - IpAddress$
+    - LifeCycleState$
     - MountTargetId$
     - NetworkInterfaceId$
     - OwnerId$
     - SubnetId$
     - VpcId$
-    - AvailabilityZoneName$
   list_mount_targets:
     columns:
     - ^FileSystemId$
@@ -1235,6 +1538,15 @@ elasticache:
     - Key$
     - Value$
 elasticbeanstalk:
+  describe_application_versions:
+    columns:
+    - ApplicationName$
+    - BuildArn$
+    - DateCreated$
+    - DateUpdated$
+    - Description$
+    - SourceBundle$
+    - VersionLabel$
   describe_applications:
     columns:
     - ApplicationArn$
@@ -1245,16 +1557,31 @@ elasticbeanstalk:
     - DateUpdated$
     - Description$
     - ResourceLifecycleConfig$
+    - Versions$
+  describe_environment_health:
+    columns:
+    - ApplicationMetrics$
+    - Color$
+    - EnvironmentName$
+    - HealthStatus$
+    - InstancesHealth$
   describe_environments:
     columns:
-    - EnvironmentId$
-    - EnvironmentArn$
-    - PlatformArn$
     - ApplicationName$
     - CNAME$
+    - EnvironmentArn$
+    - EnvironmentId$
     - EnvironmentName$
+    - Health$
     - LinkName$
+    - PlatformArn$
     - SolutionStackName$
+    - Status$
+  describe_events:
+    columns:
+    - EventDate$
+    - Message$
+    - Severity$
   describe_health:
     columns:
     - ^EnvironmentName$
@@ -1277,8 +1604,8 @@ elasticsearch:
   list_domain_names:
     columns:
     - DomainName$
-    - EngineType$
     - DomainNames$
+    - EngineType$
 elb:
   describe_classic:
     columns:
@@ -1306,26 +1633,47 @@ elb:
     columns:
     - ^TargetGroupName$
 elbv2:
+  describe_listeners:
+    columns:
+    - Port$
+    - Protocol$
   describe_load_balancers:
     columns:
-    - OutpostId$
-    - SubnetId$
+    - AvailabilityZones$
     - CanonicalHostedZoneId$
-    - Ipv4IpamPoolId$
-    - VpcId$
-    - LoadBalancerArn$
-    - ZoneName$
     - DNSName$
+    - IpAddressType$
+    - Ipv4IpamPoolId$
+    - LoadBalancerArn$
+    - LoadBalancerName$
+    - OutpostId$
+    - Scheme$
+    - SecurityGroups$
+    - SubnetId$
+    - VpcId$
+    - ZoneName$
   describe_target_groups:
     columns:
-    - VpcId$
+    - HealthCheckPath$
+    - HealthCheckProtocol$
+    - HealthyThresholdCount$
+    - IpAddressType$
+    - NextMarker$
+    - Port$
+    - Protocol$
     - TargetGroupArn$
     - TargetGroupName$
-    - IpAddressType$
     - TargetType$
-    - HealthyThresholdCount$
     - UnhealthyThresholdCount$
-    - NextMarker$
+    - VpcId$
+  describe_target_health:
+    columns:
+    - HealthCheckPort$
+    - Target.AvailabilityZone$
+    - Target.Id$
+    - Target.Port$
+    - TargetHealth.Description$
+    - TargetHealth.State$
 events:
   describe_bus_policy:
     columns:
@@ -1350,19 +1698,20 @@ events:
     - ^Name$
   list_event_buses:
     columns:
-    - Name$
     - Arn$
     - Description$
+    - Name$
   list_rules:
     columns:
     - Arn$
-    - RoleArn$
-    - Name$
-    - State$
-    - NextToken$
-    - Rules$
     - Description$
     - EventPattern$
+    - Name$
+    - NextToken$
+    - RoleArn$
+    - Rules$
+    - ScheduleExpression$
+    - State$
   list_targets:
     columns:
     - ^Name$
@@ -1552,6 +1901,10 @@ iam:
     - RoleId$
     - UserId$
     - Arn$
+  get_group_policy:
+    columns:
+    - Effect$
+    - PolicyDocument.Statement.$
   get_policy:
     columns:
     - DefaultVersionId$
@@ -1579,6 +1932,10 @@ iam:
     - Role$
     - AssumeRolePolicyDocument$
     - CreateDate$
+  get_role_policy:
+    columns:
+    - Effect$
+    - PolicyDocument.Statement.$
   get_user:
     columns:
     - UserId$
@@ -1589,6 +1946,9 @@ iam:
     - User$
     - CreateDate$
     - PasswordLastUsed$
+  get_user_policy:
+    columns:
+    - PolicyDocument.Statement$
   list_access_keys:
     columns:
     - AccessKeyId$
@@ -1623,27 +1983,30 @@ iam:
     columns:
     - IsTruncated$
     - Marker$
+    - PolicyName$
     - PolicyNames$
   list_groups:
     columns:
-    - GroupId$
     - Arn$
+    - CreateDate$
+    - GroupId$
     - GroupName$
     - Groups$
-    - CreateDate$
-    - Path$
     - IsTruncated$
     - Marker$
+    - Path$
   list_instance_profiles:
     columns:
-    - InstanceProfileId$
-    - RoleId$
     - Arn$
-    - InstanceProfileName$
-    - RoleName$
-    - InstanceProfiles$
     - CreateDate$
+    - InstanceProfileId$
+    - InstanceProfileName$
+    - InstanceProfiles$
     - Path$
+    - RoleId$
+    - RoleName$
+    - Roles.RoleId$
+    - Roles.RoleName$
   list_mfa_devices:
     columns:
     - UserName$
@@ -1651,38 +2014,50 @@ iam:
     - EnableDate$
   list_policies:
     columns:
-    - PolicyName$
-    - PolicyId$
     - Arn$
-    - DefaultVersionId$
     - AttachmentCount$
+    - DefaultVersionId$
+    - PolicyId$
+    - PolicyName$
   list_role_policies:
     columns:
     - IsTruncated$
     - Marker$
+    - PolicyName$
     - PolicyNames$
   list_roles:
     columns:
-    - RoleName$
-    - RoleId$
     - Arn$
     - CreateDate$
     - MaxSessionDuration$
+    - RoleId$
+    - RoleName$
   list_saml_providers:
     columns:
+    - Arn$
+    - CreateDate$
+    - ValidUntil$
     - ^Arn$
   list_user_policies:
     columns:
     - IsTruncated$
     - Marker$
+    - PolicyName$
     - PolicyNames$
   list_users:
     columns:
-    - UserName$
-    - UserId$
     - Arn$
     - CreateDate$
     - PasswordLastUsed$
+    - Path$
+    - UserId$
+    - UserName$
+  list_virtual_mfa_devices:
+    columns:
+    - SerialNumber$
+    - User.Path$
+    - User.UserId$
+    - User.UserName$
 kafka:
   describe_cluster:
     columns:
@@ -1791,10 +2166,10 @@ kms:
     - RotationPeriodInDays$
   list_aliases:
     columns:
-    - AliasName$
-    - TargetKeyId$
     - AliasArn$
+    - AliasName$
     - CreationDate$
+    - TargetKeyId$
   list_grants:
     columns:
     - GrantId$
@@ -1807,8 +2182,8 @@ kms:
     - EncryptionContextSubset$
   list_keys:
     columns:
-    - KeyId$
     - KeyArn$
+    - KeyId$
   list_policies:
     columns:
     - ^KeyArn$
@@ -1852,13 +2227,14 @@ lambda:
     - LastModified$
   list_functions:
     columns:
-    - FunctionName$
-    - Runtime$
-    - Handler$
     - CodeSize$
-    - MemorySize$
-    - Timeout$
+    - FunctionArn$
+    - FunctionName$
+    - Handler$
     - LastModified$
+    - MemorySize$
+    - Runtime$
+    - Timeout$
   list_layer_versions:
     columns:
     - Version$
@@ -1873,28 +2249,39 @@ lambda:
     - Description$
   list_versions_by_function:
     columns:
+    - FunctionArn$
+    - FunctionName$
+    - Handler$
+    - MemorySize$
+    - Runtime$
+    - Timeout$
+    - Version$
     - ^FunctionName$
 logs:
   describe_export_tasks:
     columns:
-    - taskId$
-    - logGroupName$
-    - taskName$
-    - status$
     - creationTime$
-    - exportTasks$
     - destination$
     - destinationPrefix$
+    - exportTasks$
+    - from$
+    - logGroupName$
+    - status$
+    - taskId$
+    - taskName$
+    - to$
   describe_log_groups:
     columns:
-    - kmsKeyId$
     - arn$
-    - logGroupArn$
-    - logGroupName$
-    - dataProtectionStatus$
-    - logGroupClass$
-    - metricFilterCount$
     - creationTime$
+    - dataProtectionStatus$
+    - kmsKeyId$
+    - logGroupArn$
+    - logGroupClass$
+    - logGroupName$
+    - metricFilterCount$
+    - retentionInDays$
+    - storedBytes$
   describe_log_streams:
     columns:
     - arn$
@@ -1958,14 +2345,15 @@ organizations:
     - AvailablePolicyTypes$
   list_accounts:
     columns:
-    - Id$
-    - Arn$
-    - Name$
-    - Status$
-    - State$
-    - JoinedTimestamp$
     - Accounts$
+    - Arn$
     - Email$
+    - Id$
+    - JoinedMethod$
+    - JoinedTimestamp$
+    - Name$
+    - State$
+    - Status$
   list_organizational_units_for_parent:
     columns:
     - Id$
@@ -2001,33 +2389,39 @@ rds:
     - SnapshotType$
   describe_db_clusters:
     columns:
+    - DBClusterArn$
     - DBClusterIdentifier$
-    - Status$
+    - DatabaseName$
+    - DeletionProtection$
+    - Endpoint$
     - Engine$
     - EngineVersion$
     - MultiAZ$
-    - DatabaseName$
-    - Endpoint$
     - ReaderEndpoint$
-    - DBClusterArn$
+    - Status$
+    - StorageEncrypted$
   describe_db_engine_versions:
     columns:
+    - DBEngineDescription$
+    - DBParameterGroupFamily$
     - Engine$
     - EngineVersion$
-    - DBParameterGroupFamily$
-    - DBEngineDescription$
     - Status$
+    - SupportsReadReplica$
   describe_db_instances:
     columns:
+    - Address$
+    - AllocatedStorage$
+    - AvailabilityZone$
+    - DBClusterIdentifier$
+    - DBInstanceArn$
+    - DBInstanceClass$
     - DBInstanceIdentifier$
     - DBInstanceStatus$
-    - DBInstanceClass$
     - Engine$
     - EngineVersion$
     - MultiAZ$
-    - AllocatedStorage$
-    - Address$
-    - DBInstanceArn$
+    - PubliclyAccessible$
   describe_db_parameter_groups:
     columns:
     - DBParameterGroupName$
@@ -2066,6 +2460,12 @@ rds:
     - VpcId$
     - SubnetGroupStatus$
     - DBSubnetGroupArn$
+  describe_events:
+    columns:
+    - Date$
+    - Message$
+    - SourceIdentifier$
+    - SourceType$
   describe_stack_events:
     columns:
     - ^SourceArn$
@@ -2158,24 +2558,30 @@ route53:
     - CloudWatchAlarmConfiguration$
   list_hosted_zones:
     columns:
+    - CallerReference$
+    - Comment$
+    - Config$
+    - Config.PrivateZone$
+    - HostedZones$
     - Id$
     - Name$
-    - ResourceRecordSetCount$
-    - HostedZones$
-    - CallerReference$
-    - Config$
-    - Comment$
     - PrivateZone$
+    - ResourceRecordSetCount$
   list_resource_record_sets:
     columns:
-    - HostedZoneId$
     - CollectionId$
-    - HealthCheckId$
-    - TrafficPolicyInstanceId$
-    - NextRecordIdentifier$
-    - SetIdentifier$
-    - NextRecordName$
     - DNSName$
+    - HealthCheckId$
+    - HostedZoneId$
+    - Name$
+    - NextRecordIdentifier$
+    - NextRecordName$
+    - ResourceRecords$
+    - SetIdentifier$
+    - TTL$
+    - TrafficPolicyInstanceId$
+    - Type$
+    - Weight$
 s3:
   get_bucket_acl:
     columns:
@@ -2257,8 +2663,8 @@ s3:
     - RoutingRules$
   list_buckets:
     columns:
-    - Name$
     - CreationDate$
+    - Name$
   list_multipart_uploads:
     columns:
     - UploadId$
@@ -2267,11 +2673,12 @@ s3:
     - Initiated$
   list_objects_v2:
     columns:
-    - Key$
-    - Size$
-    - LastModified$
-    - StorageClass$
     - ETag$
+    - Key$
+    - LastModified$
+    - Owner$
+    - Size$
+    - StorageClass$
 sagemaker:
   describe_endpoint:
     columns:
@@ -2384,10 +2791,10 @@ secretsmanager:
     - ResourcePolicy$
   list_secrets:
     columns:
-    - Name$
     - ARN$
     - CreatedDate$
     - LastAccessedDate$
+    - Name$
 ses:
   describe_configuration_set:
     columns:
@@ -2441,16 +2848,26 @@ ssm:
     - DocumentType$
     - HashType$
     - Type$
+  describe_instance_associations_status:
+    columns:
+    - AssociationId$
+    - AssociationName$
+    - AssociationVersion$
+    - DetailedStatus$
+    - DocumentVersion$
+    - ExecutionDate$
   describe_instance_information:
     columns:
     - ActivationId$
-    - InstanceId$
-    - SourceId$
+    - AssociationStatus$
     - ComputerName$
+    - DetailedStatus$
+    - IPAddress$
+    - InstanceId$
     - Name$
     - PlatformName$
-    - DetailedStatus$
-    - AssociationStatus$
+    - ResourceType$
+    - SourceId$
   describe_parameter:
     columns:
     - KeyId$
@@ -2463,14 +2880,16 @@ ssm:
     - NextToken$
   describe_parameters:
     columns:
-    - KeyId$
     - ARN$
-    - Name$
-    - PolicyStatus$
     - DataType$
+    - KeyId$
+    - LastModifiedUser$
+    - Name$
+    - NextToken$
+    - PolicyStatus$
     - PolicyType$
     - Type$
-    - NextToken$
+    - Version$
   get_parameter:
     columns:
     - ARN$
@@ -2558,6 +2977,10 @@ stepfunctions:
     - stateMachineArn$
     - type$
     - creationDate$
+sts:
+  get_caller_identity:
+    columns:
+    - Account$
 vpc:
   describe_internet_gateway:
     columns:
