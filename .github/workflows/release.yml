@@ -39,6 +39,26 @@ jobs:
           python -m pip install --upgrade pip
           pip install build twine
 
+      - name: Update version in pyproject.toml
+        run: |
+          # Extract version from tag (remove 'v' prefix if present)
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+          elif [[ "${{ github.event.inputs.version }}" != "" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            echo "No version found"
+            exit 1
+          fi
+          echo "Updating version to $VERSION for build"
+
+          # Update version using sed
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" pyproject.toml
+
+          # Verify the change
+          echo "Updated pyproject.toml:"
+          grep "^version =" pyproject.toml
+
       - name: Build distribution
         run: |
           python -m build

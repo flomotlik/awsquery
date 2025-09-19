@@ -49,16 +49,7 @@ pip install -e ".[dev]"
 
 awsquery supports tab completion for AWS services and actions through argcomplete.
 
-#### Quick Setup (Automatic)
-```bash
-# Run the setup script
-./setup-autocomplete.sh
-
-# Then reload your shell configuration
-source ~/.bashrc  # or ~/.zshrc, etc.
-```
-
-#### Manual Setup
+#### Setup
 
 ##### Bash
 ```bash
@@ -447,4 +438,4 @@ MIT License - see LICENSE file for details.
 
 ## Contributing
 
-Please see CONTRIBUTING.md for development guidelines and testing procedures.
+Contributions are welcome! Please ensure tests pass and follow the existing code style.
