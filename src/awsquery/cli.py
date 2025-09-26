@@ -7,6 +7,7 @@ import sys
 
 import argcomplete
 import boto3
+from argcomplete import warn
 
 from .config import apply_default_filters
 from .core import (
@@ -201,6 +202,30 @@ def determine_column_filters(column_filters, service, action):
     return None
 
 
+def _enhanced_completion_validator(completion_candidate, current_input):
+    """Custom argcomplete validator for enhanced action matching."""
+    if not current_input:
+        return True
+
+    current_input_lower = current_input.lower()
+    candidate_lower = completion_candidate.lower()
+
+    # 1. Exact prefix match (highest priority)
+    if candidate_lower.startswith(current_input_lower):
+        return True
+
+    # 2. Partial substring match
+    if current_input_lower in candidate_lower:
+        return True
+
+    # 3. Split match - all parts must be found as substrings
+    parts = [part for part in current_input_lower.split("-") if part]  # Filter empty parts
+    if len(parts) > 1 and all(part in candidate_lower for part in parts):
+        return True
+
+    return False
+
+
 def action_completer(prefix, parsed_args, **kwargs):
     """Autocomplete action names based on selected service"""
     if not parsed_args.service:
@@ -240,8 +265,21 @@ def action_completer(prefix, parsed_args, **kwargs):
                 kebab_case = re.sub("([a-z0-9])([A-Z])", r"\1-\2", op).lower()
                 cli_operations.append(kebab_case)
 
-        matched_ops = [op for op in cli_operations if op.startswith(prefix)]
-        return sorted(matched_ops)
+        # Return all valid operations - let argcomplete validator handle filtering
+        all_operations = sorted(cli_operations)
+
+        if prefix:
+            # Check what will actually match with our validator
+            matched = [op for op in all_operations if _enhanced_completion_validator(op, prefix)]
+
+            # If multiple matches share a common prefix shorter than input, warn user
+            if len(matched) > 1:
+                common = os.path.commonprefix(matched)
+                if common and len(common) <= len(prefix):
+                    # Show user what matches were found
+                    warn(f"Matches for '{prefix}': {', '.join(matched)}")
+
+        return all_operations
     except Exception:
         # If we can't get operations, return empty
         return []
@@ -299,7 +337,7 @@ Examples:
     )  # pragma: no mutate
     action_arg.completer = action_completer  # type: ignore[attr-defined]
 
-    argcomplete.autocomplete(parser)
+    argcomplete.autocomplete(parser, validator=_enhanced_completion_validator)
 
     # First pass: parse known args to get service and action
     args, remaining = parser.parse_known_args()

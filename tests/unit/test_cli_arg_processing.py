@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from awsquery.cli import (
+    _enhanced_completion_validator,
     _extract_flag_and_value,
     _extract_flags_from_args,
     _preserve_parsed_flags,
@@ -409,3 +410,172 @@ class TestActionCompleter:
 
         # Should include describe action but not create (fallback behavior)
         assert "describe-instances" in result
+
+
+class TestActionCompleterEnhanced:
+    """Test enhanced completion validator with partial and split matching."""
+
+    def test_partial_string_match_middle(self):
+        """Test partial string matching in the middle of action name."""
+        result = _enhanced_completion_validator("get-caller-identity", "caller")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-session-token", "caller")
+        assert result is False
+
+    def test_partial_string_match_end(self):
+        """Test partial string matching at the end of action name."""
+        result = _enhanced_completion_validator("get-caller-identity", "identity")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-session-token", "identity")
+        assert result is False
+
+    def test_split_match_basic(self):
+        """Test split matching with basic example call-ide -> get-caller-identity."""
+        result = _enhanced_completion_validator("get-caller-identity", "call-ide")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-session-token", "call-ide")
+        assert result is False
+
+    def test_split_match_multiple_parts(self):
+        """Test split matching with ses-tok -> get-session-token."""
+        result = _enhanced_completion_validator("get-session-token", "ses-tok")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-caller-identity", "ses-tok")
+        assert result is False
+
+    def test_split_match_partial_segments(self):
+        """Test split matching with partial segments cal-iden -> get-caller-identity."""
+        result = _enhanced_completion_validator("get-caller-identity", "cal-iden")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-session-token", "cal-iden")
+        assert result is False
+
+    def test_prefix_matching_priority(self):
+        """Test that exact prefix match works."""
+        result = _enhanced_completion_validator("get-caller-identity", "get")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-session-token", "get")
+        assert result is True
+
+        result = _enhanced_completion_validator("assume-role", "get")
+        assert result is False
+
+    def test_case_insensitive_matching(self):
+        """Test that matching is case insensitive."""
+        result = _enhanced_completion_validator("get-caller-identity", "caller")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-caller-identity", "CALLER")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-caller-identity", "CaLLer")
+        assert result is True
+
+        result = _enhanced_completion_validator("GET-CALLER-IDENTITY", "caller")
+        assert result is True
+
+    def test_empty_input_returns_true(self):
+        """Test that empty input returns True (shows all options)."""
+        result = _enhanced_completion_validator("get-caller-identity", "")
+        assert result is True
+
+        result = _enhanced_completion_validator("any-action", "")
+        assert result is True
+
+    def test_no_matches_returns_false(self):
+        """Test that non-matching input returns False."""
+        result = _enhanced_completion_validator("get-caller-identity", "xyz123")
+        assert result is False
+
+        result = _enhanced_completion_validator("get-session-token", "nonexistent")
+        assert result is False
+
+    def test_split_match_with_empty_parts(self):
+        """Test split matching handles empty parts correctly (e.g., 'call--ide')."""
+        result = _enhanced_completion_validator("get-caller-identity", "call--ide")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-session-token", "call--ide")
+        assert result is False
+
+    def test_split_match_requires_multiple_parts(self):
+        """Test that split matching only applies when input has multiple parts."""
+        # Single part should use substring matching only
+        result = _enhanced_completion_validator("get-caller-identity", "caller")
+        assert result is True
+
+        # Multi-part should use split matching
+        result = _enhanced_completion_validator("get-caller-identity", "get-caller")
+        assert result is True
+
+        result = _enhanced_completion_validator("get-caller-identity", "caller-identity")
+        assert result is True
+
+    def test_action_completer_returns_all_operations(self):
+        """Test that action_completer now returns all operations without filtering."""
+        with patch("awsquery.cli.validate_readonly") as mock_validate, patch(
+            "botocore.session.Session"
+        ) as mock_session_class, patch.dict("os.environ", {}, clear=True):
+            mock_session = MagicMock()
+            mock_session.get_available_services.return_value = ["sts"]
+            mock_service_model = MagicMock()
+            mock_service_model.operation_names = ["GetCallerIdentity", "GetSessionToken"]
+            mock_session.get_service_model.return_value = mock_service_model
+            mock_session_class.return_value = mock_session
+            mock_validate.return_value = True
+
+            parsed_args = argparse.Namespace(service="sts")
+
+            # Should return all operations regardless of prefix
+            result_all = action_completer("", parsed_args)
+            result_specific = action_completer("caller", parsed_args)
+            result_nonmatch = action_completer("xyz123", parsed_args)
+
+            # All should return the same complete list
+            expected = ["get-caller-identity", "get-session-token"]
+            assert result_all == expected
+            assert result_specific == expected
+            assert result_nonmatch == expected
+
+    @patch("awsquery.cli.warn")
+    @patch("awsquery.cli.validate_readonly")
+    @patch("botocore.session.Session")
+    @patch.dict("os.environ", {}, clear=True)
+    def test_action_completer_warns_on_common_prefix_with_split_matching(
+        self, mock_session_class, mock_validate, mock_warn
+    ):
+        """Test that action_completer warns with split matching and common prefix."""
+        mock_session = MagicMock()
+        mock_session.get_available_services.return_value = ["elasticache"]
+        mock_service_model = MagicMock()
+        mock_service_model.operation_names = [
+            "DescribeReplicationGroups",
+            "DescribeGlobalReplicationGroups",
+        ]
+        mock_session.get_service_model.return_value = mock_service_model
+        mock_session_class.return_value = mock_session
+        mock_validate.return_value = True
+
+        parsed_args = argparse.Namespace(service="elasticache")
+
+        # This should trigger a warning because:
+        # - "repli-group" matches both commands via split matching
+        # - Common prefix "describe-" (9 chars) <= input "repli-group" (11 chars)
+        result = action_completer("repli-group", parsed_args)
+
+        # Should return all valid operations
+        expected = ["describe-global-replication-groups", "describe-replication-groups"]
+        assert result == expected
+
+        # Should have called warn with the matching operations
+        mock_warn.assert_called_once()
+        call_args = mock_warn.call_args[0][0]
+        assert "repli-group" in call_args
+        assert "describe-replication-groups" in call_args
+        assert "describe-global-replication-groups" in call_args
