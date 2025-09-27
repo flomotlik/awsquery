@@ -137,15 +137,15 @@ class TestValidateReadonlyEdgeCases:
 class TestCompatibility:
     """Test compatibility functions."""
 
-    def test_validate_security_legacy(self):
-        """Test legacy validate_security always returns True."""
-        from awsquery.security import validate_security
+    def test_action_to_policy_format_legacy(self):
+        """Test action_to_policy_format function exists for compatibility."""
+        from awsquery.security import action_to_policy_format
 
-        # Should always return True regardless of inputs
-        assert validate_security("ec2", "DescribeInstances", set())
-        assert validate_security("ec2", "TerminateInstances", set())
-        assert validate_security("s3", "DeleteBucket", {"s3:ListBuckets"})
-        assert validate_security("", "", None)
+        # Test PascalCase conversion
+        assert action_to_policy_format("describe-instances") == "DescribeInstances"
+        assert action_to_policy_format("get-bucket-policy") == "GetBucketPolicy"
+        assert action_to_policy_format("list-objects-v2") == "ListObjectsV2"
+        assert action_to_policy_format("DescribeInstances") == "DescribeInstances"
 
     def test_action_to_policy_format(self):
         """Test action format conversion."""
