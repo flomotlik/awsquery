@@ -24,6 +24,3 @@ services:
     tty: true
     working_dir: /app
 
-  # Legacy service name for backward compatibility
-  awsquery:
-    extends: awsquery-dev

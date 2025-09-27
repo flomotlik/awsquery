@@ -1,13 +1,15 @@
 """Command-line interface for AWS Query Tool."""
 
+# pylint: disable=too-many-lines
+
 import argparse
 import os
 import re
 import sys
+from typing import Any, List, Optional, Tuple
 
 import argcomplete
 import boto3
-from argcomplete import warn
 
 from .config import apply_default_filters
 from .core import (
@@ -33,9 +35,158 @@ from .security import (
 )
 from .utils import create_session, debug_print, get_aws_services, sanitize_input
 
+# Global variable to store current completion context for smart prefix matching
+_current_completion_context = {"operations": [], "current_input": ""}
+
+
+def parse_parameter_string(param_str):
+    """Parse parameter string into Python objects for boto3 API calls.
+
+    Examples:
+    - "Key=Value" -> {"Key": "Value"}
+    - "Values=a,b,c" -> {"Values": ["a", "b", "c"]}
+    - Complex structures with ; and , delimiters for nested objects
+    """
+    if not param_str or not param_str.strip():
+        raise ValueError("Invalid parameter format: empty parameter string")
+
+    param_str = param_str.strip()
+
+    # Split on first '=' to get key and value
+    if "=" not in param_str:
+        raise ValueError("Invalid parameter format: missing '=' separator")
+
+    key, value = param_str.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+
+    if not key:
+        raise ValueError("Invalid parameter format: empty parameter key")
+
+    # Parse the value based on its structure
+    parsed_value = _parse_parameter_value(value)
+
+    return {key: parsed_value}
+
+
+def _parse_parameter_value(value):
+    """Parse a parameter value, handling type conversion and complex structures."""
+    if not value:
+        return ""
+
+    # Check for complex structure with semicolons (list of dicts)
+    if ";" in value and "," in value:
+        # This is likely a list of objects like ParameterFilters
+        return _parse_list_of_dicts(value)
+
+    # Check for comma-separated key=value pairs (single dict in a list)
+    if "," in value and "=" in value:
+        # Check if all comma-separated items contain '=' (indicating key=value pairs)
+        items = [item.strip() for item in value.split(",")]
+        if all("=" in item for item in items if item):
+            # This is a single dictionary that should be wrapped in a list
+            # Parse as key=value pairs into a single dict
+            single_dict = {}
+            for item in items:
+                if "=" in item:
+                    k, v = item.split("=", 1)
+                    k = k.strip()
+                    v = v.strip()
+                    if k:
+                        single_dict[k] = _convert_type(v)
+            return [single_dict] if single_dict else []
+
+    # Check for simple comma-separated list
+    if "," in value:
+        # Split and clean each item
+        items = [item.strip() for item in value.split(",")]
+        # Apply type conversion to each item
+        return [_convert_type(item) for item in items if item]
+
+    # Single value - apply type conversion
+    return _convert_type(value)
+
+
+def _parse_list_of_dicts(value):
+    """Parse semicolon-separated list of comma-separated key=value pairs."""
+    result = []
+
+    # Split by semicolons to get individual objects
+    dict_strings = [s.strip() for s in value.split(";") if s.strip()]
+
+    for dict_str in dict_strings:
+        if not dict_str:
+            continue
+
+        # Parse each object as comma-separated key=value pairs
+        obj = {}
+        pairs = [pair.strip() for pair in dict_str.split(",") if pair.strip()]
+
+        for pair in pairs:
+            if "=" not in pair:
+                continue
+
+            pair_key, pair_value = pair.split("=", 1)
+            pair_key = pair_key.strip()
+            pair_value = pair_value.strip()
+
+            if not pair_key:
+                continue
+
+            # Special handling for Values field - it should be a list
+            if pair_key == "Values":
+                # If there are more values after this, they should be collected
+                remaining_values = []
+                # Look for additional values in subsequent pairs
+                value_start_index = pairs.index(pair)
+                for i in range(value_start_index + 1, len(pairs)):
+                    next_pair = pairs[i]
+                    if "=" in next_pair:
+                        break  # This is a new key=value pair
+                    remaining_values.append(_convert_type(next_pair.strip()))
+
+                # Create the Values list
+                values_list = [_convert_type(pair_value)]
+                values_list.extend(remaining_values)
+                obj[pair_key] = values_list
+
+                # Remove processed values from pairs list
+                for _ in remaining_values:
+                    if pairs:
+                        pairs.pop(value_start_index + 1)
+            else:
+                obj[pair_key] = _convert_type(pair_value)
+
+        if obj:
+            result.append(obj)
+
+    return result
+
+
+def _convert_type(value):
+    """Convert string value to appropriate Python type."""
+    if not isinstance(value, str):
+        return value
+
+    value = value.strip()
+
+    # Boolean conversion
+    if value.lower() == "true":
+        return True
+    if value.lower() == "false":
+        return False
+
+    # Integer conversion
+    if value.isdigit():
+        return int(value)
+
+    # Keep as string
+    return value
+
+
 # CLI flag constants
 SIMPLE_FLAGS = ["-d", "--debug", "-j", "--json", "-k", "--keys", "--allow-unsafe"]
-VALUE_FLAGS = ["--region", "--profile"]
+VALUE_FLAGS = ["--region", "--profile", "-p", "--parameter", "-i", "--input"]
 
 
 def _extract_flags_from_args(remaining_args):
@@ -202,8 +353,99 @@ def determine_column_filters(column_filters, service, action):
     return None
 
 
+def _has_prefix_matches(current_input, available_operations):
+    """Check if any available operations start with the current input."""
+    if not current_input or not available_operations:
+        return False
+
+    current_input_lower = current_input.lower()
+    return any(op.lower().startswith(current_input_lower) for op in available_operations)
+
+
+def find_hint_function(hint, service, session=None):
+    """Find the best matching AWS function based on hint string.
+
+    Args:
+        hint: The hint string (e.g., "desc-clus" or "desc-clus:clusterarn")
+        service: AWS service name
+        session: Optional boto3 session
+
+    Returns:
+        tuple: (selected_function, field_hint, alternatives) or (None, None, []) if no matches
+        where field_hint is the suggested field to extract (or None for default heuristic)
+    """
+
+    if not hint or not service:
+        return None, None, []
+
+    # Parse hint format: function:field or just function
+    function_hint = hint
+    field_hint = None
+    if ":" in hint:
+        function_hint, field_hint = hint.split(":", 1)
+        field_hint = field_hint.strip() if field_hint else None
+
+    function_hint = function_hint.strip()
+    if not function_hint:
+        return None, None, []
+
+    try:
+        # Get all operations for the service first
+        import botocore.session
+
+        # Temporarily clear AWS_PROFILE to avoid validation errors
+        old_profile = os.environ.pop("AWS_PROFILE", None)
+        try:
+            session_temp = botocore.session.Session()
+            if service not in session_temp.get_available_services():
+                return None, []
+
+            service_model = session_temp.get_service_model(service)
+            all_operations = list(service_model.operation_names)
+        finally:
+            if old_profile is not None:
+                os.environ["AWS_PROFILE"] = old_profile
+
+        # Filter to only valid (readonly) operations
+        available_operations = get_service_valid_operations(service, all_operations)
+
+        if not available_operations:
+            return None, None, []
+
+        # Create mapping of CLI format to original operation names
+        operation_mapping = {}
+        for op in available_operations:
+            cli_format = op.replace("_", "-").lower()
+            operation_mapping[cli_format] = op
+
+        # Find all matches using the enhanced validator with function_hint
+        matched_cli_names = []
+        for cli_op in operation_mapping.keys():
+            if _enhanced_completion_validator(cli_op, function_hint):
+                matched_cli_names.append(cli_op)
+
+        if not matched_cli_names:
+            return None, None, []
+
+        # Sort by preference: shortest first, then alphabetical
+        matched_cli_names.sort(key=lambda x: (len(x), x))
+
+        # Return original operation names, not CLI format
+        selected_cli = matched_cli_names[0]
+        selected_operation = operation_mapping[selected_cli]
+
+        alternative_operations = []
+        for cli_name in matched_cli_names[1:]:
+            alternative_operations.append(operation_mapping[cli_name])
+
+        return selected_operation, field_hint, alternative_operations
+
+    except Exception:
+        return None, None, []
+
+
 def _enhanced_completion_validator(completion_candidate, current_input):
-    """Custom argcomplete validator for enhanced action matching."""
+    """Custom argcomplete validator for enhanced action matching with smart prefix priority."""
     if not current_input:
         return True
 
@@ -214,12 +456,19 @@ def _enhanced_completion_validator(completion_candidate, current_input):
     if candidate_lower.startswith(current_input_lower):
         return True
 
-    # 2. Partial substring match
+    # 2. Smart prefix matching: If any operations start with current_input,
+    #    exclude operations that only contain it as a substring
+    available_operations = _current_completion_context.get("operations", [])
+    if _has_prefix_matches(current_input, available_operations):
+        # Only allow prefix matches when prefix matches exist
+        return candidate_lower.startswith(current_input_lower)
+
+    # 3. Partial substring match (when no prefix matches exist)
     if current_input_lower in candidate_lower:
         return True
 
-    # 3. Split match - all parts must be found as substrings
-    parts = [part for part in current_input_lower.split("-") if part]  # Filter empty parts
+    # 4. Split match - all parts must be found as substrings
+    parts = [part for part in current_input_lower.split("-") if part]
     if len(parts) > 1 and all(part in candidate_lower for part in parts):
         return True
 
@@ -268,21 +517,165 @@ def action_completer(prefix, parsed_args, **kwargs):
         # Return all valid operations - let argcomplete validator handle filtering
         all_operations = sorted(cli_operations)
 
-        if prefix:
-            # Check what will actually match with our validator
-            matched = [op for op in all_operations if _enhanced_completion_validator(op, prefix)]
-
-            # If multiple matches share a common prefix shorter than input, warn user
-            if len(matched) > 1:
-                common = os.path.commonprefix(matched)
-                if common and len(common) <= len(prefix):
-                    # Show user what matches were found
-                    warn(f"Matches for '{prefix}': {', '.join(matched)}")
+        # Update global context for smart prefix matching
+        _current_completion_context["operations"] = all_operations
+        _current_completion_context["current_input"] = prefix or ""
 
         return all_operations
     except Exception:
         # If we can't get operations, return empty
         return []
+
+
+class CLIArgumentProcessor:
+    """Handles CLI argument processing and validation"""
+
+    def __init__(self) -> None:
+        """Initialize CLI argument processor."""
+        self.parser: Optional[argparse.ArgumentParser] = None
+        self.args: Optional[argparse.Namespace] = None
+        self.remaining: Optional[List[str]] = None
+
+    def create_parser(self) -> argparse.ArgumentParser:
+        """Create and configure the argument parser"""
+        self.parser = argparse.ArgumentParser(
+            description=(
+                "Query AWS APIs with flexible filtering and automatic parameter resolution"
+            ),  # pragma: no mutate
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+            epilog="""  # pragma: no mutate
+Examples:
+  awsquery ec2 describe_instances prod web -- Tags.Name State InstanceId
+  awsquery s3 list_buckets backup
+  awsquery ec2 describe_instances  (shows available keys)
+  awsquery cloudformation describe-stack-events prod -- Created -- StackName (multi-level)
+  awsquery ec2 describe_instances --keys  (show all keys)
+  awsquery cloudformation describe-stack-resources workers --keys -- EKS (multi-level keys)
+  awsquery ec2 describe_instances --debug  (enable debug output)
+  awsquery cloudformation describe-stack-resources workers --debug -- EKS (debug multi-level)
+        """,
+        )
+
+        self.parser.add_argument(
+            "-j",
+            "--json",
+            action="store_true",
+            help="Output results in JSON format instead of table",  # pragma: no mutate
+        )
+        self.parser.add_argument(
+            "-k",
+            "--keys",
+            action="store_true",
+            help="Show all available keys for the command",  # pragma: no mutate
+        )
+        self.parser.add_argument(
+            "-d", "--debug", action="store_true", help="Enable debug output"
+        )  # pragma: no mutate
+        self.parser.add_argument(
+            "--region", help="AWS region to use for requests"
+        )  # pragma: no mutate
+        self.parser.add_argument(
+            "--profile", help="AWS profile to use for requests"
+        )  # pragma: no mutate
+        self.parser.add_argument(
+            "-p",
+            "--parameter",
+            action="append",
+            help="Add parameter to AWS API call (e.g., -p InstanceIds=i-123,i-456)",
+        )  # pragma: no mutate
+        self.parser.add_argument(
+            "-i",
+            "--input",
+            help="Hint for multi-step call function selection (e.g., -i desc-clus)",
+        )  # pragma: no mutate
+        self.parser.add_argument(
+            "--allow-unsafe",
+            action="store_true",
+            help="Allow potentially unsafe operations without prompting",  # pragma: no mutate
+        )
+        self.parser.add_argument(
+            "service", nargs="?", help="AWS service name (e.g., ec2, s3)"
+        )  # pragma: no mutate
+        self.parser.add_argument(
+            "action", nargs="?", help="AWS action/operation name"
+        )  # pragma: no mutate
+
+        # Enable autocompletion
+        argcomplete.autocomplete(self.parser)
+
+        return self.parser
+
+    def parse_initial_args(self) -> Tuple[argparse.Namespace, List[str]]:
+        """Parse initial arguments and handle reordering if needed"""
+        if not self.parser:
+            self.create_parser()
+
+        if self.parser is None:
+            raise RuntimeError("Failed to create argument parser")
+
+        self.args, self.remaining = self.parser.parse_known_args()
+
+        if self.remaining:
+            self._reorder_arguments()
+
+        return self.args, self.remaining
+
+    def _reorder_arguments(self) -> None:
+        """Reorder arguments to handle flags mixed with positional args"""
+        if self.args is None or self.remaining is None:
+            raise RuntimeError("Arguments must be parsed before reordering")
+
+        # Check if -- separator was in the original command line
+        has_separator = "--" in sys.argv
+        separator_in_remaining = "--" in self.remaining
+
+        # Re-parse with the full argument list to catch all flags
+        reordered_argv = [sys.argv[0]]  # Program name
+        flags = []
+        non_flags = []
+
+        # Preserve flags that were already successfully parsed
+        if self.args.debug:
+            flags.append("-d")
+        if getattr(self.args, "json", False):
+            flags.append("-j")
+        if getattr(self.args, "keys", False):
+            flags.append("-k")
+        if getattr(self.args, "allow_unsafe", False):
+            flags.append("--allow-unsafe")
+        if getattr(self.args, "region", None):
+            flags.extend(["--region", self.args.region])
+        if getattr(self.args, "profile", None):
+            flags.extend(["--profile", self.args.profile])
+        if getattr(self.args, "parameter", None):
+            for param in self.args.parameter:
+                flags.extend(["-p", param])
+        if getattr(self.args, "input", None):
+            flags.extend(["-i", self.args.input])
+
+        # Process remaining arguments based on separator presence
+        if has_separator and not separator_in_remaining:
+            extracted_flags, non_flags = _process_remaining_args_after_separator(self.remaining)
+            flags.extend(extracted_flags)
+            if non_flags and "--" not in non_flags:
+                non_flags.insert(0, "--")
+        else:
+            extracted_flags, non_flags = _process_remaining_args(self.remaining)
+            flags.extend(extracted_flags)
+
+        # Rebuild argv with proper order
+        reordered_argv.extend(flags)
+        if self.args.service:
+            reordered_argv.append(self.args.service)
+        if self.args.action:
+            reordered_argv.append(self.args.action)
+
+        # Re-parse with reordered arguments
+        if self.parser is None:
+            raise RuntimeError("Parser not available for reordering")
+
+        self.args, _ = self.parser.parse_known_args(reordered_argv[1:])
+        self.remaining = non_flags
 
 
 def main():
@@ -321,6 +714,17 @@ Examples:
     )  # pragma: no mutate
     parser.add_argument("--region", help="AWS region to use for requests")  # pragma: no mutate
     parser.add_argument("--profile", help="AWS profile to use for requests")  # pragma: no mutate
+    parser.add_argument(
+        "-p",
+        "--parameter",
+        action="append",
+        help="Add parameter to AWS API call (e.g., -p InstanceIds=i-123,i-456)",
+    )  # pragma: no mutate
+    parser.add_argument(
+        "-i",
+        "--input",
+        help="Hint for multi-step call function selection (e.g., -i desc-clus)",
+    )  # pragma: no mutate
     parser.add_argument(
         "--allow-unsafe",
         action="store_true",
@@ -370,6 +774,11 @@ Examples:
             flags.extend(["--region", args.region])
         if getattr(args, "profile", None):
             flags.extend(["--profile", args.profile])
+        if getattr(args, "parameter", None):
+            for param in args.parameter:
+                flags.extend(["-p", param])
+        if getattr(args, "input", None):
+            flags.extend(["-i", args.input])
 
         # If -- was in original but not in remaining, it means everything
         # in remaining is after the -- separator
@@ -403,7 +812,7 @@ Examples:
     # Set debug mode globally
     from . import utils
 
-    utils.debug_enabled = args.debug
+    utils.set_debug_enabled(args.debug)
 
     # Build the argv for filter parsing (service, action, and remaining arguments)
     # But exclude any flags that were already processed
@@ -423,6 +832,62 @@ Examples:
     resource_filters = [sanitize_input(f) for f in resource_filters] if resource_filters else []
     value_filters = [sanitize_input(f) for f in value_filters] if value_filters else []
     column_filters = [sanitize_input(f) for f in column_filters] if column_filters else []
+
+    # Parse -p parameters if provided
+    parsed_parameters = {}
+    if args.parameter:
+        for param_str in args.parameter:
+            try:
+                param_dict = parse_parameter_string(param_str)
+                parsed_parameters.update(param_dict)
+            except ValueError as e:
+                print(f"ERROR: Invalid parameter format '{param_str}': {e}", file=sys.stderr)
+                sys.exit(1)
+
+    debug_print(f"DEBUG: Parsed parameters: {parsed_parameters}")  # pragma: no mutate
+
+    # Process -i hint if provided
+    hint_function = None
+    hint_field = None
+    hint_alternatives = []
+    if args.input:
+        hint_function, hint_field, hint_alternatives = find_hint_function(
+            args.input, service, session=None
+        )
+        if hint_function:
+            # Convert hint function to CLI format for display
+            from .utils import pascal_to_kebab_case
+
+            hint_function_cli = pascal_to_kebab_case(hint_function)
+            if hint_field:
+                print(
+                    f"Using hint function '{hint_function_cli}' with field '{hint_field}' "
+                    f"for multi-step calls",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"Using hint function '{hint_function_cli}' for multi-step calls",
+                    file=sys.stderr,
+                )
+            if hint_alternatives:
+                # Convert alternatives to CLI format for display
+                cli_alternatives = [pascal_to_kebab_case(alt) for alt in hint_alternatives]
+                print(f"Alternative options: {', '.join(cli_alternatives)}", file=sys.stderr)
+            debug_print(
+                f"DEBUG: Hint '{args.input}' matched function: {hint_function}"
+            )  # pragma: no mutate
+            if hint_alternatives:
+                cli_alternatives_debug = [pascal_to_kebab_case(alt) for alt in hint_alternatives]
+                debug_print(
+                    f"DEBUG: Alternative matches: {', '.join(cli_alternatives_debug)}"
+                )  # pragma: no mutate
+        else:
+            print(
+                f"Warning: Hint '{args.input}' did not match any available functions",
+                file=sys.stderr,
+            )
+            debug_print(f"DEBUG: Hint '{args.input}' found no matches")  # pragma: no mutate
 
     # Validate operation safety (only if we have a non-empty action)
     if (
@@ -450,7 +915,9 @@ Examples:
 
         try:
             # Use tracking to get keys from the last successful request
-            call_result = execute_with_tracking(service, action, session=session)
+            call_result = execute_with_tracking(
+                service, action, parameters=parsed_parameters, session=session
+            )
 
             # If the initial call failed, try multi-level resolution
             if not call_result.final_success:
@@ -466,6 +933,9 @@ Examples:
                     multi_resource_filters,
                     multi_value_filters,
                     multi_column_filters,
+                    session=session,
+                    hint_function=hint_function,
+                    hint_field=hint_field,
                 )
 
             result = show_keys_from_result(call_result)
@@ -476,12 +946,12 @@ Examples:
             sys.exit(1)
 
     try:
-        debug_print(f"Using single-level execution first")  # pragma: no mutate
-        response = execute_aws_call(service, action, session=session)
+        debug_print("Using single-level execution first")  # pragma: no mutate
+        response = execute_aws_call(service, action, parameters=parsed_parameters, session=session)
 
         if isinstance(response, dict) and "validation_error" in response:
             debug_print(
-                f"ValidationError detected in single-level call, switching to multi-level"
+                "ValidationError detected in single-level call, switching to multi-level"
             )  # pragma: no mutate
             _, multi_resource_filters, multi_value_filters, multi_column_filters = (
                 parse_multi_level_filters_for_mode(filter_argv, mode="multi")
@@ -502,6 +972,8 @@ Examples:
                 multi_value_filters,
                 final_multi_column_filters,
                 session,
+                hint_function,
+                hint_field,
             )
             debug_print(
                 f"Multi-level call completed with {len(filtered_resources)} resources"
@@ -519,7 +991,7 @@ Examples:
         if args.keys:
             sorted_keys = extract_and_sort_keys(filtered_resources)
             output = "\n".join(f"  {key}" for key in sorted_keys)
-            print(f"All available keys:", file=sys.stderr)
+            print("All available keys:", file=sys.stderr)
             print(output)
         else:
             if args.json:

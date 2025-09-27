@@ -90,22 +90,18 @@ def _is_aws_tags_structure(value):
     )
 
 
-def transform_tags_structure(data, visited=None):
-    """Transform AWS Tag lists to searchable maps recursively with circular reference protection
+def transform_tags_structure(data, max_depth=10, current_depth=0):
+    """Transform AWS Tag lists to searchable maps recursively with depth limiting
 
     Converts Tags from [{"Key": "Name", "Value": "web-server"}] format
     to {"Name": "web-server"} format for easier searching and filtering.
     Preserves original data alongside transformed data for debugging.
     """
-    if visited is None:
-        visited = set()
-
-    # Circular reference protection
-    if isinstance(data, (dict, list)) and id(data) in visited:
-        return data  # Return original to avoid infinite recursion
+    # Depth limiting prevents infinite recursion
+    if current_depth > max_depth:
+        return data
 
     if isinstance(data, dict):
-        visited.add(id(data))
         result = {}
         for key, value in data.items():
             if key == "Tags" and _is_aws_tags_structure(value):
@@ -119,14 +115,10 @@ def transform_tags_structure(data, visited=None):
                 )  # pragma: no mutate
             else:
                 # Recursively transform nested structures
-                result[key] = transform_tags_structure(value, visited)
-        visited.remove(id(data))
+                result[key] = transform_tags_structure(value, max_depth, current_depth + 1)
         return result
     elif isinstance(data, list):
-        visited.add(id(data))
-        list_result = [transform_tags_structure(item, visited) for item in data]
-        visited.remove(id(data))
-        return list_result
+        return [transform_tags_structure(item, max_depth, current_depth + 1) for item in data]
     else:
         return data
 
@@ -431,15 +423,3 @@ def show_keys(service, action):
 
     sorted_keys = extract_and_sort_keys(resources)
     return "\n".join(f"  {key}" for key in sorted_keys)
-
-
-def convert_parameter_name(parameter_name):
-    """Convert parameter name from camelCase to PascalCase for AWS API compatibility"""
-    if not parameter_name:
-        return parameter_name
-
-    return (
-        parameter_name[0].upper() + parameter_name[1:]
-        if len(parameter_name) > 0
-        else parameter_name
-    )

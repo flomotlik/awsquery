@@ -6,10 +6,8 @@ from awsquery.formatters import filter_columns, format_json_output, format_table
 
 
 class TestColumnOrderingConsistency:
-    """Test that column ordering is consistent across runs."""
 
     def test_default_filter_order_preserved_in_table(self):
-        """Test that default filter order from config is preserved in table output."""
         resources = [
             {
                 "InstanceId": "i-123",
@@ -71,7 +69,6 @@ class TestColumnOrderingConsistency:
         assert headers == expected_order
 
     def test_user_specified_filter_order_preserved(self):
-        """Test that user-specified column filter order is preserved."""
         resources = [
             {"Name": "bucket1", "CreationDate": "2024-01-01", "Region": "us-east-1", "Size": 1000},
             {"Name": "bucket2", "CreationDate": "2024-01-02", "Region": "us-west-2", "Size": 2000},
@@ -100,7 +97,6 @@ class TestColumnOrderingConsistency:
         assert headers == ["Size", "Name", "Region", "CreationDate"]
 
     def test_no_filters_consistent_alphabetical_order(self):
-        """Test that without filters, columns are in consistent alphabetical order."""
         resources = [{"Zebra": "z1", "Alpha": "a1", "Charlie": "c1", "Bravo": "b1"}]
 
         # No column filters
@@ -123,7 +119,6 @@ class TestColumnOrderingConsistency:
         assert headers == ["Alpha", "Bravo", "Charlie", "Zebra"]
 
     def test_filter_columns_preserves_order(self):
-        """Test that filter_columns function preserves the order of filters."""
         data = {
             "field4": "val4",
             "field1": "val1",
@@ -149,7 +144,6 @@ class TestColumnOrderingConsistency:
         assert results[0] == ["field2", "field4", "field1"]
 
     def test_json_output_preserves_filter_order(self):
-        """Test that JSON output preserves column filter order."""
         resources = [{"Name": "item1", "Status": "active", "Id": "123", "Type": "A"}]
 
         column_filters = ["Type", "Id", "Name", "Status"]
@@ -171,7 +165,6 @@ class TestColumnOrderingConsistency:
         assert outputs[0] == ["Type", "Id", "Name", "Status"]
 
     def test_pattern_filters_preserve_order(self):
-        """Test that pattern-based filters preserve order."""
         resources = [
             {
                 "InstanceId": "i-123",

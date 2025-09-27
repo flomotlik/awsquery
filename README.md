@@ -18,9 +18,9 @@ the data you need during review, debugging or development.
 - **Flexible Filtering**: Multi-level filtering with `--` separators for resource, value, and column filters
 - **Partial Matching**: All filters use case-insensitive partial matching (both value and column filters)
 - **Keys Discovery**: Show all available fields from any API response with `-k`/`--keys` (fixed to show keys from successful responses)
-- **Debug Mode**: Comprehensive debug output with `-d`/`--debug`
-- **Security Validation**: Enforces ReadOnly AWS policy with wildcard pattern matching
-- **Auto-completion**: Tab completion for AWS services and actions (filtered by security policy)
+- **Debug Mode**: Comprehensive debug output with `-d`/`--debug` featuring structured output with timestamps and DebugContext tracking
+- **Security Validation**: Enforces ReadOnly AWS operations with comprehensive validation
+- **Smart Auto-completion**: Enhanced tab completion with split matching and prefix priority for AWS services and actions
 - **Smart Parameter Extraction**: Handles both specific fields and standard AWS field patterns (Name, Id, Arn)
 - **Intelligent Response Processing**: Clean extraction of list data, ignoring metadata
 - **Tabular Output**: Customizable column display with automatic filtering
@@ -28,6 +28,8 @@ the data you need during review, debugging or development.
 - **Region/Profile Support**: AWS CLI-compatible `--region` and `--profile` arguments for session management
 - **Tag Transformation**: Automatic conversion of AWS Tags list to key-value pairs for better readability
 - **Default Column Filters**: Configuration-based default columns for common AWS queries
+- **Parameter Passing**: Direct parameter passing to AWS APIs with `-p`/`--parameter` for advanced use cases
+- **Hint-Based Resolution**: Function selection hints with `-i`/`--input` for multi-step calls, including field extraction targeting
 
 ## Installation
 
@@ -75,12 +77,19 @@ After adding the appropriate line to your shell configuration, restart your shel
 source ~/.bashrc  # or ~/.zshrc, etc.
 ```
 
-Now you can use tab completion:
+Now you can use enhanced tab completion with smart matching:
 ```bash
 awsquery <TAB>              # Shows available services
 awsquery ec2 <TAB>          # Shows available ec2 actions
 awsquery s3 list-<TAB>      # Shows s3 list actions
+awsquery ec2 desc-inst<TAB> # Smart completion: "desc-inst" matches "describe-instances"
+awsquery cloudformation des-sta<TAB> # Matches "describe-stacks"
 ```
+
+The autocomplete system now features:
+- **Split matching**: "desc-inst" matches "describe-instances"
+- **Prefix priority**: Exact prefix matches are prioritized over substring matches
+- **Security filtering**: Only shows ReadOnly operations
 
 ## Usage
 
@@ -114,14 +123,15 @@ awsquery --keys s3 list-buckets
 # List available services
 awsquery
 
-# Debug mode for troubleshooting
+# Debug mode for troubleshooting with enhanced DebugContext output
+# Shows structured debug information with timestamps and execution flow
 awsquery -d ec2 describe-instances
 ```
 
 ## Command Structure
 
 ```
-awsquery [-j|--json] [-k|--keys] [-d|--debug] [--region REGION] [--profile PROFILE] SERVICE ACTION [VALUE_FILTERS...] [-- TABLE_OUTPUT_FILTERS...]
+awsquery [-j|--json] [-k|--keys] [-d|--debug] [-p PARAM] [-i HINT] [--region REGION] [--profile PROFILE] SERVICE ACTION [VALUE_FILTERS...] [-- TABLE_OUTPUT_FILTERS...]
 ```
 
 - **SERVICE**: AWS service name (ec2, s3, iam, etc.)
@@ -131,17 +141,18 @@ awsquery [-j|--json] [-k|--keys] [-d|--debug] [--region REGION] [--profile PROFI
 - **-j, --json**: Output results in JSON format instead of table
 - **-k, --keys**: Show all available keys for the command
 - **-d, --debug**: Enable debug output for troubleshooting
+- **-p, --parameter PARAM**: Pass parameters directly to AWS API (key=value format)
+- **-i, --input HINT**: Hint for multi-step function selection (e.g., "desc-clus" or "desc-clus:fieldname")
 - **--region REGION**: AWS region to use for requests (e.g., us-west-2)
 - **--profile PROFILE**: AWS profile to use from ~/.aws/credentials
 
 ## Security
 
-- **ReadOnly Enforcement**: Only AWS ReadOnly policy actions are permitted
+- **ReadOnly Enforcement**: Only AWS ReadOnly operations are permitted
 - **Input Sanitization**: Prevents injection attacks through parameter validation
-- **Policy Validation**: All actions validated against policy.json before execution
+- **Operation Validation**: All actions validated before execution
 - **Wildcard Matching**: Supports AWS IAM wildcard patterns (e.g., `ec2:Describe*`)
 - **Session Isolation**: Each profile/region maintains separate boto3 sessions
-- **Automatic Policy Updates**: Can fetch latest AWS ReadOnly policy via `make update-policy`
 - **Security Testing**: Comprehensive test suite validates security constraints
 
 ## Examples
@@ -163,13 +174,16 @@ awsquery s3 list-buckets backup
 # Filters: "prod" in stack data, columns containing "Created" or "StackName"
 awsquery cloudformation describe-stack-events prod -- Created StackName
 
+# Targeted field extraction with hint for multi-step calls
+awsquery elbv2 describe-tags -i desc-clus:clusterarn prod
+
 # Discover all available keys
 awsquery -k ec2 describe-instances
 
 # JSON output with filtering (partial column name matching)
 awsquery -j ec2 describe-instances prod -- InstanceId State.Name
 
-# Debug mode for troubleshooting
+# Debug mode with enhanced output showing parameter resolution and API calls
 awsquery -d cloudformation describe-stack-resources workers -- EKS
 
 # Use specific AWS region
@@ -184,6 +198,47 @@ awsquery --region us-east-2 --profile dev ec2 describe-vpcs
 # View transformed tags (partial match on column names)
 # Shows any column containing "Tags.Name" or "Tags.Environment"
 awsquery ec2 describe-instances -- Tags.Name Tags.Environment
+
+# CloudTrail LookupEvents with complex parameter structures
+# Filter events by event name with automatic type conversion
+awsquery cloudtrail lookup-events -p LookupAttributes=AttributeKey=EventName,AttributeValue=ConsoleLogin
+
+# Multiple CloudTrail attributes using semicolon separation
+awsquery cloudtrail lookup-events -p LookupAttributes=AttributeKey=EventName,AttributeValue=AssumeRole;AttributeKey=Username,AttributeValue=admin
+
+# CloudTrail with time range and resource type filtering
+awsquery cloudtrail lookup-events -p StartTime=2024-01-01 -p EndTime=2024-01-31 -p LookupAttributes=AttributeKey=ResourceType,AttributeValue=AWS::S3::Bucket
+
+### Advanced Parameter Passing
+
+# Pass specific parameters to AWS API calls
+awsquery ec2 describe-instances -p MaxResults=10
+awsquery ec2 describe-instances -p InstanceIds=i-123,i-456 -p MaxResults=5
+
+# Complex parameter structures for SSM with automatic type conversion
+awsquery ssm describe-parameters -p ParameterFilters=Key=Name,Option=Contains,Values=Ubuntu,2024
+
+# Multiple complex structures using semicolon separation
+awsquery ssm describe-parameters -p ParameterFilters=Key=Name,Option=Contains,Values=Ubuntu;Key=Type,Option=Equal,Values=String
+
+# Complex structures with nested arrays and type conversion
+awsquery ec2 describe-instances -p Filters=Name=instance-state-name,Values=running,stopped;Name=tag:Environment,Values=prod,staging
+
+### Hint-Based Multi-Step Resolution
+
+# Use hints to guide automatic parameter resolution
+# When describe-tags needs resource ARNs, hint at using describe-clusters
+awsquery elbv2 describe-tags -i desc-clus prod
+
+# CloudFormation stack resources with hint for stack selection
+awsquery cloudformation describe-stack-resources -i desc-stacks production
+
+# ECS service details with task definition hint
+awsquery ecs describe-services -i desc-task web-service
+
+# Field-specific extraction with function:field format
+awsquery elbv2 describe-tags -i desc-clus:clusterarn prod  # Extract ClusterArn specifically
+awsquery eks describe-fargate-profile -i desc-clus:rolearn  # Extract RoleArn instead of default
 ```
 
 ## Configuration
@@ -198,8 +253,9 @@ Ensure AWS credentials are configured via:
 
 ### Default Filters Configuration
 
-The tool uses `default_filters.yaml` to define default columns for common queries. This file is loaded from the package directory and will
-provide you with standard columns if you don't add any.
+The tool uses `default_filters.yaml` to define default columns for common queries. This comprehensive configuration file (3000+ lines)
+provides extensive pre-configured filters for dozens of AWS services, loaded from the package directory to provide you with standard
+columns if you don't add any.
 
 Example configuration:
 ```yaml
@@ -236,31 +292,27 @@ make coverage
 # Run specific test categories
 make test-unit
 make test-integration
-make test-critical  # Run critical path tests only
+make test-critical  # Run all tests (comprehensive test suite)
 
 # Code formatting and linting
 make format
 make format-check  # Check without modifying
 make lint
-make type-check
+make type-check    # Run mypy type checking
 make security-check  # Run security analysis
+
+# Mutation testing
+make mutmut        # Run mutation tests
+make mutmut-results # Show mutation test results
+make mutmut-html   # Generate HTML mutation test report
 
 # Pre-commit hooks
 make pre-commit  # Run all pre-commit hooks
 
 # Continuous Integration
-make ci  # Run all CI checks
+make ci  # Run comprehensive CI pipeline (tests, linting, type-check, security)
 ```
 
-### Policy Management
-
-```bash
-# Update policy.json with latest AWS ReadOnly managed policy
-make update-policy
-
-# Validate policy.json structure
-make validate-policy
-```
 
 ### Docker Usage
 
@@ -370,6 +422,52 @@ awsquery cloudformation describe-stack-events production
 awsquery cloudformation describe-stack-resources prod -- Lambda
 ```
 
+### Parameter Passing (`-p`/`--parameter`)
+
+Pass parameters directly to AWS API calls using the `-p` flag. This is useful for fine-tuning API behavior:
+
+```bash
+# Limit results for large responses
+awsquery ec2 describe-instances -p MaxResults=20
+
+# Filter specific resources by ID
+awsquery ec2 describe-instances -p InstanceIds=i-1234567890abcdef0,i-0987654321fedcba0
+
+# Multiple parameters (can use multiple -p flags)
+awsquery elbv2 describe-load-balancers -p PageSize=10 -p Names=my-alb
+
+# Complex parameter structures (for APIs like SSM)
+awsquery ssm describe-parameters -p ParameterFilters=Key=Name,Option=Contains,Values=Ubuntu
+```
+
+**Parameter Format:**
+- Simple: `Key=Value`
+- Lists: `Key=Value1,Value2,Value3`
+- Complex structures: Use semicolons to separate multiple objects (e.g., `Key1=Val1,Val2;Key2=Val3`)
+- Type conversion: Numbers and booleans are automatically converted
+- Nested structures: Comma-separated values within objects, semicolon-separated objects
+- CloudTrail example: `LookupAttributes=AttributeKey=EventName,AttributeValue=Login;AttributeKey=Username,AttributeValue=admin`
+
+### Hint-Based Resolution (`-i`/`--input`)
+
+Guide multi-step parameter resolution with function hints:
+
+```bash
+# Basic function hint - guides which list operation to use
+awsquery cloudformation describe-stack-resources -i list-sta production
+
+# Field extraction hint - specify exact field to extract
+awsquery elbv2 describe-tags -i desc-clus:clusterarn prod
+
+# Override default field selection
+awsquery eks describe-fargate-profile -i desc-clus:rolearn my-cluster
+```
+
+**Key Features:**
+- **Smart matching**: "desc-inst" matches "describe-instances"
+- **Field targeting**: Use `function:field` to extract specific fields
+- **Automatic fallback**: Uses standard heuristics when no field specified
+
 ### Filtering Strategies
 
 ```bash
@@ -410,7 +508,7 @@ awsquery s3 list-buckets backup -- Name Creation
 **"Access Denied" errors**
 - Ensure your AWS credentials have ReadOnly permissions
 - Check if using the correct profile with `--profile`
-- Verify the action is in the ReadOnly policy
+- Verify the operation is permitted
 
 **"Parameter validation failed"**
 - Some APIs require specific parameters
@@ -424,7 +522,7 @@ awsquery s3 list-buckets backup -- Name Creation
 
 ## Requirements
 
-The tool requires a `policy.json` file containing the AWS ReadOnly policy for security validation. This file is included automatically when installing via pip. The package dependencies are:
+The package dependencies are:
 
 - boto3>=1.35.0
 - botocore>=1.35.0

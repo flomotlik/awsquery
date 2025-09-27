@@ -248,9 +248,9 @@ class TestAllFeaturesIntegration:
         # Verify multi-level was called with session
         mock_multi_level.assert_called_once()
         call_args = mock_multi_level.call_args
-        # Session can be passed as last positional arg or as keyword
+        # Session can be passed as positional arg or as keyword
         if len(call_args[0]) >= 7:
-            assert call_args[0][6] == mock_session
+            assert call_args[0][5] == mock_session
         elif "session" in call_args[1]:
             assert call_args[1]["session"] == mock_session
         # Filters won't be passed in this simplified test
@@ -579,7 +579,7 @@ class TestErrorHandlingAcrossFeatures:
 class TestRegressionPrevention:
     """Integration tests to prevent regressions in existing functionality."""
 
-    def test_backward_compatibility_with_existing_commands(self):
+    def test_existing_commands_still_work(self):
         """Test that existing commands still work after adding new features."""
         # This test ensures that the new features don't break existing usage patterns
 

@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python3 -m pytest tests/ --cov=src/awsquery --cov-report=term-missing -q)",
       "Bash(mutmut show:*)",
-      "Bash(mutmut:*)"
+      "Bash(mutmut:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []

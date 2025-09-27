@@ -89,17 +89,6 @@ def validate_readonly(service: str, action: str, allow_unsafe: bool = False) -> 
     return prompt_unsafe_operation(service, action)
 
 
-# Legacy functions for backward compatibility (will be removed later)
-def load_security_policy():
-    """Legacy function - returns empty set to avoid breaking existing code."""
-    return set()
-
-
-def validate_security(service: str, action: str, allowed_actions) -> bool:
-    """Legacy function - always returns True to avoid breaking existing code."""
-    return True
-
-
 def action_to_policy_format(action: str) -> str:
     """Convert kebab-case or snake_case action to PascalCase."""
     if "-" in action:

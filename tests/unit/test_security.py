@@ -8,7 +8,6 @@ from awsquery.security import (
     action_to_policy_format,
     get_service_valid_operations,
     is_readonly_operation,
-    load_security_policy,
     prompt_unsafe_operation,
     validate_readonly,
 )
@@ -179,14 +178,3 @@ class TestActionToPolicyFormat:
     def test_already_pascal(self):
         """Test that PascalCase is preserved."""
         assert action_to_policy_format("DescribeInstances") == "DescribeInstances"
-
-
-class TestCompatibilityFunctions:
-    """Test compatibility functions."""
-
-    def test_validate_security_legacy(self):
-        """Test that validate_security function always returns True."""
-        from awsquery.security import validate_security
-
-        assert validate_security("ec2", "anything", set()) is True
-        assert validate_security("s3", "delete-all", {"some:action"}) is True

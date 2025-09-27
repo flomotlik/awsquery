@@ -1478,7 +1478,7 @@ eks:
     - addons$
   list_clusters:
     columns:
-    - clusters$
+    - value
   list_fargate_profiles:
     columns:
     - fargateProfileNames$

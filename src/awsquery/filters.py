@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from typing import Dict, List
 
-from .formatters import convert_parameter_name, flatten_dict_keys, transform_tags_structure
-from .utils import debug_print, simplify_key
+from .formatters import flatten_dict_keys, transform_tags_structure
+from .utils import convert_parameter_name, debug_print, simplify_key
 
 
 def parse_filter_pattern(filter_text):
@@ -202,14 +202,17 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
 
     elif mode == "multi":
         if len(segments) == 1:
-            resource_filters = []
-            value_filters = extra_args
+            # No separators: all args are resource filters (before first --)
+            resource_filters = extra_args
+            value_filters = []
             column_filters = []
         elif len(segments) == 2:
-            resource_filters = []
-            value_filters = extra_args
-            column_filters = second_segment
+            # One separator: args split between resource and value filters
+            resource_filters = extra_args
+            value_filters = second_segment
+            column_filters = []
         else:
+            # Two or more separators: full three-way split
             resource_filters = extra_args
             value_filters = second_segment
             column_filters = third_segment
@@ -226,7 +229,7 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
     return base_command, resource_filters, value_filters, column_filters
 
 
-def extract_parameter_values(resources, parameter_name):
+def extract_parameter_values(resources, parameter_name, field_hint=None):
     """Extract parameter values from list operation results"""
     if not resources:
         return []
@@ -245,6 +248,40 @@ def extract_parameter_values(resources, parameter_name):
         transformed = transform_tags_structure(resource)
         transformed_resources.append(transformed)
 
+    # If field hint is provided, use it as the primary search target
+    if field_hint:
+        debug_print(
+            f"Using field hint '{field_hint}' for parameter extraction"
+        )  # pragma: no mutate
+
+        for resource in transformed_resources:
+            flat = flatten_dict_keys(resource)
+
+            # Try exact match first
+            if field_hint in flat:
+                value = flat[field_hint]
+                if value:
+                    values.append(str(value))
+                    continue
+
+            # Try case-insensitive match
+            for key, value in flat.items():
+                if key.lower() == field_hint.lower() and value:
+                    values.append(str(value))
+                    break
+            else:
+                # Try partial match
+                matching_keys = [k for k in flat.keys() if field_hint.lower() in k.lower()]
+                if matching_keys:
+                    key = matching_keys[0]
+                    value = flat[key]
+                    if value:
+                        values.append(str(value))
+
+        debug_print(f"Field hint extraction found {len(values)} values")  # pragma: no mutate
+        return values
+
+    # Fall back to default heuristic search
     pascal_case_name = convert_parameter_name(parameter_name)
     search_names = [parameter_name, pascal_case_name]
 

@@ -268,54 +268,6 @@ def get_malformed_policies():
     }
 
 
-def get_legacy_policy_formats():
-    """
-    Generate legacy/alternative policy formats for compatibility testing.
-
-    Returns:
-        Dictionary of different policy format examples
-    """
-    return {
-        "direct_statement": {
-            # No PolicyVersion wrapper
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": ["ec2:DescribeInstances", "s3:ListBuckets"],
-                    "Resource": "*",
-                }
-            ],
-        },
-        "single_action_string": {
-            "PolicyVersion": {
-                "Document": {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {
-                            "Effect": "Allow",
-                            "Action": "ec2:DescribeInstances",  # Single string instead of array
-                            "Resource": "*",
-                        }
-                    ],
-                }
-            }
-        },
-        "multiple_statements": {
-            "PolicyVersion": {
-                "Document": {
-                    "Version": "2012-10-17",
-                    "Statement": [
-                        {"Effect": "Allow", "Action": ["ec2:Describe*"], "Resource": "*"},
-                        {"Effect": "Allow", "Action": ["s3:List*", "s3:Get*"], "Resource": "*"},
-                        {"Effect": "Deny", "Action": ["ec2:TerminateInstances"], "Resource": "*"},
-                    ],
-                }
-            }
-        },
-    }
-
-
 def create_policy_file(policy_dict, file_path=None):
     """
     Create a temporary policy file for testing.
@@ -353,9 +305,6 @@ def create_policy_test_scenarios():
         "ec2_only": get_service_specific_policy("ec2"),
         "s3_only": get_service_specific_policy("s3"),
         "iam_only": get_service_specific_policy("iam"),
-        "direct_statement": get_legacy_policy_formats()["direct_statement"],
-        "single_action": get_legacy_policy_formats()["single_action_string"],
-        "multiple_statements": get_legacy_policy_formats()["multiple_statements"],
         "empty_statement": get_malformed_policies()["empty_statement"],
     }
 

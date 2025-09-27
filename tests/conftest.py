@@ -15,7 +15,6 @@ sys.modules["boto3"] = mock_boto3
 
 @pytest.fixture(autouse=True)
 def reset_boto3_mock():
-    """Reset boto3 mock before each test."""
     mock_boto3.client.reset_mock()
     mock_boto3.Session.reset_mock()
     mock_boto3.client.side_effect = None
@@ -25,7 +24,6 @@ def reset_boto3_mock():
 
 @pytest.fixture
 def mock_boto3_client():
-    """Mock boto3 client with AWS operation responses."""
     mock_client = Mock()
     mock_client.describe_instances.return_value = {
         "Reservations": [
@@ -258,44 +256,41 @@ def validation_error_fixtures():
 
 @pytest.fixture(autouse=True)
 def reset_debug_mode():
-    """Auto-reset debug state for all tests to ensure isolation."""
     from awsquery import utils
 
-    original_debug_state = getattr(utils, "debug_enabled", False)
-    utils.debug_enabled = False
+    original_debug_state = utils.get_debug_enabled()
+    utils.set_debug_enabled(False)
 
     yield
 
     # Ensure state is always restored even if test fails
-    utils.debug_enabled = original_debug_state
+    utils.set_debug_enabled(original_debug_state)
 
 
 @pytest.fixture
 def debug_mode():
-    """Fixture to temporarily enable debug mode for specific tests."""
     from awsquery import utils
 
-    original_debug_state = getattr(utils, "debug_enabled", False)
-    utils.debug_enabled = True
+    original_debug_state = utils.get_debug_enabled()
+    utils.set_debug_enabled(True)
 
     yield
 
     # Restore original state
-    utils.debug_enabled = original_debug_state
+    utils.set_debug_enabled(original_debug_state)
 
 
 @pytest.fixture
 def debug_disabled():
-    """Fixture to explicitly disable debug mode for specific tests."""
     from awsquery import utils
 
-    original_debug_state = getattr(utils, "debug_enabled", False)
-    utils.debug_enabled = False
+    original_debug_state = utils.get_debug_enabled()
+    utils.set_debug_enabled(False)
 
     yield
 
     # Restore original state
-    utils.debug_enabled = original_debug_state
+    utils.set_debug_enabled(original_debug_state)
 
 
 @pytest.fixture
@@ -425,7 +420,6 @@ def capture_stdout(capsys):
 
 @pytest.fixture
 def multi_level_validation_error():
-    """Common validation error for multi-level tests."""
     return {
         "parameter_name": "clusterName",
         "is_required": True,
@@ -435,7 +429,6 @@ def multi_level_validation_error():
 
 @pytest.fixture
 def multi_level_mock_setup():
-    """Factory for setting up common multi-level test mocks."""
 
     def _setup(validation_error, list_response, final_response):
         from unittest.mock import Mock
@@ -457,7 +450,6 @@ def multi_level_mock_setup():
 
 @pytest.fixture
 def sample_cluster_list():
-    """Sample cluster list response for testing."""
     return [
         {"Name": "production-cluster", "Status": "ACTIVE", "Version": "1.21"},
         {"Name": "staging-cluster", "Status": "ACTIVE", "Version": "1.20"},
@@ -467,7 +459,6 @@ def sample_cluster_list():
 
 @pytest.fixture
 def sample_function_list():
-    """Sample Lambda function list response for testing."""
     return [
         {
             "FunctionName": "production-api-handler",
@@ -488,10 +479,8 @@ def sample_function_list():
 
 @pytest.fixture
 def workflow_validator():
-    """Helper for validating common workflow patterns."""
 
     def _validate_parsing_workflow(argv, expected_base, expected_filters):
-        """Validate command parsing workflow."""
         from awsquery.filters import parse_multi_level_filters_for_mode
 
         base_cmd, res_filters, val_filters, col_filters = parse_multi_level_filters_for_mode(
@@ -509,7 +498,6 @@ def workflow_validator():
         return base_cmd, res_filters, val_filters, col_filters
 
     def _validate_readonly_workflow(service, action, policy):
-        """Validate security workflow."""
         from awsquery.security import validate_readonly
         from awsquery.utils import normalize_action_name
 
@@ -518,7 +506,6 @@ def workflow_validator():
         return normalized
 
     def _validate_formatting_workflow(response, filters, expected_content):
-        """Validate response formatting workflow."""
         from awsquery.formatters import flatten_response, format_table_output
 
         flattened = flatten_response(response)

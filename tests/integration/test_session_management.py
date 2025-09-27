@@ -364,9 +364,9 @@ class TestCLISessionIntegration:
         # Verify multi-level call received session
         mock_multi_level.assert_called_once()
         call_args = mock_multi_level.call_args
-        # Session can be passed as last positional arg or as keyword
+        # Session can be passed as positional arg or as keyword
         if len(call_args[0]) >= 7:
-            assert call_args[0][6] == mock_session
+            assert call_args[0][5] == mock_session
         elif "session" in call_args[1]:
             assert call_args[1]["session"] == mock_session
 
