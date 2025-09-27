@@ -234,7 +234,7 @@ class TestCLIParserEdgeCases:
                         # Debug should have been enabled
                         from awsquery import utils
 
-                        assert utils.debug_enabled is True
+                        assert utils.get_debug_enabled() is True
 
 
 class TestParserRegressionPrevention:

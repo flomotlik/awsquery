@@ -235,7 +235,9 @@ class TestSessionIntegration:
             execute_multi_level_call("ec2", "describe-instances", [], [], [], session=mock_session)
 
             # Verify session was passed to execute_aws_call
-            mock_execute.assert_called_once_with("ec2", "describe-instances", session=mock_session)
+            mock_execute.assert_called_once_with(
+                "ec2", "describe-instances", parameters=None, session=mock_session
+            )
 
 
 class TestSessionErrorHandling:
@@ -279,8 +281,8 @@ class TestSessionDebugOutput:
         from awsquery import utils
 
         # Enable debug mode
-        original_debug = utils.debug_enabled
-        utils.debug_enabled = True
+        original_debug = utils.get_debug_enabled()
+        utils.set_debug_enabled(True)
 
         try:
             with patch("boto3.Session"):
@@ -297,15 +299,15 @@ class TestSessionDebugOutput:
                 for expected_call in expected_calls:
                     assert expected_call in mock_debug.call_args_list
         finally:
-            utils.debug_enabled = original_debug
+            utils.set_debug_enabled(original_debug)
 
     @patch("awsquery.utils.debug_print")
     def test_session_debug_with_empty_values(self, mock_debug):
         """Test debug output when empty values are provided."""
         from awsquery import utils
 
-        original_debug = utils.debug_enabled
-        utils.debug_enabled = True
+        original_debug = utils.get_debug_enabled()
+        utils.set_debug_enabled(True)
 
         try:
             with patch("boto3.Session"):
@@ -318,4 +320,4 @@ class TestSessionDebugOutput:
                 add_calls = [call for call in mock_debug.call_args_list if "Added" in str(call)]
                 assert len(add_calls) == 0
         finally:
-            utils.debug_enabled = original_debug
+            utils.set_debug_enabled(original_debug)

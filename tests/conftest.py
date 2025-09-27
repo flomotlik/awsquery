@@ -261,13 +261,13 @@ def reset_debug_mode():
     """Auto-reset debug state for all tests to ensure isolation."""
     from awsquery import utils
 
-    original_debug_state = getattr(utils, "debug_enabled", False)
-    utils.debug_enabled = False
+    original_debug_state = utils.get_debug_enabled()
+    utils.set_debug_enabled(False)
 
     yield
 
     # Ensure state is always restored even if test fails
-    utils.debug_enabled = original_debug_state
+    utils.set_debug_enabled(original_debug_state)
 
 
 @pytest.fixture
@@ -275,13 +275,13 @@ def debug_mode():
     """Fixture to temporarily enable debug mode for specific tests."""
     from awsquery import utils
 
-    original_debug_state = getattr(utils, "debug_enabled", False)
-    utils.debug_enabled = True
+    original_debug_state = utils.get_debug_enabled()
+    utils.set_debug_enabled(True)
 
     yield
 
     # Restore original state
-    utils.debug_enabled = original_debug_state
+    utils.set_debug_enabled(original_debug_state)
 
 
 @pytest.fixture
@@ -289,13 +289,13 @@ def debug_disabled():
     """Fixture to explicitly disable debug mode for specific tests."""
     from awsquery import utils
 
-    original_debug_state = getattr(utils, "debug_enabled", False)
-    utils.debug_enabled = False
+    original_debug_state = utils.get_debug_enabled()
+    utils.set_debug_enabled(False)
 
     yield
 
     # Restore original state
-    utils.debug_enabled = original_debug_state
+    utils.set_debug_enabled(original_debug_state)
 
 
 @pytest.fixture

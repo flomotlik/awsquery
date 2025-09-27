@@ -489,8 +489,8 @@ class TestTrackingDebugOutput:
         from awsquery import utils
 
         # Enable debug mode
-        original_debug = utils.debug_enabled
-        utils.debug_enabled = True
+        original_debug = utils.get_debug_enabled()
+        utils.set_debug_enabled(True)
 
         try:
             mock_response = [{"Instances": []}]
@@ -503,15 +503,15 @@ class TestTrackingDebugOutput:
             assert "Tracking: Successful call to ec2.describe-instances" in captured.err
 
         finally:
-            utils.debug_enabled = original_debug
+            utils.set_debug_enabled(original_debug)
 
     @patch("awsquery.core.execute_aws_call")
     def test_tracking_debug_failure(self, mock_execute, capsys):
         """Test debug output for tracking failures."""
         from awsquery import utils
 
-        original_debug = utils.debug_enabled
-        utils.debug_enabled = True
+        original_debug = utils.get_debug_enabled()
+        utils.set_debug_enabled(True)
 
         try:
             mock_execute.side_effect = Exception("Test failure")
@@ -523,4 +523,4 @@ class TestTrackingDebugOutput:
             assert "Tracking: Failed call to ec2.describe-instances" in captured.err
 
         finally:
-            utils.debug_enabled = original_debug
+            utils.set_debug_enabled(original_debug)

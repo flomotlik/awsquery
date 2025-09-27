@@ -251,8 +251,8 @@ class TestTransformTagsStructure:
         """Test that transformation produces debug output."""
         from awsquery import utils
 
-        original_debug = utils.debug_enabled
-        utils.debug_enabled = True
+        original_debug = utils.get_debug_enabled()
+        utils.set_debug_enabled(True)
 
         try:
             data = {
@@ -265,7 +265,7 @@ class TestTransformTagsStructure:
             mock_debug.assert_called_with("Transformed 2 AWS Tags to map format")
 
         finally:
-            utils.debug_enabled = original_debug
+            utils.set_debug_enabled(original_debug)
 
 
 class TestTagsIntegrationWithFormatters:
@@ -511,7 +511,7 @@ class TestTagsErrorHandling:
         current["Tags"] = [{"Key": "DeepTag", "Value": "DeepValue"}]
 
         # Should handle deep nesting without stack overflow
-        result = transform_tags_structure(data)
+        result = transform_tags_structure(data, max_depth=60)  # Allow deeper than 50 levels
 
         # Navigate to deepest level and verify transformation
         current_result = result

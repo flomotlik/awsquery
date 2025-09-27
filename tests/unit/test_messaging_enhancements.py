@@ -22,16 +22,14 @@ class TestEnhancedDebugPrint:
         assert captured.err == ""
         assert captured.out == ""
 
-    @patch("awsquery.utils.debug_enabled", True)
-    def test_debug_print_enabled_has_debug_prefix(self, capsys):
+    def test_debug_print_enabled_has_debug_prefix(self, debug_mode, capsys):
         debug_print("Test message")
 
         captured = capsys.readouterr()
         assert "[DEBUG]" in captured.err
         assert "Test message" in captured.err
 
-    @patch("awsquery.utils.debug_enabled", True)
-    def test_debug_print_enabled_has_timestamp(self, capsys):
+    def test_debug_print_enabled_has_timestamp(self, debug_mode, capsys):
         """Test debug_print includes timestamp when enabled."""
         debug_print("Test message")
 
@@ -40,8 +38,7 @@ class TestEnhancedDebugPrint:
         timestamp_pattern = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}"
         assert re.search(timestamp_pattern, captured.err)
 
-    @patch("awsquery.utils.debug_enabled", True)
-    def test_debug_print_format_order(self, capsys):
+    def test_debug_print_format_order(self, debug_mode, capsys):
         """Test debug_print output format: [DEBUG] TIMESTAMP MESSAGE."""
         debug_print("Test message")
 
@@ -50,8 +47,7 @@ class TestEnhancedDebugPrint:
         expected_pattern = r"\[DEBUG\] \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} Test message"
         assert re.search(expected_pattern, captured.err)
 
-    @patch("awsquery.utils.debug_enabled", True)
-    def test_debug_print_multiple_args(self, capsys):
+    def test_debug_print_multiple_args(self, debug_mode, capsys):
         """Test debug_print handles multiple arguments correctly."""
         debug_print("Message", 123, {"key": "value"})
 
@@ -61,8 +57,7 @@ class TestEnhancedDebugPrint:
         assert "123" in captured.err
         assert "{'key': 'value'}" in captured.err
 
-    @patch("awsquery.utils.debug_enabled", True)
-    def test_debug_print_kwargs_preserved(self, capsys):
+    def test_debug_print_kwargs_preserved(self, debug_mode, capsys):
         """Test debug_print preserves keyword arguments like sep."""
         debug_print("A", "B", "C", sep="-")
 
@@ -459,7 +454,7 @@ class TestUserMessageIntegration:
         import awsquery.utils
 
         # Debug mode is enabled via fixture
-        assert awsquery.utils.debug_enabled
+        assert awsquery.utils.get_debug_enabled()
 
         # Test debug message
         debug_print("This is a debug message")

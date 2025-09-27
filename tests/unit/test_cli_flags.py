@@ -42,14 +42,14 @@ class TestCLIFlagHandling:
                         # Reset debug mode
                         from awsquery import utils
 
-                        utils.debug_enabled = False
+                        utils.set_debug_enabled(False)
 
                         try:
                             main()
                         except SystemExit:
                             pass
 
-                        assert utils.debug_enabled is True, f"Debug not enabled for: {argv}"
+                        assert utils.get_debug_enabled() is True, f"Debug not enabled for: {argv}"
 
     @patch("awsquery.cli.create_session")
     @patch("awsquery.cli.execute_aws_call")
@@ -214,7 +214,7 @@ class TestCLIFlagHandling:
                     # All flags should be recognized
                     from awsquery import utils
 
-                    assert utils.debug_enabled is True
+                    assert utils.get_debug_enabled() is True
                     mock_json.assert_called_once()
                     mock_session.assert_called_once_with(region="us-west-2", profile="prod")
 
@@ -275,5 +275,5 @@ class TestCLIFlagHandling:
                     # Verify flags
                     from awsquery import utils
 
-                    assert utils.debug_enabled is True
+                    assert utils.get_debug_enabled() is True
                     mock_json.assert_called_once()

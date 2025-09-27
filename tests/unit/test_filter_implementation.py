@@ -307,3 +307,265 @@ class TestMatchesPattern:
         # Empty pattern in exact mode only matches empty
         assert matches_pattern("", "", "exact")
         assert not matches_pattern("something", "", "exact")
+
+
+class TestBasicFilterFunctionality:
+    """Test fundamental filter_resources functionality that was in deleted tests."""
+
+    def test_empty_filters_returns_all_resources(self):
+        """Test that empty filters return all resources."""
+        resources = [
+            {"InstanceId": "i-123", "State": {"Name": "running"}},
+            {"InstanceId": "i-456", "State": {"Name": "stopped"}},
+        ]
+        result = filter_resources(resources, [])
+        assert result == resources
+        assert len(result) == 2
+
+    def test_empty_resources_returns_empty_list(self):
+        """Test filtering empty resource list."""
+        result = filter_resources([], ["running"])
+        assert result == []
+
+    def test_none_filters_returns_all_resources(self):
+        """Test that None filters return all resources."""
+        resources = [
+            {"InstanceId": "i-123", "State": {"Name": "running"}},
+            {"InstanceId": "i-456", "State": {"Name": "stopped"}},
+        ]
+        result = filter_resources(resources, None)
+        assert result == resources
+        assert len(result) == 2
+
+    def test_multiple_filters_all_must_match(self):
+        """Test that multiple filters require all to match."""
+        resources = [
+            {"Name": "web-server-prod", "State": "running", "Type": "t3.medium"},
+            {"Name": "web-server-dev", "State": "stopped", "Type": "t2.micro"},
+            {"Name": "db-server-prod", "State": "running", "Type": "t3.large"},
+        ]
+        result = filter_resources(resources, ["web", "prod"])
+        assert len(result) == 1
+        assert result[0]["Name"] == "web-server-prod"
+
+    def test_multiple_filters_no_matches(self):
+        """Test multiple filters with no matching resources."""
+        resources = [
+            {"Name": "web-server", "Environment": "prod"},
+            {"Name": "db-server", "Environment": "dev"},
+        ]
+        result = filter_resources(resources, ["web", "staging"])
+        assert result == []
+
+    def test_realistic_ec2_filtering(self):
+        """Test realistic EC2 instance filtering."""
+        resources = [
+            {
+                "InstanceId": "i-1234567890abcdef0",
+                "InstanceType": "t3.medium",
+                "State": {"Name": "running"},
+                "Tags": [
+                    {"Key": "Name", "Value": "web-server-01"},
+                    {"Key": "Environment", "Value": "production"},
+                ],
+            },
+            {
+                "InstanceId": "i-abcdef1234567890",
+                "InstanceType": "t2.micro",
+                "State": {"Name": "stopped"},
+                "Tags": [
+                    {"Key": "Name", "Value": "test-server-01"},
+                    {"Key": "Environment", "Value": "development"},
+                ],
+            },
+        ]
+        result = filter_resources(resources, ["production"])
+        assert len(result) == 1
+        assert result[0]["InstanceId"] == "i-1234567890abcdef0"
+
+    def test_filter_with_special_characters(self):
+        """Test filtering with special characters."""
+        resources = [
+            {"Name": "server-01_prod", "Status": "active"},
+            {"Name": "server-02.test", "Status": "inactive"},
+            {"Name": "server@dev", "Status": "active"},
+        ]
+        result = filter_resources(resources, ["server-01"])
+        assert len(result) == 1
+        assert result[0]["Name"] == "server-01_prod"
+
+    def test_filter_with_numeric_values(self):
+        """Test filtering with numeric values."""
+        resources = [
+            {"Port": 80, "Protocol": "HTTP", "Status": "open"},
+            {"Port": 443, "Protocol": "HTTPS", "Status": "open"},
+            {"Port": 22, "Protocol": "SSH", "Status": "closed"},
+        ]
+        result = filter_resources(resources, ["80"])
+        assert len(result) == 1
+        assert result[0]["Port"] == 80
+
+    def test_realistic_s3_filtering(self):
+        """Test realistic S3 bucket filtering."""
+        resources = [
+            {
+                "Name": "prod-app-logs-2023",
+                "CreationDate": "2023-01-01T00:00:00Z",
+                "Tags": [{"Key": "Environment", "Value": "production"}],
+            },
+            {
+                "Name": "dev-temp-storage",
+                "CreationDate": "2023-06-15T00:00:00Z",
+                "Tags": [{"Key": "Environment", "Value": "development"}],
+            },
+        ]
+        result = filter_resources(resources, ["prod"])
+        assert len(result) == 1
+        assert result[0]["Name"] == "prod-app-logs-2023"
+
+    def test_realistic_cloudformation_filtering(self):
+        """Test realistic CloudFormation stack filtering."""
+        resources = [
+            {
+                "StackName": "production-vpc-stack",
+                "StackStatus": "CREATE_COMPLETE",
+                "Tags": [
+                    {"Key": "Environment", "Value": "production"},
+                    {"Key": "Team", "Value": "infrastructure"},
+                ],
+            },
+            {
+                "StackName": "staging-app-stack",
+                "StackStatus": "UPDATE_COMPLETE",
+                "Tags": [
+                    {"Key": "Environment", "Value": "staging"},
+                    {"Key": "Team", "Value": "backend"},
+                ],
+            },
+        ]
+        result = filter_resources(resources, ["production"])
+        assert len(result) == 1
+        assert result[0]["StackName"] == "production-vpc-stack"
+
+
+class TestMultiLevelFilterParsing:
+    """Test multi-level filter parsing functionality from deleted tests."""
+
+    def test_no_separators_base_command_only(self):
+        """Test parsing command with no separators."""
+        from awsquery.filters import parse_multi_level_filters_for_mode
+
+        base, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
+            ["ec2", "describe-instances"], mode="single"
+        )
+        assert base == ["ec2", "describe-instances"]
+        assert resource_filters == []
+        assert value_filters == []
+        assert column_filters == []
+
+    def test_single_separator_simple_command(self):
+        """Test parsing with single separator."""
+        from awsquery.filters import parse_multi_level_filters_for_mode
+
+        base, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
+            ["ec2", "describe-instances", "prod", "--", "InstanceId"], mode="single"
+        )
+        assert base == ["ec2", "describe-instances"]
+        assert resource_filters == []  # single mode always has empty resource_filters
+        assert value_filters == ["prod"]  # extra_args go to value_filters in single mode
+        assert column_filters == ["InstanceId"]
+
+    def test_two_separators_resource_and_value_filters(self):
+        """Test parsing with two separators for resource and value filters."""
+        from awsquery.filters import parse_multi_level_filters_for_mode
+
+        base, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
+            ["ec2", "describe-instances", "prod", "--", "running", "--", "InstanceId"],
+            mode="single",
+        )
+        assert base == ["ec2", "describe-instances"]
+        assert resource_filters == []  # single mode always has empty resource_filters
+        assert value_filters == ["prod", "running"]  # extra_args + second_segment in single mode
+        assert column_filters == ["InstanceId"]
+
+    def test_empty_segments_handling(self):
+        """Test handling of empty segments between separators."""
+        from awsquery.filters import parse_multi_level_filters_for_mode
+
+        base, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
+            ["ec2", "describe-instances", "--", "--", "InstanceId"], mode="single"
+        )
+        assert base == ["ec2", "describe-instances"]
+        assert resource_filters == []
+        assert value_filters == []
+        assert column_filters == ["InstanceId"]
+
+    def test_service_and_action_identification(self):
+        """Test correct identification of service and action from command."""
+        from awsquery.filters import parse_multi_level_filters_for_mode
+
+        base, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
+            ["s3", "list-buckets", "backup", "--", "Name"], mode="single"
+        )
+        assert base == ["s3", "list-buckets"]
+        assert resource_filters == []  # single mode always has empty resource_filters
+        assert value_filters == ["backup"]  # extra_args go to value_filters in single mode
+        assert column_filters == ["Name"]
+
+    def test_multi_mode_with_resource_filters(self):
+        """Test multi mode where resource_filters actually get populated."""
+        from awsquery.filters import parse_multi_level_filters_for_mode
+
+        # Test multi mode with 3 segments (2 separators) where resource_filters get populated
+        base, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
+            ["ec2", "describe-instances", "prod", "--", "running", "--", "InstanceId"], mode="multi"
+        )
+        assert base == ["ec2", "describe-instances"]
+        assert resource_filters == [
+            "prod"
+        ]  # extra_args become resource_filters in multi mode with 3+ segments
+        assert value_filters == ["running"]  # second_segment becomes value_filters
+        assert column_filters == ["InstanceId"]  # third_segment becomes column_filters
+
+
+class TestComplexFilterScenarios:
+    """Test complex filtering scenarios from deleted test files."""
+
+    def test_complex_aws_resource_with_arrays(self):
+        """Test filtering complex AWS resources with array structures."""
+        resources = [
+            {
+                "InstanceId": "i-123",
+                "SecurityGroups": [
+                    {"GroupId": "sg-123", "GroupName": "web-sg"},
+                    {"GroupId": "sg-456", "GroupName": "db-sg"},
+                ],
+                "Tags": [
+                    {"Key": "Name", "Value": "web-server"},
+                    {"Key": "Environment", "Value": "prod"},
+                ],
+            },
+            {
+                "InstanceId": "i-456",
+                "SecurityGroups": [{"GroupId": "sg-789", "GroupName": "test-sg"}],
+                "Tags": [
+                    {"Key": "Name", "Value": "test-server"},
+                    {"Key": "Environment", "Value": "dev"},
+                ],
+            },
+        ]
+
+        # Filter on security group name
+        result = filter_resources(resources, ["web-sg"])
+        assert len(result) == 1
+        assert result[0]["InstanceId"] == "i-123"
+
+        # Filter on tag value
+        result = filter_resources(resources, ["prod"])
+        assert len(result) == 1
+        assert result[0]["InstanceId"] == "i-123"
+
+        # Filter on instance name via tags
+        result = filter_resources(resources, ["test-server"])
+        assert len(result) == 1
+        assert result[0]["InstanceId"] == "i-456"
