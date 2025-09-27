@@ -423,3 +423,77 @@ class TestCLIParserRegression:
                     assert value_filters == expected["value_multi"]
                 if "column_multi" in expected:
                     assert column_filters == expected["column_multi"]
+
+
+class TestMultiModeFilterParsing:
+    """Test multi-mode filter parsing for multi-level calls."""
+
+    def test_multi_mode_no_separator_args_are_resource_filters(self):
+        """When no -- separator, args should be resource filters in multi mode."""
+        # This is the CDK bug case!
+        argv = ["cloudformation", "describe-stack-resources", "CDK"]
+        base_cmd, resource_filters, value_filters, column_filters = (
+            parse_multi_level_filters_for_mode(argv, mode="multi")
+        )
+
+        assert base_cmd == ["cloudformation", "describe-stack-resources"]
+        assert resource_filters == ["CDK"]  # Should be resource filter
+        assert value_filters == []  # Should be empty
+        assert column_filters == []
+
+    def test_multi_mode_one_separator_correct_split(self):
+        """With one -- separator, split resource and value filters correctly."""
+        argv = ["cloudformation", "describe-stack-resources", "CDK", "--", "prod"]
+        base_cmd, resource_filters, value_filters, column_filters = (
+            parse_multi_level_filters_for_mode(argv, mode="multi")
+        )
+
+        assert base_cmd == ["cloudformation", "describe-stack-resources"]
+        assert resource_filters == ["CDK"]  # Before --
+        assert value_filters == ["prod"]  # After --
+        assert column_filters == []
+
+    def test_multi_mode_two_separators_all_filters(self):
+        """With two -- separators, all three filter types should be populated."""
+        argv = [
+            "cloudformation",
+            "describe-stack-resources",
+            "CDK",
+            "--",
+            "prod",
+            "--",
+            "Name",
+            "Status",
+        ]
+        base_cmd, resource_filters, value_filters, column_filters = (
+            parse_multi_level_filters_for_mode(argv, mode="multi")
+        )
+
+        assert base_cmd == ["cloudformation", "describe-stack-resources"]
+        assert resource_filters == ["CDK"]  # Before first --
+        assert value_filters == ["prod"]  # Between first and second --
+        assert column_filters == ["Name", "Status"]  # After second --
+
+    def test_multi_mode_multiple_args_no_separator(self):
+        """Multiple args with no separator should all be resource filters."""
+        argv = ["ec2", "describe-instances", "prod", "web", "api"]
+        base_cmd, resource_filters, value_filters, column_filters = (
+            parse_multi_level_filters_for_mode(argv, mode="multi")
+        )
+
+        assert base_cmd == ["ec2", "describe-instances"]
+        assert resource_filters == ["prod", "web", "api"]  # All are resource filters
+        assert value_filters == []
+        assert column_filters == []
+
+    def test_multi_mode_empty_segments_handled(self):
+        """Empty segments between separators should result in empty filter lists."""
+        argv = ["ec2", "describe-instances", "--", "--", "Name"]
+        base_cmd, resource_filters, value_filters, column_filters = (
+            parse_multi_level_filters_for_mode(argv, mode="multi")
+        )
+
+        assert base_cmd == ["ec2", "describe-instances"]
+        assert resource_filters == []  # Empty before first --
+        assert value_filters == []  # Empty between -- and --
+        assert column_filters == ["Name"]  # After second --

@@ -202,14 +202,17 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
 
     elif mode == "multi":
         if len(segments) == 1:
-            resource_filters = []
-            value_filters = extra_args
+            # No separators: all args are resource filters (before first --)
+            resource_filters = extra_args
+            value_filters = []
             column_filters = []
         elif len(segments) == 2:
-            resource_filters = []
-            value_filters = extra_args
-            column_filters = second_segment
+            # One separator: args split between resource and value filters
+            resource_filters = extra_args
+            value_filters = second_segment
+            column_filters = []
         else:
+            # Two or more separators: full three-way split
             resource_filters = extra_args
             value_filters = second_segment
             column_filters = third_segment
