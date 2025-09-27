@@ -1,7 +1,6 @@
 """Utility functions for AWS Query Tool."""
 
 import sys
-import types
 
 import boto3
 
@@ -81,17 +80,15 @@ class DebugContext:
         self.enabled = False
 
 
-# Global debug context - can be replaced with dependency injection in the future
+# Global debug context
 _debug_context = DebugContext()
 
 
-# Compatibility function for existing code
 def debug_print(*args, **kwargs):
     """Print debug messages with [DEBUG] prefix and timestamp when debug mode is enabled"""
     _debug_context.print(*args, **kwargs)
 
 
-# Compatibility for setting debug mode
 def set_debug_enabled(value):
     """Set debug mode on or off"""
     if value:
@@ -105,8 +102,10 @@ def get_debug_enabled():
     return _debug_context.enabled
 
 
-# Module-level compatibility with dynamic property behavior
-class _DebugEnabledProperty:
+# Simple debug_enabled property for module-level access
+class _DebugEnabled:
+    """Simple debug enabled property without backward compatibility complexity"""
+
     def __bool__(self):
         return _debug_context.enabled
 
@@ -117,21 +116,7 @@ class _DebugEnabledProperty:
         return str(_debug_context.enabled)
 
 
-debug_enabled = _DebugEnabledProperty()
-
-
-# Allow module-level assignment for backward compatibility
-def __setattr__(name, value):
-    if name == "debug_enabled":
-        set_debug_enabled(value)
-    else:
-        globals()[name] = value
-
-
-# Type-safe module attribute assignment
-current_module = sys.modules[__name__]
-if isinstance(current_module, types.ModuleType):
-    current_module.__setattr__ = __setattr__  # type: ignore[method-assign]
+debug_enabled = _DebugEnabled()
 
 
 def sanitize_input(value):

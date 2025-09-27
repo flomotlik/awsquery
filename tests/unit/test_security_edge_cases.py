@@ -116,25 +116,6 @@ class TestValidateReadonlyEdgeCases:
             assert is_readonly_operation(op), f"{op} should be readonly"
 
 
-class TestCompatibility:
-    def test_action_to_policy_format_legacy(self):
-        from awsquery.security import action_to_policy_format
-
-        # Test PascalCase conversion
-        assert action_to_policy_format("describe-instances") == "DescribeInstances"
-        assert action_to_policy_format("get-bucket-policy") == "GetBucketPolicy"
-        assert action_to_policy_format("list-objects-v2") == "ListObjectsV2"
-        assert action_to_policy_format("DescribeInstances") == "DescribeInstances"
-
-    def test_action_to_policy_format(self):
-        from awsquery.security import action_to_policy_format
-
-        assert action_to_policy_format("describe-instances") == "DescribeInstances"
-        assert action_to_policy_format("list-buckets") == "ListBuckets"
-        assert action_to_policy_format("get-object-acl") == "GetObjectAcl"
-        assert action_to_policy_format("DescribeInstances") == "DescribeInstances"
-
-
 class TestGetServiceValidOperations:
     def test_filters_operations(self):
         from awsquery.security import get_service_valid_operations

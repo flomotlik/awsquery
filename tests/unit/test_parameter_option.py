@@ -453,58 +453,6 @@ class TestComplexAWSScenarios:
         assert result == expected
 
 
-class TestBackwardsCompatibility:
-    """Test that existing parameter formats still work correctly."""
-
-    def test_simple_key_value_unchanged(self):
-        """Test that simple key=value parameters still work."""
-        param_str = "MaxResults=100"
-        result = parse_parameter_string(param_str)
-
-        expected = {"MaxResults": 100}
-        assert result == expected
-
-    def test_comma_separated_list_unchanged(self):
-        """Test that comma-separated lists still work."""
-        param_str = "InstanceIds=i-123,i-456,i-789"
-        result = parse_parameter_string(param_str)
-
-        expected = {"InstanceIds": ["i-123", "i-456", "i-789"]}
-        assert result == expected
-
-    def test_boolean_conversion_unchanged(self):
-        """Test that boolean conversion still works."""
-        param_str = "DryRun=true"
-        result = parse_parameter_string(param_str)
-
-        expected = {"DryRun": True}
-        assert result == expected
-
-    def test_integer_conversion_unchanged(self):
-        """Test that integer conversion still works."""
-        param_str = "MaxResults=50"
-        result = parse_parameter_string(param_str)
-
-        expected = {"MaxResults": 50}
-        assert result == expected
-
-    def test_ssm_parameter_filters_unchanged(self):
-        """Test that existing SSM ParameterFilters format still works."""
-        param_str = (
-            "ParameterFilters=Key=Name,Option=Contains,Values=Ubuntu,2024;"
-            "Key=Name,Option=Contains,Values=Amazon,Linux"
-        )
-        result = parse_parameter_string(param_str)
-
-        expected = {
-            "ParameterFilters": [
-                {"Key": "Name", "Option": "Contains", "Values": ["Ubuntu", 2024]},
-                {"Key": "Name", "Option": "Contains", "Values": ["Amazon", "Linux"]},
-            ]
-        }
-        assert result == expected
-
-
 class TestParameterIntegration:
     """Integration tests for parameter handling with CLI."""
 

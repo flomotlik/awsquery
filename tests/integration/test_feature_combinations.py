@@ -579,7 +579,7 @@ class TestErrorHandlingAcrossFeatures:
 class TestRegressionPrevention:
     """Integration tests to prevent regressions in existing functionality."""
 
-    def test_backward_compatibility_with_existing_commands(self):
+    def test_existing_commands_still_work(self):
         """Test that existing commands still work after adding new features."""
         # This test ensures that the new features don't break existing usage patterns
 

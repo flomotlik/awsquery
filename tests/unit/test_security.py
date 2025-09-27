@@ -178,7 +178,3 @@ class TestActionToPolicyFormat:
     def test_already_pascal(self):
         """Test that PascalCase is preserved."""
         assert action_to_policy_format("DescribeInstances") == "DescribeInstances"
-
-
-class TestCompatibilityFunctions:
-    """Test compatibility functions."""
