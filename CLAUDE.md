@@ -220,12 +220,33 @@ grep -r "test.*parser" tests/
 grep -r "test.*filter" tests/
 ```
 
-### Test Documentation Requirements
-- **Minimal Comments**: Remove all unnecessary verbose comments from test files
-- **Essential Only**: Keep comments only for complex test logic, specific assertions, or edge cases
-- **No Redundant Docstrings**: Avoid docstrings that simply restate method names
-- **Purpose Over Process**: Document WHY tests exist, not HOW they work (unless complex)
-- **Clean Signal-to-Noise**: Prioritize readable code over explanatory comments
+### 🚫 **ABSOLUTE PROHIBITION: VERBOSE TEST COMMENTS**
+
+**MANDATORY EDICT: UNNECESSARY TEST COMMENTS ARE CATEGORICALLY FORBIDDEN**
+
+**NEVER WRITE THESE TYPES OF COMMENTS:**
+- **TDD Placeholder Comments**: `"""Test the expected structure when -i/--input is implemented."""`
+- **Obvious Restatements**: `"""Test that function returns expected value."""`
+- **Implementation Descriptions**: `"""This test checks if the parser works correctly."""`
+- **Future Implementation Notes**: `"""TODO: implement when feature X is ready."""`
+- **Verbose Process Descriptions**: `"""First we call X, then we check Y, finally we assert Z."""`
+
+**HARD RULES FOR TEST DOCUMENTATION:**
+- **NO REDUNDANT DOCSTRINGS**: Never restate what the method name already says
+- **NO TDD PLACEHOLDERS**: Delete placeholder comments immediately after implementation
+- **NO OBVIOUS COMMENTS**: If the test name explains it, don't repeat in comments
+- **NO VERBOSE EXPLANATIONS**: Code should be self-documenting
+- **ESSENTIAL ONLY**: Comments only for complex edge cases or non-obvious logic
+
+**ACCEPTABLE COMMENTS (RARE):**
+- Complex edge case explanation: `# Unicode circumflex U+02C6 vs ASCII U+005E`
+- Non-obvious assertion: `# Must check stderr, not stdout for debug output`
+- External dependency note: `# Requires specific AWS policy format`
+
+**ENFORCEMENT:**
+- **IMMEDIATE DELETION** of any TDD placeholder comments
+- **ZERO TOLERANCE** for verbose test documentation
+- **CLEAN CODE OVER COMMENTS** - make tests readable through naming and structure
 
 ### 🚫 **ABSOLUTE PROHIBITION: PYTEST MARKERS**
 

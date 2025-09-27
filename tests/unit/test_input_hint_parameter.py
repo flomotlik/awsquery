@@ -1,11 +1,4 @@
-"""Comprehensive unit tests for -i/--input parameter feature.
-
-Tests the hint parameter functionality that allows users to provide hints
-for multi-step AWS API calls using enhanced completion matching logic.
-
-Note: These tests are designed for the -i/--input feature that will be implemented.
-Currently, most CLI parsing tests expect the feature to not exist yet.
-"""
+"""Tests for -i/--input parameter feature."""
 
 import sys
 from argparse import Namespace
@@ -17,10 +10,7 @@ from awsquery.cli import _enhanced_completion_validator, main
 
 
 class TestInputHintParsing:
-    """Test CLI argument parsing for -i/--input parameter."""
-
     def test_input_hint_flag_implemented(self):
-        """Test that -i flag works correctly with hint processing."""
         sys.argv = ["awsquery", "-i", "desc-clus", "elbv2", "describe-tags"]
 
         # Now -i is implemented, so "elbv2" is the service and "describe-tags" is the action
@@ -37,7 +27,6 @@ class TestInputHintParsing:
         assert args[1] == "describe-tags"  # action
 
     def test_input_hint_long_flag_implemented(self):
-        """Test that --input flag works correctly with hint processing."""
         sys.argv = ["awsquery", "--input", "desc-clus", "elbv2", "describe-tags"]
 
         # Now --input is implemented, so "elbv2" is the service and "describe-tags" is the action
@@ -51,16 +40,6 @@ class TestInputHintParsing:
         mock_validate.assert_called_once()
 
     def test_future_input_hint_flag_structure(self):
-        """Test the expected structure when -i/--input is implemented."""
-        # This documents how the feature should work when implemented
-
-        # Expected parser structure (not yet implemented):
-        # parser.add_argument(
-        #     "-i", "--input",
-        #     help="Hint for multi-step operation function selection"
-        # )
-
-        # Expected usage patterns:
         expected_usage_patterns = [
             ["awsquery", "-i", "desc-clus", "elbv2", "describe-tags"],
             ["awsquery", "--input", "list-inst", "ec2", "describe-security-groups"],
@@ -68,17 +47,13 @@ class TestInputHintParsing:
         ]
 
         for pattern in expected_usage_patterns:
-            # When implemented, these should parse correctly
-            assert len(pattern) >= 5  # minimum: program, flag, hint, service, action
+            assert len(pattern) >= 5
             assert pattern[1] in ["-i", "--input"]
-            assert isinstance(pattern[2], str)  # hint string
+            assert isinstance(pattern[2], str)
 
 
 class TestHintFunctionMatching:
-    """Test function matching logic with enhanced completion validator."""
-
     def test_exact_prefix_match(self):
-        """Test exact prefix matching for hint functions."""
         # This uses the existing enhanced completion validator
         operations = [
             "describe-load-balancers",
@@ -98,7 +73,6 @@ class TestHintFunctionMatching:
         assert len(matches) >= 1
 
     def test_split_matching_algorithm(self):
-        """Test split matching for hint functions."""
         operations = [
             "describe-load-balancers",
             "describe-target-groups",
@@ -116,7 +90,6 @@ class TestHintFunctionMatching:
         # The validator should prefer operations that match the pattern
 
     def test_case_insensitive_matching(self):
-        """Test case insensitive matching for hints."""
         operations = ["describe-clusters", "Describe-LoadBalancers", "DESCRIBE-STACKS"]
 
         # Test various case combinations
@@ -133,7 +106,6 @@ class TestHintFunctionMatching:
             assert expected.lower() in [m.lower() for m in matches]
 
     def test_no_matches_returns_empty(self):
-        """Test that non-matching hints return empty list."""
         operations = ["describe-instances", "list-volumes", "get-snapshots"]
 
         hint = "xyz-notfound"
@@ -142,7 +114,6 @@ class TestHintFunctionMatching:
         assert matches == []
 
     def test_partial_word_matching(self):
-        """Test partial word matching within function names."""
         operations = [
             "describe-db-clusters",
             "describe-rds-clusters",
@@ -164,7 +135,6 @@ class TestHintFunctionMatching:
             assert expected in matches
 
     def test_hyphen_handling_in_hints(self):
-        """Test proper handling of hyphens in hint strings."""
         operations = ["describe-load-balancers", "describe-target-groups", "describe-clusters"]
 
         test_cases = [
@@ -179,7 +149,6 @@ class TestHintFunctionMatching:
             assert isinstance(matches, list)
 
     def test_empty_hint_matches_all(self):
-        """Test that empty hint matches all operations."""
         operations = ["describe-clusters", "list-instances", "get-volumes"]
 
         hint = ""
@@ -191,10 +160,7 @@ class TestHintFunctionMatching:
 
 
 class TestHintSelection:
-    """Test selection logic when multiple matches exist."""
-
     def test_shortest_match_selection(self):
-        """Test that shortest match is selected when multiple matches exist."""
         operations = [
             "describe-clusters",
             "describe-cache-clusters",
@@ -214,7 +180,6 @@ class TestHintSelection:
         assert sorted_matches[0] == "describe-clusters"
 
     def test_prefix_priority_over_contains(self):
-        """Test that prefix matches have priority over contains-only matches."""
         operations = [
             "describe-clusters",  # Prefix match for "desc"
             "batch-describe-clusters",  # Contains "desc" but not prefix
@@ -236,7 +201,6 @@ class TestHintSelection:
         assert "batch-describe-clusters" not in matches
 
     def test_alphabetical_selection_for_equal_length(self):
-        """Test alphabetical selection when multiple matches have same length."""
         operations = [
             "describe-zeta-clusters",
             "describe-beta-clusters",
@@ -254,7 +218,6 @@ class TestHintSelection:
         assert sorted_matches[0] == "describe-alpha-clusters"
 
     def test_single_match_selection(self):
-        """Test selection when only one match exists."""
         operations = [
             "describe-clusters",
             "list-instances",
@@ -268,7 +231,6 @@ class TestHintSelection:
         assert matches[0] == "describe-clusters"
 
     def test_no_selection_when_no_matches(self):
-        """Test behavior when no matches are found."""
         operations = ["list-instances", "get-volumes", "create-snapshots"]
 
         hint = "desc-clus"
@@ -277,7 +239,6 @@ class TestHintSelection:
         assert len(matches) == 0
 
     def test_complex_selection_scenario(self):
-        """Test selection in complex real-world scenario."""
         # Realistic EKS operations
         operations = [
             "describe-cluster",  # Shortest exact match
@@ -297,11 +258,8 @@ class TestHintSelection:
 
 
 class TestHintIntegration:
-    """Test integration with multi-step calls."""
-
     @patch("awsquery.core.infer_list_operation")
     def test_hint_function_used_in_inference(self, mock_infer):
-        """Test that hint function would be used during operation inference."""
         mock_infer.return_value = ["describe-clusters", "list-clusters"]
 
         # This tests the integration pattern where hint would influence inference
@@ -318,7 +276,6 @@ class TestHintIntegration:
 
     @patch("awsquery.core.execute_aws_call")
     def test_hint_improves_parameter_resolution(self, mock_execute):
-        """Test that hint would improve parameter resolution accuracy."""
         # Mock successful execution of hint-suggested function
         mock_execute.return_value = [
             {
@@ -343,7 +300,6 @@ class TestHintIntegration:
         assert "prod-cluster" in parameter_values
 
     def test_hint_parameter_extraction_logic(self):
-        """Test the core logic for extracting values using hint-selected function."""
         # Mock response from hint-selected function (e.g., describe-clusters)
         cluster_response = [
             {
@@ -371,7 +327,6 @@ class TestHintIntegration:
         assert "arn:aws:eks:us-east-1:123:cluster/dev" in cluster_arns
 
     def test_enhanced_completion_validator_integration(self):
-        """Test integration with existing enhanced completion validator."""
         # This tests the actual function that would be used for hint matching
 
         # Test realistic AWS operations
@@ -401,10 +356,7 @@ class TestHintIntegration:
 
 
 class TestHintErrorHandling:
-    """Test error cases and edge conditions."""
-
     def test_invalid_hint_string(self):
-        """Test handling of invalid hint strings."""
         operations = ["describe-clusters", "list-instances"]
 
         invalid_hints = [
@@ -421,7 +373,6 @@ class TestHintErrorHandling:
             assert isinstance(matches, list)
 
     def test_hint_with_special_characters(self):
-        """Test hint strings with special characters."""
         operations = ["describe-clusters", "list-db-instances", "get-cache-info"]
 
         special_hints = [
@@ -441,7 +392,6 @@ class TestHintErrorHandling:
                 pass
 
     def test_hint_matching_edge_cases(self):
-        """Test edge cases in hint matching logic."""
         operations = [
             "describe",  # Exact word
             "describe-",  # Trailing hyphen
@@ -468,7 +418,6 @@ class TestHintErrorHandling:
                     pytest.fail(f"Validator crashed on hint='{hint}', operation='{op}'")
 
     def test_unicode_hint_handling(self):
-        """Test handling of Unicode characters in hints."""
         operations = ["describe-clusters", "list-instances"]
 
         unicode_hints = [
@@ -488,7 +437,6 @@ class TestHintErrorHandling:
                 pass
 
     def test_hint_parameter_format_validation(self):
-        """Test validation of hint parameter format."""
         # Test that hint parameter follows expected format
         valid_hints = [
             "desc-clus",
@@ -518,12 +466,10 @@ class TestHintErrorHandling:
                     pass  # Expected for some invalid types
 
     def test_hint_selection_algorithm(self):
-        """Test the hint selection algorithm logic."""
         # This tests the core algorithm that would be used to select
         # the best matching function from multiple candidates
 
         def select_best_hint_match(operations, hint):
-            """Mock implementation of hint selection algorithm."""
             matches = [op for op in operations if _enhanced_completion_validator(op, hint)]
 
             if not matches:
@@ -558,10 +504,7 @@ class TestHintErrorHandling:
 
 
 class TestFieldHintParsing:
-    """Test parsing of field hints in function:field format."""
-
     def test_function_field_format_parsing(self):
-        """Test parsing hints in 'function:field' format."""
         from awsquery.cli import find_hint_function
 
         # Mock the service operations to avoid boto3 dependencies
@@ -576,7 +519,6 @@ class TestFieldHintParsing:
             assert isinstance(alternatives, list)
 
     def test_function_only_format_parsing(self):
-        """Test parsing hints with just function (no field)."""
         from awsquery.cli import find_hint_function
 
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
@@ -590,7 +532,6 @@ class TestFieldHintParsing:
             assert isinstance(alternatives, list)
 
     def test_empty_field_parsing(self):
-        """Test parsing when field part is empty."""
         from awsquery.cli import find_hint_function
 
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
@@ -603,7 +544,6 @@ class TestFieldHintParsing:
             assert field is None
 
     def test_multiple_colons_parsing(self):
-        """Test parsing with multiple colons."""
         from awsquery.cli import find_hint_function
 
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
@@ -616,7 +556,6 @@ class TestFieldHintParsing:
             assert field == "cluster:arn"
 
     def test_whitespace_handling(self):
-        """Test whitespace handling in hint parsing."""
         from awsquery.cli import find_hint_function
 
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
@@ -635,10 +574,7 @@ class TestFieldHintParsing:
 
 
 class TestFieldHintExtraction:
-    """Test field hint behavior in parameter extraction."""
-
     def test_field_hint_takes_priority(self):
-        """Test that field hint takes priority over default heuristics."""
         from awsquery.filters import extract_parameter_values
 
         # Mock data with both field hint target and default parameter name
@@ -660,7 +596,6 @@ class TestFieldHintExtraction:
         assert "default-name" not in values_hint
 
     def test_exact_field_name_matching(self):
-        """Test exact field name matching."""
         from awsquery.filters import extract_parameter_values
 
         resources = [
@@ -676,7 +611,6 @@ class TestFieldHintExtraction:
         assert "exact-value" in values
 
     def test_case_insensitive_field_matching(self):
-        """Test case-insensitive field matching when exact match fails."""
         from awsquery.filters import extract_parameter_values
 
         resources = [{"clusterarn": "arn:value", "other_field": "other"}]
@@ -686,7 +620,6 @@ class TestFieldHintExtraction:
         assert "arn:value" in values
 
     def test_partial_field_name_matching(self):
-        """Test partial field name matching when exact matches fail."""
         from awsquery.filters import extract_parameter_values
 
         resources = [{"ClusterArnDetails": "partial-match-value", "UnrelatedField": "other"}]
@@ -696,7 +629,6 @@ class TestFieldHintExtraction:
         assert "partial-match-value" in values
 
     def test_default_behavior_without_field_hint(self):
-        """Test that default heuristic works when no field hint provided."""
         from awsquery.filters import extract_parameter_values
 
         resources = [{"ClusterName": "cluster-value", "OtherField": "other-value"}]
@@ -706,7 +638,6 @@ class TestFieldHintExtraction:
         assert "cluster-value" in values
 
     def test_field_hint_with_nested_data(self):
-        """Test field hint extraction with nested/flattened data."""
         from awsquery.filters import extract_parameter_values
 
         resources = [
@@ -722,7 +653,6 @@ class TestFieldHintExtraction:
         assert "direct-arn" in values_direct
 
     def test_field_hint_multiple_resources(self):
-        """Test field hint extraction across multiple resources."""
         from awsquery.filters import extract_parameter_values
 
         resources = [
@@ -740,11 +670,8 @@ class TestFieldHintExtraction:
 
 
 class TestFieldHintIntegration:
-    """Test integration of field hints through the call chain."""
-
     @patch("awsquery.core.execute_aws_call")
     def test_field_hint_passed_through_multi_level_call(self, mock_execute):
-        """Test that field hints are passed through multi-level calls."""
         mock_execute.return_value = [
             {
                 "Clusters": [
@@ -774,7 +701,6 @@ class TestFieldHintIntegration:
 
     @patch("awsquery.core.execute_aws_call")
     def test_field_hint_with_tracking_call(self, mock_execute):
-        """Test field hint integration with tracking calls."""
         mock_execute.return_value = [
             {"Clusters": [{"ClusterName": "test-cluster", "CustomArn": "custom-arn-value"}]}
         ]
@@ -797,7 +723,6 @@ class TestFieldHintIntegration:
         assert isinstance(call_results, list)
 
     def test_user_feedback_includes_field_information(self):
-        """Test that user feedback messages include field information."""
         from awsquery.cli import find_hint_function
 
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
@@ -811,7 +736,6 @@ class TestFieldHintIntegration:
 
     @patch("sys.stderr")
     def test_hint_affects_actual_parameter_extraction(self, mock_stderr):
-        """Test that field hint actually affects parameter extraction."""
         from awsquery.filters import extract_parameter_values
 
         # Create test data where field hint should change results
@@ -830,10 +754,7 @@ class TestFieldHintIntegration:
 
 
 class TestFieldHintErrorHandling:
-    """Test error handling for field hints."""
-
     def test_field_hint_no_matches(self):
-        """Test behavior when field hint doesn't match any fields."""
         from awsquery.filters import extract_parameter_values
 
         resources = [{"ClusterName": "test-cluster", "ClusterArn": "test-arn"}]
@@ -843,7 +764,6 @@ class TestFieldHintErrorHandling:
         assert len(values) == 0
 
     def test_malformed_hint_format(self):
-        """Test handling of malformed hint formats."""
         from awsquery.cli import find_hint_function
 
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
@@ -870,7 +790,6 @@ class TestFieldHintErrorHandling:
                     pytest.fail(f"Unexpected exception for hint '{hint}': {e}")
 
     def test_empty_field_hint_in_extraction(self):
-        """Test extraction with empty field hint."""
         from awsquery.filters import extract_parameter_values
 
         resources = [{"ClusterName": "test-value"}]
@@ -880,7 +799,6 @@ class TestFieldHintErrorHandling:
         assert "test-value" in values
 
     def test_none_field_hint_in_extraction(self):
-        """Test extraction with None field hint."""
         from awsquery.filters import extract_parameter_values
 
         resources = [{"ClusterName": "test-value"}]
@@ -890,7 +808,6 @@ class TestFieldHintErrorHandling:
         assert "test-value" in values
 
     def test_field_hint_edge_cases(self):
-        """Test edge cases in field hint handling."""
         from awsquery.filters import extract_parameter_values
 
         resources = [{"": "empty-key-value", " ": "space-key-value", "NormalKey": "normal-value"}]
@@ -908,7 +825,6 @@ class TestFieldHintErrorHandling:
             assert isinstance(values, list)  # Should not crash
 
     def test_field_hint_with_complex_aws_response(self):
-        """Test field hint extraction with realistic AWS response structure."""
         from awsquery.filters import extract_parameter_values
 
         # Simulate a realistic EKS describe-clusters response
@@ -946,7 +862,6 @@ class TestFieldHintErrorHandling:
         assert "https://dev.eks.amazonaws.com" in endpoint_values
 
     def test_function_field_hint_comprehensive_workflow(self):
-        """Test complete workflow from parsing to extraction."""
         from awsquery.cli import find_hint_function
         from awsquery.filters import extract_parameter_values
 
@@ -973,7 +888,6 @@ class TestFieldHintErrorHandling:
             assert "default-name" not in values  # Field hint overrides default
 
     def test_case_variations_in_field_hints(self):
-        """Test various case combinations in field hint matching."""
         from awsquery.filters import extract_parameter_values
 
         # Test exact case match preference
@@ -1014,10 +928,7 @@ class TestFieldHintErrorHandling:
 
 
 class TestHintImplementationReadiness:
-    """Test readiness for implementing the hint feature."""
-
     def test_existing_completion_validator_works(self):
-        """Test that existing completion validator is ready for hint usage."""
         # This confirms the underlying infrastructure is ready
 
         hint = "desc-inst"
@@ -1042,7 +953,6 @@ class TestHintImplementationReadiness:
         assert "terminate-instances" not in matches
 
     def test_filter_parsing_infrastructure_ready(self):
-        """Test that filter parsing can handle hint-influenced operations."""
         from awsquery.filters import parse_multi_level_filters_for_mode
 
         # Test that filter parsing works with various service/action combinations
@@ -1060,7 +970,6 @@ class TestHintImplementationReadiness:
             assert isinstance(column, list)
 
     def test_multi_level_call_infrastructure_ready(self):
-        """Test that multi-level call infrastructure is ready for hints."""
         # This tests that the infrastructure for parameter resolution exists
         from awsquery.core import infer_list_operation
 

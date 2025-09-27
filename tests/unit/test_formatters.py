@@ -28,7 +28,6 @@ class TestFlattenResponse:
         assert result == []
 
     def test_flatten_response_empty_single_response(self):
-        """Test flatten_response with None/empty single response."""
         result = flatten_response(None)
         assert result == []
 
@@ -36,13 +35,10 @@ class TestFlattenResponse:
         assert result == []
 
     def test_flatten_response_paginated_responses(self, sample_paginated_responses):
-        """Test flatten_response with paginated responses."""
         result = flatten_response(sample_paginated_responses)
 
-        # Should have all instances from all pages
         assert len(result) == 4  # 2 instances per page * 2 pages
 
-        # Verify instance IDs from both pages
         instance_ids = [instance["InstanceId"] for instance in result]
         assert "i-page1-instance1" in instance_ids
         assert "i-page1-instance2" in instance_ids
@@ -50,21 +46,19 @@ class TestFlattenResponse:
         assert "i-page2-instance2" in instance_ids
 
     def test_flatten_response_single_non_paginated(self, sample_ec2_response):
-        """Test flatten_response with single (non-paginated) response."""
         result = flatten_response(sample_ec2_response)
 
-        # Should extract reservations from the single response (largest list)
-        assert len(result) == 1  # 1 reservation containing multiple instances
+        # Extracts reservations (largest list) from single response
+        assert len(result) == 1
         reservation = result[0]
         assert "ReservationId" in reservation
         assert "Instances" in reservation
-        assert len(reservation["Instances"]) == 2  # 2 instances in the reservation
+        assert len(reservation["Instances"]) == 2
         instance_ids = [instance["InstanceId"] for instance in reservation["Instances"]]
         assert "i-1234567890abcdef0" in instance_ids
         assert "i-abcdef1234567890" in instance_ids
 
     def test_flatten_response_direct_list(self):
-        """Test flatten_response with direct list of resources."""
         direct_list = [
             {"InstanceId": "i-direct1", "State": {"Name": "running"}},
             {"InstanceId": "i-direct2", "State": {"Name": "stopped"}},
@@ -78,27 +72,18 @@ class TestFlattenResponse:
 
 
 class TestFlattenSingleResponse:
-    """Test suite for flatten_single_response() function.
-
-    Extract resources from single response.
-    """
 
     def test_flatten_single_response_empty_inputs(self):
-        """Test flatten_single_response with various empty inputs."""
-        # None
         result = flatten_single_response(None)
         assert result == []
 
-        # Empty dict
         result = flatten_single_response({})
         assert result == []
 
-        # Empty list
         result = flatten_single_response([])
         assert result == []
 
     def test_flatten_single_response_direct_list(self):
-        """Test flatten_single_response with direct list input."""
         resources = [
             {"InstanceId": "i-123", "State": "running"},
             {"InstanceId": "i-456", "State": "stopped"},
@@ -108,7 +93,7 @@ class TestFlattenSingleResponse:
         assert len(result) == 2
 
     def test_flatten_single_response_non_dict_input(self):
-        """Test flatten_single_response with non-dict input gets wrapped in list."""
+        # Non-dict input gets wrapped in list
         result = flatten_single_response("string value")
         assert result == ["string value"]
 
@@ -119,29 +104,26 @@ class TestFlattenSingleResponse:
         assert result == [True]
 
     def test_flatten_single_response_only_response_metadata(self):
-        """Test flatten_single_response with only ResponseMetadata returns empty list."""
+        # Only ResponseMetadata returns empty list
         response = {"ResponseMetadata": {"RequestId": "test-request-id", "HTTPStatusCode": 200}}
         result = flatten_single_response(response)
         assert result == []
 
     def test_flatten_single_response_single_list_key(self, sample_ec2_response):
-        """Test flatten_single_response with single list key extraction."""
         result = flatten_single_response(sample_ec2_response)
 
-        # Should extract Reservations (the only list key)
         assert len(result) == 1  # One reservation
         reservation = result[0]
         assert "ReservationId" in reservation
         assert "Instances" in reservation
 
-        # The instances are within the reservation
         instances = reservation["Instances"]
         instance_ids = [instance["InstanceId"] for instance in instances]
         assert "i-1234567890abcdef0" in instance_ids
         assert "i-abcdef1234567890" in instance_ids
 
     def test_flatten_single_response_multiple_list_keys_chooses_largest(self):
-        """Test flatten_single_response with multiple list keys chooses largest."""
+        # Chooses largest list when multiple lists present
         response = {
             "SmallList": [{"id": 1}],
             "LargeList": [{"id": 1}, {"id": 2}, {"id": 3}],
@@ -150,12 +132,11 @@ class TestFlattenSingleResponse:
         }
         result = flatten_single_response(response)
 
-        # Should choose LargeList (3 items)
         assert len(result) == 3
         assert result == [{"id": 1}, {"id": 2}, {"id": 3}]
 
     def test_flatten_single_response_no_list_keys_returns_whole_response(self):
-        """Test flatten_single_response with no list keys returns whole response."""
+        # No list keys returns whole response (minus ResponseMetadata)
         response = {
             "ResourceId": "resource-123",
             "Name": "test-resource",
@@ -164,7 +145,6 @@ class TestFlattenSingleResponse:
         }
         result = flatten_single_response(response)
 
-        # Should return whole response (minus ResponseMetadata) as single item
         assert len(result) == 1
         assert result[0]["ResourceId"] == "resource-123"
         assert result[0]["Name"] == "test-resource"
@@ -172,10 +152,9 @@ class TestFlattenSingleResponse:
         assert "ResponseMetadata" not in result[0]
 
     def test_flatten_single_response_mixed_list_and_non_list_keys(self, sample_s3_response):
-        """Test flatten_single_response ignores non-list keys when list key present."""
+        # Ignores non-list keys when list key present
         result = flatten_single_response(sample_s3_response)
 
-        # Should extract Buckets list, ignoring Owner
         assert len(result) == 3
         assert all("Name" in bucket for bucket in result)
         bucket_names = [bucket["Name"] for bucket in result]
@@ -185,20 +164,14 @@ class TestFlattenSingleResponse:
 
 
 class TestFlattenDictKeys:
-    """Test suite for flatten_dict_keys() function.
-
-    Flatten nested dictionaries with dot notation.
-    """
 
     def test_flatten_dict_keys_simple_dict(self):
-        """Test flatten_dict_keys with simple flat dictionary."""
         data = {"Name": "test-resource", "Status": "active", "Count": 5}
         result = flatten_dict_keys(data)
 
         assert result == {"Name": "test-resource", "Status": "active", "Count": 5}
 
     def test_flatten_dict_keys_nested_dict(self):
-        """Test flatten_dict_keys with nested dictionaries."""
         data = {
             "InstanceId": "i-123",
             "State": {"Name": "running", "Code": 16},
@@ -216,7 +189,6 @@ class TestFlattenDictKeys:
         assert result == expected
 
     def test_flatten_dict_keys_with_arrays(self):
-        """Test flatten_dict_keys with arrays containing objects."""
         data = {
             "InstanceId": "i-123",
             "SecurityGroups": [
@@ -241,7 +213,6 @@ class TestFlattenDictKeys:
         assert result == expected
 
     def test_flatten_dict_keys_with_primitive_array_items(self):
-        """Test flatten_dict_keys with arrays containing primitive values."""
         data = {"Name": "test", "Numbers": [1, 2, 3], "Strings": ["a", "b", "c"]}
         result = flatten_dict_keys(data)
 
@@ -257,7 +228,6 @@ class TestFlattenDictKeys:
         assert result == expected
 
     def test_flatten_dict_keys_deeply_nested(self):
-        """Test flatten_dict_keys with deeply nested structures."""
         data = {
             "Level1": {
                 "Level2": {
@@ -275,41 +245,34 @@ class TestFlattenDictKeys:
         assert result == expected
 
     def test_flatten_dict_keys_non_dict_input(self):
-        """Test flatten_dict_keys with non-dictionary inputs."""
-        # String input
+        # Non-dict inputs get wrapped with 'value' key
         result = flatten_dict_keys("test-string")
         assert result == {"value": "test-string"}
 
-        # Number input
         result = flatten_dict_keys(42)
         assert result == {"value": 42}
 
-        # Boolean input
         result = flatten_dict_keys(True)
         assert result == {"value": True}
 
-        # None input
         result = flatten_dict_keys(None)
         assert result == {"value": None}
 
     def test_flatten_dict_keys_non_dict_input_with_parent_key(self):
-        """Test flatten_dict_keys with non-dictionary inputs preserves parent key."""
+        # Non-dict inputs preserve parent key
         result = flatten_dict_keys("test-string", parent_key="existing_key")
         assert result == {"existing_key": "test-string"}
 
     def test_flatten_dict_keys_empty_dict(self):
-        """Test flatten_dict_keys with empty dictionary."""
         result = flatten_dict_keys({})
         assert result == {}
 
     def test_flatten_dict_keys_custom_separator(self):
-        """Test flatten_dict_keys with custom separator."""
         data = {"Level1": {"Level2": "value"}}
         result = flatten_dict_keys(data, sep="_")
         assert result == {"Level1_Level2": "value"}
 
     def test_flatten_dict_keys_mixed_data_types(self):
-        """Test flatten_dict_keys with mixed data types."""
         data = {
             "StringField": "text",
             "NumberField": 123,
@@ -335,7 +298,6 @@ class TestFlattenDictKeys:
 
 
 class TestSimplifyKey:
-    """Test suite for simplify_key() function - extract the last non-numeric part."""
 
     @pytest.mark.parametrize(
         "full_key,expected",
@@ -366,17 +328,14 @@ class TestSimplifyKey:
         ],
     )
     def test_simplify_key_patterns(self, full_key, expected):
-        """Test simplify_key with various key patterns."""
         result = simplify_key(full_key)
         assert result == expected
 
     def test_simplify_key_none_input(self):
-        """Test simplify_key with None input."""
         result = simplify_key(None)
         assert result is None
 
     def test_simplify_key_single_component(self):
-        """Test simplify_key with single component (no dots)."""
         result = simplify_key("SimpleKey")
         assert result == "SimpleKey"
 
@@ -385,10 +344,8 @@ class TestSimplifyKey:
 
 
 class TestTableOutput:
-    """Test suite for format_table_output() function - format resources as table."""
 
     def test_format_table_output_empty_resources(self):
-        """Test format_table_output with empty resources."""
         result = format_table_output([])
         assert result == "No results found."
 
@@ -396,14 +353,12 @@ class TestTableOutput:
         assert result == "No results found."
 
     def test_format_table_output_simple_resources(self):
-        """Test format_table_output with simple flat resources."""
         resources = [
             {"Name": "resource1", "Status": "active", "Count": 5},
             {"Name": "resource2", "Status": "inactive", "Count": 3},
         ]
         result = format_table_output(resources)
 
-        # Check it's a table format
         assert "┌─" in result or "|" in result  # Grid format indicators
         assert "Name" in result
         assert "Status" in result
@@ -412,7 +367,7 @@ class TestTableOutput:
         assert "resource2" in result
 
     def test_format_table_output_nested_resources(self):
-        """Test format_table_output with nested resources gets flattened."""
+        # Nested resources get flattened
         resources = [
             {
                 "InstanceId": "i-123",
@@ -422,7 +377,6 @@ class TestTableOutput:
         ]
         result = format_table_output(resources)
 
-        # Should have flattened keys
         assert "InstanceId" in result
         assert "Name" in result  # Simplified from State.Name
         assert "Code" in result  # Simplified from State.Code
@@ -432,7 +386,6 @@ class TestTableOutput:
         assert "running" in result
 
     def test_format_table_output_column_filters_matching(self):
-        """Test format_table_output with column filters that match."""
         resources = [
             {
                 "InstanceId": "i-123",
@@ -443,54 +396,48 @@ class TestTableOutput:
         ]
         result = format_table_output(resources, column_filters=["Instance", "State"])
 
-        # Should include columns matching filters
         assert "InstanceId" in result or "InstanceType" in result
         assert "Name" in result  # From State.Name
         # Should not include PublicIpAddress (no filter match)
         assert "PublicIpAddress" not in result and "PublicIp" not in result
 
     def test_format_table_output_column_filters_no_matches(self):
-        """Test format_table_output with column filters that don't match."""
         resources = [{"Name": "resource1", "Status": "active"}]
         result = format_table_output(resources, column_filters=["NonExistent"])
 
         assert result == "No matching columns found."
 
     def test_format_table_output_key_deduplication(self):
-        """Test format_table_output with duplicate simplified keys."""
+        # Duplicate simplified keys get combined
         resources = [
             {"Instance.Name": "instance1", "Resource.Name": "resource1", "Tag.Name": "tag1"}
         ]
         result = format_table_output(resources)
 
-        # Should have a Name column header
         assert "Name" in result
 
-        # Should combine all Name values in one cell
         assert "instance1" in result
         assert "resource1" in result
         assert "tag1" in result
 
         # Check that the values are combined in a single row
         data_lines = [line for line in result.split("\n") if "instance1" in line]
-        assert len(data_lines) == 1  # Should be only one data line
+        assert len(data_lines) == 1
         data_line = data_lines[0]
-        # All three values should be in the same line
         assert "instance1" in data_line
         assert "resource1" in data_line
         assert "tag1" in data_line
 
     def test_format_table_output_long_value_truncation(self):
-        """Test format_table_output truncates long values."""
+        # Long values get truncated with ellipsis
         resources = [{"ShortValue": "short", "LongValue": "a" * 90}]  # Over 80 character limit
         result = format_table_output(resources)
 
         assert "short" in result
-        # Should be truncated with ellipsis
         assert ("a" * 77 + "...") in result
 
     def test_format_table_output_empty_rows_filtered(self):
-        """Test format_table_output filters out empty rows."""
+        # Empty rows get filtered out
         resources = [
             {"Name": "resource1", "Status": "active"},
             {"OtherField": ""},  # This won't match any columns
@@ -499,10 +446,8 @@ class TestTableOutput:
         ]
         result = format_table_output(resources)
 
-        # Should only show rows with actual data
         assert "resource1" in result
         assert "resource2" in result
-        # Count number of data rows (excluding headers)
         lines = [line for line in result.split("\n") if "resource" in line]
         assert len(lines) == 2  # Only 2 valid resources
 
@@ -516,7 +461,6 @@ class TestTableOutput:
         ],
     )
     def test_format_table_output_column_filter_patterns(self, column_filters, expected_columns):
-        """Test format_table_output with various column filter patterns."""
         resources = [
             {
                 "InstanceId": "i-123",
@@ -532,10 +476,8 @@ class TestTableOutput:
 
 
 class TestJsonOutput:
-    """Test suite for format_json_output() function - format resources as JSON."""
 
     def test_format_json_output_empty_resources(self):
-        """Test format_json_output with empty resources."""
         result = format_json_output([])
         parsed = json.loads(result)
         assert parsed == {"results": []}
@@ -545,7 +487,6 @@ class TestJsonOutput:
         assert parsed == {"results": []}
 
     def test_format_json_output_simple_resources(self):
-        """Test format_json_output with simple resources."""
         resources = [
             {"Name": "resource1", "Status": "active"},
             {"Name": "resource2", "Status": "inactive"},
@@ -558,7 +499,7 @@ class TestJsonOutput:
         assert parsed["results"][1]["Name"] == "resource2"
 
     def test_format_json_output_nested_resources(self):
-        """Test format_json_output with nested resources (no filtering)."""
+        # Without column filters, preserves original structure
         resources = [
             {
                 "InstanceId": "i-123",
@@ -569,13 +510,12 @@ class TestJsonOutput:
         result = format_json_output(resources)
         parsed = json.loads(result)
 
-        # Without column filters, should preserve original structure
         assert len(parsed["results"]) == 1
         assert parsed["results"][0]["InstanceId"] == "i-123"
         assert parsed["results"][0]["State"]["Name"] == "running"
 
     def test_format_json_output_with_column_filters(self):
-        """Test format_json_output with column filters."""
+        # Column filters flatten and filter the output
         resources = [
             {
                 "InstanceId": "i-123",
@@ -587,35 +527,29 @@ class TestJsonOutput:
         result = format_json_output(resources, column_filters=["Instance", "State"])
         parsed = json.loads(result)
 
-        # Should flatten and filter
         assert len(parsed["results"]) == 1
         resource = parsed["results"][0]
 
-        # Should have Instance-related fields
         assert "InstanceId" in resource or "InstanceType" in resource
-        # Should have State field
         assert "Name" in resource  # Simplified from State.Name
-        # Should not have PublicIpAddress
         assert "PublicIpAddress" not in resource
 
     def test_format_json_output_key_deduplication(self):
-        """Test format_json_output with duplicate simplified keys."""
+        # Duplicate simplified keys get combined
         resources = [
             {"Instance.Name": "instance1", "Resource.Name": "resource1", "Status": "active"}
         ]
         result = format_json_output(resources, column_filters=["Name"])
         parsed = json.loads(result)
 
-        # Should combine duplicate keys
         assert len(parsed["results"]) == 1
         resource = parsed["results"][0]
         assert "Name" in resource
-        # Should contain both values (comma-separated or one of them)
         name_value = resource["Name"]
         assert "instance1" in name_value or "resource1" in name_value
 
     def test_format_json_output_filters_empty_values(self):
-        """Test format_json_output filters out empty values."""
+        # Empty/null values get filtered out
         resources = [
             {"Name": "resource1", "EmptyString": "", "NullValue": None, "Status": "active"}
         ]
@@ -626,21 +560,19 @@ class TestJsonOutput:
         resource = parsed["results"][0]
         assert "Name" in resource
         assert "Status" in resource
-        # Empty/null values should be filtered out
         assert "EmptyString" not in resource
         assert "NullValue" not in resource
 
     def test_format_json_output_no_matching_resources(self):
-        """Test format_json_output when no resources match filters."""
+        # No columns match returns empty results
         resources = [{"Name": "resource1", "Status": "active"}]
         result = format_json_output(resources, column_filters=["NonExistent"])
         parsed = json.loads(result)
 
-        # Should return empty results when no columns match
         assert parsed["results"] == []
 
     def test_format_json_output_default_string_conversion(self):
-        """Test format_json_output handles non-serializable objects with default=str."""
+        # Non-serializable objects get converted to string
         from datetime import datetime
 
         resources = [
@@ -649,7 +581,6 @@ class TestJsonOutput:
         result = format_json_output(resources)
         parsed = json.loads(result)
 
-        # Should convert datetime to string
         assert len(parsed["results"]) == 1
         resource = parsed["results"][0]
         assert resource["Name"] == "resource1"
@@ -657,27 +588,22 @@ class TestJsonOutput:
         assert resource["Count"] == 42
 
     def test_format_json_output_proper_json_structure(self):
-        """Test format_json_output produces valid JSON with proper indentation."""
+        # Valid JSON with proper indentation
         resources = [{"Name": "test"}]
         result = format_json_output(resources)
 
-        # Should be valid JSON
         parsed = json.loads(result)
         assert "results" in parsed
 
-        # Should have proper indentation (2 spaces)
         assert "\n" in result
         lines = result.split("\n")
-        # Check for indented lines
         indented_lines = [line for line in lines if line.startswith("  ")]
         assert len(indented_lines) > 0
 
 
 class TestUtilityFunctions:
-    """Test suite for utility functions - extract_and_sort_keys and show_keys."""
 
     def test_extract_and_sort_keys_empty_resources(self):
-        """Test extract_and_sort_keys with empty resources."""
         result = extract_and_sort_keys([])
         assert result == []
 
@@ -685,19 +611,16 @@ class TestUtilityFunctions:
         assert result == []
 
     def test_extract_and_sort_keys_simple_resources(self):
-        """Test extract_and_sort_keys with simple flat resources."""
         resources = [
             {"Name": "resource1", "Status": "active", "Count": 5},
             {"Name": "resource2", "Type": "web", "Status": "inactive"},
         ]
         result = extract_and_sort_keys(resources)
 
-        # Should extract and sort all unique simplified keys
         expected_keys = ["Count", "Name", "Status", "Type"]
         assert result == expected_keys
 
     def test_extract_and_sort_keys_nested_resources(self):
-        """Test extract_and_sort_keys with nested resources."""
         resources = [
             {
                 "InstanceId": "i-123",
@@ -707,37 +630,32 @@ class TestUtilityFunctions:
         ]
         result = extract_and_sort_keys(resources)
 
-        # Should extract simplified keys from flattened structure
         assert "InstanceId" in result
         assert "Name" in result  # From State.Name
         assert "Code" in result  # From State.Code
         assert "Key" in result  # From Tags.0.Key
         assert "Value" in result  # From Tags.0.Value
 
-        # Should be sorted case-insensitively
         assert result == sorted(result, key=str.lower)
 
     def test_extract_and_sort_keys_case_insensitive_sort(self):
-        """Test extract_and_sort_keys sorts case-insensitively."""
+        # Case-insensitive sorting
         resources = [{"zebra": "z", "Apple": "a", "Banana": "b", "cherry": "c"}]
         result = extract_and_sort_keys(resources)
 
-        # Should be sorted case-insensitively: Apple, Banana, cherry, zebra
         assert result == ["Apple", "Banana", "cherry", "zebra"]
 
     def test_extract_and_sort_keys_deduplication(self):
-        """Test extract_and_sort_keys removes duplicate simplified keys."""
+        # Duplicate simplified keys get deduplicated
         resources = [
             {"Instance.Name": "instance1", "Resource.Name": "resource1", "State.Name": "running"}
         ]
         result = extract_and_sort_keys(resources)
 
-        # Should have only one 'Name' key (deduplicated)
         assert result.count("Name") == 1
         assert "Name" in result
 
     def test_extract_and_sort_keys_with_various_data_types(self):
-        """Test extract_and_sort_keys with mixed data types."""
         resources = [
             {
                 "StringField": "text",
@@ -756,7 +674,6 @@ class TestUtilityFunctions:
 
     @patch("awsquery.core.execute_aws_call")
     def test_show_keys_no_data(self, mock_execute):
-        """Test show_keys when no data is available."""
         mock_execute.return_value = {"ResponseMetadata": {"RequestId": "test"}}
 
         result = show_keys("ec2", "describe-instances")
@@ -766,7 +683,6 @@ class TestUtilityFunctions:
 
     @patch("awsquery.core.execute_aws_call")
     def test_show_keys_with_data(self, mock_execute):
-        """Test show_keys with actual data."""
         mock_execute.return_value = {
             "Instances": [
                 {
@@ -780,11 +696,10 @@ class TestUtilityFunctions:
 
         result = show_keys("ec2", "describe-instances")
 
-        # Should format keys with indentation
+        # Keys formatted with indentation
         lines = result.split("\n")
         assert all(line.startswith("  ") for line in lines if line.strip())
 
-        # Should contain simplified keys (from flattened structure)
         content = result.replace("  ", "")
         assert "InstanceId" in content
         assert "Name" in content  # From State.Name
@@ -793,12 +708,10 @@ class TestUtilityFunctions:
 
     @patch("awsquery.core.execute_aws_call")
     def test_show_keys_integration(self, mock_execute):
-        """Test show_keys integration with extract_and_sort_keys."""
         mock_execute.return_value = {"Instances": [{"InstanceId": "i-123", "Status": "running"}]}
 
         result = show_keys("ec2", "describe-instances")
 
-        # Should have expected keys formatted with indentation
         lines = [line.strip() for line in result.split("\n") if line.strip()]
         assert "InstanceId" in lines
         assert "Status" in lines
@@ -807,34 +720,29 @@ class TestUtilityFunctions:
 
 
 class TestComplexScenarios:
-    """Test suite for complex real-world formatting scenarios."""
 
     def test_format_table_output_aws_ec2_instances(self, sample_ec2_response):
-        """Test format_table_output with realistic EC2 instances response."""
+        # Realistic EC2 instances formatting
         resources = flatten_single_response(sample_ec2_response)
         result = format_table_output(resources, column_filters=["Instance", "State", "Tag"])
 
-        # Should include relevant columns
         assert "InstanceId" in result
         assert "Name" in result  # From State.Name
         assert any(tag in result for tag in ["Key", "Value"])  # From Tags
 
-        # Should include instance data
         assert "i-1234567890abcdef0" in result
         assert "i-abcdef1234567890" in result
         assert "running" in result
         assert "stopped" in result
 
     def test_format_json_output_aws_s3_buckets(self, sample_s3_response):
-        """Test format_json_output with realistic S3 buckets response."""
+        # Realistic S3 buckets formatting
         resources = flatten_single_response(sample_s3_response)
         result = format_json_output(resources, column_filters=["Name", "Creation"])
         parsed = json.loads(result)
 
-        # Should have 3 buckets
         assert len(parsed["results"]) == 3
 
-        # Should filter for Name and Creation fields
         for bucket in parsed["results"]:
             assert "Name" in bucket
             # CreationDate should be simplified to just show Creation
@@ -842,7 +750,7 @@ class TestComplexScenarios:
                 assert True  # Expected
 
     def test_format_table_output_complex_nested_structure(self):
-        """Test format_table_output with complex nested AWS-like structure."""
+        # Complex nested AWS-like structure
         complex_resource = {
             "LoadBalancer": {
                 "LoadBalancerName": "test-lb",
@@ -871,15 +779,13 @@ class TestComplexScenarios:
             [complex_resource], column_filters=["LoadBalancer", "Protocol"]
         )
 
-        # Should include LoadBalancer fields
         assert "LoadBalancerName" in result or "DNSName" in result
-        # Should include Protocol from Listeners
         assert "Protocol" in result
         assert "HTTP" in result
         assert "HTTPS" in result
 
     def test_format_json_output_mixed_data_types(self):
-        """Test format_json_output with mixed data types from AWS responses."""
+        # Mixed data types from AWS responses
         resources = [
             {
                 "StringField": "test-value",
@@ -900,26 +806,23 @@ class TestComplexScenarios:
         )
         parsed = json.loads(result)
 
-        # Should handle mixed data types correctly
         assert len(parsed["results"]) == 1
         resource = parsed["results"][0]
 
-        # Check expected field types are preserved/converted
+        # All fields get stringified for consistency
         for key, value in resource.items():
-            assert isinstance(value, str)  # All should be stringified for consistency
+            assert isinstance(value, str)
 
     def test_flatten_response_real_paginated_data(self):
-        """Test flatten_response with realistic paginated data."""
+        # Realistic paginated data handling
         from tests.fixtures.aws_responses import get_paginated_response
 
         paginated_data = get_paginated_response("ec2", "describe_instances", 2, 3)
         result = flatten_response(paginated_data)
 
-        # Should combine all reservations from all pages
-        # (each page has 1 reservation with 3 instances)
+        # Each page has 1 reservation with 3 instances
         assert len(result) == 2  # 2 pages * 1 reservation per page
 
-        # Verify we have reservations from both pages
         all_instances = []
         for reservation in result:
             assert "ReservationId" in reservation
@@ -935,20 +838,17 @@ class TestComplexScenarios:
         assert len(page1_instances) >= 1
 
     def test_extract_and_sort_keys_large_complex_structure(self):
-        """Test extract_and_sort_keys with large complex structure."""
+        # Large complex structure handling
         from tests.fixtures.aws_responses import get_complex_nested_response
 
         complex_response = get_complex_nested_response(depth=3, breadth=2)
         resources = flatten_single_response(complex_response)
         result = extract_and_sort_keys(resources)
 
-        # Should extract many keys from complex structure
         assert len(result) >= 10
 
-        # Should be properly sorted
         assert result == sorted(result, key=str.lower)
 
-        # Should contain expected AWS-like keys
         assert any("ResourceId" in key for key in result)
         assert any("ResourceType" in key for key in result)
 
@@ -962,7 +862,6 @@ class TestComplexScenarios:
         ],
     )
     def test_format_outputs_with_various_aws_services(self, column_filter, resource_type):
-        """Test formatting functions with various AWS service responses."""
         # Create different resource types
         if resource_type == "ec2_instances":
             resources = [
@@ -995,17 +894,15 @@ class TestComplexScenarios:
                 {"ResourceId": "r-456", "Status": "inactive"},
             ]
 
-        # Test table output
         table_result = format_table_output(resources, column_filters=column_filter)
         assert table_result != "No matching columns found."
 
-        # Test JSON output
         json_result = format_json_output(resources, column_filters=column_filter)
         parsed = json.loads(json_result)
         assert len(parsed["results"]) > 0
 
     def test_edge_case_empty_and_null_handling(self):
-        """Test handling of edge cases with empty and null values."""
+        # Edge cases with empty and null values
         resources = [
             {
                 "ValidField": "has-value",
@@ -1018,26 +915,21 @@ class TestComplexScenarios:
             }
         ]
 
-        # Table output should handle these gracefully
         table_result = format_table_output(resources)
         assert "ValidField" in table_result
         assert "has-value" in table_result
 
-        # JSON output should handle these gracefully
         json_result = format_json_output(resources)
         parsed = json.loads(json_result)
         assert len(parsed["results"]) == 1
 
-        # Key extraction should work
         keys = extract_and_sort_keys(resources)
         assert len(keys) > 0
 
 
 class TestTagTransformation:
-    """Test suite for AWS Tags transformation functionality."""
 
     def test_detect_aws_tags_valid_structure(self):
-        """Test detect_aws_tags with valid AWS Tag structure."""
         obj_with_tags = {
             "InstanceId": "i-123",
             "Tags": [
@@ -1048,33 +940,30 @@ class TestTagTransformation:
         assert detect_aws_tags(obj_with_tags) is True
 
     def test_detect_aws_tags_empty_tags(self):
-        """Test detect_aws_tags with empty Tags list."""
         obj_empty_tags = {"InstanceId": "i-123", "Tags": []}
         assert detect_aws_tags(obj_empty_tags) is False
 
     def test_detect_aws_tags_no_tags_field(self):
-        """Test detect_aws_tags with no Tags field."""
         obj_no_tags = {"InstanceId": "i-123", "State": "running"}
         assert detect_aws_tags(obj_no_tags) is False
 
     def test_detect_aws_tags_invalid_tag_structure(self):
-        """Test detect_aws_tags with invalid tag structure."""
+        # Missing Key/Value structure
         obj_invalid_tags = {
             "InstanceId": "i-123",
-            "Tags": [{"Name": "invalid-structure"}],  # Missing Key/Value
+            "Tags": [{"Name": "invalid-structure"}],
         }
         assert detect_aws_tags(obj_invalid_tags) is False
 
     def test_detect_aws_tags_tags_not_list(self):
-        """Test detect_aws_tags with Tags field not being a list."""
+        # Dict instead of list
         obj_tags_not_list = {
             "InstanceId": "i-123",
-            "Tags": {"Key": "Name", "Value": "web-server"},  # Dict instead of list
+            "Tags": {"Key": "Name", "Value": "web-server"},
         }
         assert detect_aws_tags(obj_tags_not_list) is False
 
     def test_transform_tags_structure_simple_case(self):
-        """Test transform_tags_structure with simple AWS Tags."""
         input_data = {
             "InstanceId": "i-123",
             "Tags": [
@@ -1085,15 +974,15 @@ class TestTagTransformation:
 
         result = transform_tags_structure(input_data)
 
-        # Should transform Tags to map format
+        # Tags transformed to map format
         assert result["InstanceId"] == "i-123"
         assert result["Tags"] == {"Name": "web-server", "Environment": "production"}
 
-        # Should preserve original for debugging
+        # Original preserved for debugging
         assert result["Tags_Original"] == input_data["Tags"]
 
     def test_transform_tags_structure_nested_data(self):
-        """Test transform_tags_structure with nested data structures."""
+        # Nested data structures with Tags
         input_data = {
             "Instances": [
                 {
@@ -1115,7 +1004,7 @@ class TestTagTransformation:
 
         result = transform_tags_structure(input_data)
 
-        # Should recursively transform Tags in nested structures
+        # Recursively transforms Tags in nested structures
         assert len(result["Instances"]) == 2
 
         instance1 = result["Instances"][0]
@@ -1128,7 +1017,7 @@ class TestTagTransformation:
         assert instance2["Tags"] == {"Name": "web-server-2", "Environment": "staging"}
 
     def test_transform_tags_structure_preserve_non_aws_tags(self):
-        """Test transform_tags_structure preserves non-AWS Tags structures."""
+        # Non-AWS Tags structures get preserved
         input_data = {
             "InstanceId": "i-123",
             "Tags": ["simple", "string", "list"],  # Not AWS Tags structure
@@ -1143,17 +1032,16 @@ class TestTagTransformation:
         assert "Tags_Original" not in result
 
     def test_transform_tags_structure_empty_tags(self):
-        """Test transform_tags_structure with empty Tags list."""
         input_data = {"InstanceId": "i-123", "Tags": []}
 
         result = transform_tags_structure(input_data)
 
-        # Should preserve empty Tags as is
+        # Empty Tags preserved as is
         assert result["Tags"] == []
         assert "Tags_Original" not in result
 
     def test_transform_tags_structure_complex_nested_structure(self):
-        """Test transform_tags_structure with complex nested structure."""
+        # Complex nested structure with Tags at multiple levels
         input_data = {
             "LoadBalancers": [
                 {
@@ -1178,7 +1066,7 @@ class TestTagTransformation:
 
         result = transform_tags_structure(input_data)
 
-        # Should transform Tags at all levels
+        # Transforms Tags at all levels
         lb = result["LoadBalancers"][0]
         assert lb["Tags"] == {
             "Name": "test-load-balancer",
@@ -1190,7 +1078,7 @@ class TestTagTransformation:
         assert instance["Tags"] == {"Name": "web-server-1", "Role": "web"}
 
     def test_transform_tags_structure_with_duplicate_keys(self):
-        """Test transform_tags_structure with duplicate tag keys (last wins)."""
+        # Duplicate tag keys - last value wins
         input_data = {
             "InstanceId": "i-123",
             "Tags": [
@@ -1202,11 +1090,10 @@ class TestTagTransformation:
 
         result = transform_tags_structure(input_data)
 
-        # Last value should win for duplicate keys
-        assert result["Tags"] == {"Environment": "production", "Name": "web-server"}  # Last value
+        assert result["Tags"] == {"Environment": "production", "Name": "web-server"}
 
     def test_transform_tags_structure_with_special_characters(self):
-        """Test transform_tags_structure with special characters in tag values."""
+        # Special characters in tag values
         input_data = {
             "InstanceId": "i-123",
             "Tags": [
@@ -1218,7 +1105,7 @@ class TestTagTransformation:
 
         result = transform_tags_structure(input_data)
 
-        # Should preserve special characters
+        # Special characters preserved
         assert result["Tags"] == {
             "Name": "web-server-!@#$%",
             "Description": "Multi\nline\nstring",
@@ -1226,7 +1113,7 @@ class TestTagTransformation:
         }
 
     def test_format_table_output_with_transformed_tags(self):
-        """Test format_table_output uses transformed tags for column selection."""
+        # Table output uses transformed tags for column selection
         resources = [
             {
                 "InstanceId": "i-123",
@@ -1237,19 +1124,16 @@ class TestTagTransformation:
             }
         ]
 
-        # Should be able to filter by Tags.Name syntax
         result = format_table_output(
             resources, column_filters=["InstanceId", "Tags.Name", "Tags.Environment"]
         )
 
-        # Should include the instance ID
         assert "i-123" in result
-        # Should include transformed tag values
         assert "web-server-1" in result
         assert "production" in result
 
     def test_format_json_output_with_transformed_tags(self):
-        """Test format_json_output uses transformed tags."""
+        # JSON output uses transformed tags
         resources = [
             {
                 "InstanceId": "i-123",
@@ -1263,15 +1147,14 @@ class TestTagTransformation:
         result = format_json_output(resources)
         parsed = json.loads(result)
 
-        # Should have transformed tags in output
         resource = parsed["results"][0]
         assert resource["Tags"] == {"Name": "web-server-1", "Environment": "production"}
 
-        # Should preserve original for debugging
+        # Original preserved for debugging
         assert resource["Tags_Original"] == resources[0]["Tags"]
 
     def test_extract_and_sort_keys_with_transformed_tags(self):
-        """Test extract_and_sort_keys includes transformed tag keys."""
+        # Key extraction includes transformed tag keys
         resources = [
             {
                 "InstanceId": "i-123",
@@ -1284,29 +1167,25 @@ class TestTagTransformation:
 
         keys = extract_and_sort_keys(resources)
 
-        # Should include flattened tag keys from transformed structure
         assert "InstanceId" in keys
         assert "Name" in keys  # From Tags.Name
         assert "Environment" in keys  # From Tags.Environment
 
     def test_performance_with_large_tag_sets(self):
-        """Test tag transformation performance with large tag sets."""
-        # Create resource with many tags
+        # Performance test with many tags
         large_tags = [{"Key": f"Tag{i}", "Value": f"Value{i}"} for i in range(100)]
         input_data = {"InstanceId": "i-123", "Tags": large_tags}
 
         result = transform_tags_structure(input_data)
 
-        # Should transform all tags
         assert len(result["Tags"]) == 100
         assert result["Tags"]["Tag0"] == "Value0"
         assert result["Tags"]["Tag99"] == "Value99"
 
-        # Should preserve original
         assert len(result["Tags_Original"]) == 100
 
     def test_transform_tags_structure_no_modification_to_original(self):
-        """Test transform_tags_structure doesn't modify original data."""
+        # Original data remains unchanged
         original_data = {
             "InstanceId": "i-123",
             "Tags": [
@@ -1318,11 +1197,9 @@ class TestTagTransformation:
 
         result = transform_tags_structure(original_data)
 
-        # Original data should remain unchanged
         assert original_data["Tags"] == original_tags
         assert original_data["Tags"][0] == {"Key": "Name", "Value": "web-server"}
 
-        # Result should be different
         assert result["Tags"] != original_data["Tags"]
         assert result["Tags"] == {"Name": "web-server", "Environment": "production"}
 
@@ -1339,7 +1216,6 @@ class TestTagTransformation:
         ],
     )
     def test_transform_tags_structure_parametrized(self, tag_input, expected_output):
-        """Test transform_tags_structure with various tag inputs."""
         input_data = {"ResourceId": "test-resource", "Tags": tag_input}
 
         result = transform_tags_structure(input_data)
