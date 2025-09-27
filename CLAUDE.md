@@ -8,22 +8,98 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Development Philosophy
 
-**IMPORTANT: Backward compatibility is NEVER a goal and NEVER needs to be achieved.** This is a self-contained tool with no external dependencies or consumers. Always prioritize:
-- Clean, maintainable code over compatibility
-- Removing deprecated functions and patterns immediately
-- Refactoring without hesitation when improvements are identified
-- Simplifying APIs and removing wrapper functions
+**CRITICAL: ZERO BACKWARD COMPATIBILITY REQUIREMENT**
+
+This project has **ZERO EXTERNAL CONSUMERS** and **NO BACKWARD COMPATIBILITY OBLIGATIONS**. Internal APIs can and should be changed aggressively for code quality improvements.
+
+**MANDATORY PRINCIPLES:**
+- **NEVER maintain backward compatibility** - there are no external users
+- **CLI commands must remain stable** - user-facing behavior should be consistent
+- **Internal APIs are completely mutable** - change function signatures, parameters, return types freely
+- **Delete deprecated code immediately** - no deprecation periods needed
+- **Refactor aggressively** - prioritize clean code over any compatibility concerns
+- **Break internal interfaces without hesitation** - improve designs whenever beneficial
+- **Update tests to match new APIs** - test failures from API changes should be fixed by updating tests
+
+**The only stability requirement is the CLI user experience. All internal code is fair game for radical changes.**
+
+## MANDATORY AGENT USAGE
+
+**ABSOLUTE REQUIREMENT: SPECIALIZED AGENTS MUST BE USED FOR ALL DEVELOPMENT TASKS**
+
+**ZERO TOLERANCE POLICY: MANUAL WORK IS CATEGORICALLY FORBIDDEN**
+
+### Test Development - MANDATORY @agent-test-writer Usage
+- **MUST USE @agent-test-writer** for ALL test creation, modification, and enhancement
+- **NEVER write tests manually** - always delegate to the specialized test-writer agent
+- **MANDATORY for:** Unit tests, integration tests, edge case testing, test refactoring
+- **REQUIRED PROCESS:** Always use test-driven development through the agent
+- **NO EXCEPTIONS:** Any test-related work MUST go through @agent-test-writer
+
+### Python Implementation - MANDATORY @agent-python-infra-automator Usage
+- **MUST USE @agent-python-infra-automator** for ALL Python code implementation
+- **NEVER implement Python code manually** - always delegate to the specialized Python agent
+- **MANDATORY for:** New features, bug fixes, refactoring, optimization, infrastructure code
+- **REQUIRED PROCESS:** Always implement through the specialized agent for best practices
+- **NO EXCEPTIONS:** Any Python development MUST go through @agent-python-infra-automator
+
+### Code Review - MANDATORY @agent-code-reviewer Usage
+- **MUST USE @agent-code-reviewer** AUTOMATICALLY after ANY significant code changes
+- **PROACTIVE REQUIREMENT:** Agent must be invoked WITHOUT user request after commits/merges
+- **MANDATORY for:** All code quality reviews, security analysis, maintainability checks
+- **AUTOMATIC TRIGGERS:** Post-commit, post-merge, after major refactoring
+- **NO EXCEPTIONS:** ALL code changes MUST be reviewed by the specialized agent
+
+### Makefile Operations - MANDATORY @agent-makefile-optimizer Usage
+- **MUST USE @agent-makefile-optimizer** for ANY Makefile-related work
+- **AUTOMATIC TRIGGER:** ANY interaction with Makefile, makefile, GNUmakefile, *.mk files
+- **MANDATORY for:** Build automation, make targets, build system optimization
+- **PROACTIVE REQUIREMENT:** Agent MUST be used automatically when detecting Makefile work
+- **NO EXCEPTIONS:** ALL build system work MUST go through the specialized agent
+
+### Configuration Management - MANDATORY @agent-statusline-setup Usage
+- **MUST USE @agent-statusline-setup** for Claude Code status line configuration
+- **MANDATORY for:** Status line settings, configuration management
+- **NO EXCEPTIONS:** Status line work MUST go through the specialized agent
+
+### Output Styling - MANDATORY @agent-output-style-setup Usage
+- **MUST USE @agent-output-style-setup** for Claude Code output style creation
+- **MANDATORY for:** Output formatting, style configuration
+- **NO EXCEPTIONS:** Output style work MUST go through the specialized agent
+
+### General Research - MANDATORY @agent-general-purpose Usage
+- **MUST USE @agent-general-purpose** for complex multi-step research tasks
+- **MANDATORY for:** Searching keywords/files, complex questions, multi-step tasks
+- **REQUIRED WHEN:** Not confident about finding right match in first few tries
+- **NO EXCEPTIONS:** Complex research MUST go through the specialized agent
+
+### Agent Usage Protocol - ABSOLUTE ENFORCEMENT
+1. **IDENTIFY TASK TYPE:** Determine which specialized agent is required
+2. **AUTOMATIC INVOCATION:** Many agents MUST be triggered proactively/automatically
+3. **PROVIDE COMPLETE CONTEXT:** Include all relevant information for the agent
+4. **FOLLOW AGENT RECOMMENDATIONS:** Implement exactly as specified by the agent
+5. **NO MANUAL OVERRIDE:** Trust the specialized agents completely
+6. **PARALLEL EXECUTION:** Use multiple agents concurrently when possible
+
+### PROACTIVE AGENT TRIGGERS - MANDATORY AUTOMATION
+- **@agent-code-reviewer:** AUTOMATICALLY after significant code changes
+- **@agent-makefile-optimizer:** AUTOMATICALLY when detecting Makefile work
+- **@agent-test-writer:** PROACTIVELY when functions/classes lack test coverage
+- **@agent-python-infra-automator:** PROACTIVELY for infrastructure automation needs
+
+**VIOLATION OF AGENT USAGE IS STRICTLY FORBIDDEN - ALL DEVELOPMENT MUST GO THROUGH SPECIALIZED AGENTS**
+**MANUAL IMPLEMENTATION IS CATEGORICALLY PROHIBITED - AGENTS ARE MANDATORY FOR ALL WORK**
 
 ## Development Commands
 
 ### Core Commands
 - `make install-dev` - Install development dependencies
-- `make test` - Run all tests 
-- `make test-unit` - Run unit tests only
-- `make test-integration` - Run integration tests only
-- `make test-critical` - Run critical path tests
+- `make test` - Run all tests (MANDATORY - NO SELECTIVE EXECUTION ALLOWED)
+- `make test-unit` - Run unit tests only (directory-based, not marker-based)
+- `make test-integration` - Run integration tests only (directory-based, not marker-based)
+- `make test-critical` - Run all tests (NO SELECTIVE MARKERS PERMITTED)
 - `make coverage` - Run tests with coverage report (generates htmlcov/index.html)
-- `python3 -m pytest tests/ -v` - Direct pytest execution
+- `python3 -m pytest tests/ -v` - Direct pytest execution (NEVER with -m markers)
 
 ### Code Quality
 - `make lint` - Run linting checks (flake8, pylint)
@@ -150,6 +226,32 @@ grep -r "test.*filter" tests/
 - **No Redundant Docstrings**: Avoid docstrings that simply restate method names
 - **Purpose Over Process**: Document WHY tests exist, not HOW they work (unless complex)
 - **Clean Signal-to-Noise**: Prioritize readable code over explanatory comments
+
+### 🚫 **ABSOLUTE PROHIBITION: PYTEST MARKERS**
+
+**MANDATORY EDICT: PYTEST MARKERS ARE CATEGORICALLY FORBIDDEN AND COMPLETELY BANNED**
+
+**UNBREAKABLE RULES:**
+- **NEVER, EVER, UNDER ANY CIRCUMSTANCES** add `@pytest.mark.*` decorators to tests
+- **ZERO TOLERANCE** for selective test execution markers (`@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`, `@pytest.mark.critical`, etc.)
+- **ALL TESTS MUST ALWAYS RUN** - no exceptions, no conditional execution, no selective filtering
+- **IMMEDIATE DELETION** required for any pytest markers discovered in code
+- **NO EXEMPTIONS** - this rule is immutable and non-negotiable
+
+**RATIONALE:**
+- Selective test execution leads to **INCOMPLETE COVERAGE** and **HIDDEN FAILURES**
+- Markers create **FALSE CONFIDENCE** by allowing tests to be skipped
+- **ALL TESTS ARE CRITICAL** - none should be optional or conditional
+- Complete test suite execution is **MANDATORY FOR QUALITY ASSURANCE**
+
+**ENFORCEMENT:**
+- Any pytest markers found in code must be **REMOVED IMMEDIATELY**
+- Makefile commands must **NEVER USE** `-m "marker"` syntax
+- Test discovery must be **PURELY DIRECTORY-BASED** (tests/unit/, tests/integration/)
+- **NO EXCEPTIONS** - this is an inviolable principle
+
+**ALLOWED:** `@pytest.mark.parametrize` ONLY (for test parameterization, not selection)
+**FORBIDDEN:** All other `@pytest.mark.*` decorators without exception
 
 ### Configuration Files
 - `pyproject.toml` - Main project configuration with dependencies and tool settings

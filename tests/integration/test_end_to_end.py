@@ -199,7 +199,7 @@ class TestEndToEndScenarios:
         from awsquery import utils
 
         # Debug mode is enabled via fixture
-        assert utils.debug_enabled
+        assert utils.get_debug_enabled()
 
         # Test debug print (should work when enabled)
         with redirect_stderr(io.StringIO()) as stderr:
@@ -443,15 +443,13 @@ class TestCLIArgumentParsing:
             mock_parsed_args = Mock()
             mock_parsed_args.service = "ec2"
 
-            with patch("awsquery.security.load_security_policy") as mock_load_policy:
+            with patch("awsquery.security.get_service_valid_operations") as mock_get_valid_ops:
+                mock_get_valid_ops.return_value = {"DescribeInstances"}
 
-                with patch("awsquery.security.validate_readonly") as mock_validate:
-                    mock_validate.side_effect = lambda s, a, p: f"{s}:{a}" in p
-
-                    # Test action completer
-                    results = action_completer("desc", mock_parsed_args)
-                    assert "describe-instances" in results
-                    assert "terminate-instances" not in results  # Should be filtered by security
+                # Test action completer
+                results = action_completer("desc", mock_parsed_args)
+                assert "describe-instances" in results
+                assert "terminate-instances" not in results  # Should be filtered by security
 
     def test_complex_argv_parsing_edge_cases(self):
         """Test complex argv parsing scenarios."""
@@ -591,27 +589,25 @@ class TestCLIErrorHandling:
     def test_aws_credential_errors(self):
         """Test AWS credential and authentication error scenarios."""
         with patch("sys.argv", ["awsquery", "ec2", "describe-instances"]):
-            with patch("awsquery.security.load_security_policy") as mock_load_policy:
+            with patch("awsquery.core.execute_aws_call") as mock_execute:
+                # Test NoCredentialsError
+                mock_execute.side_effect = NoCredentialsError()
 
-                with patch("awsquery.core.execute_aws_call") as mock_execute:
-                    # Test NoCredentialsError
-                    mock_execute.side_effect = NoCredentialsError()
-
-                    with patch("sys.exit") as mock_exit:
-                        with redirect_stderr(io.StringIO()) as captured_stderr:
-                            try:
-                                main()
-                            except (NoCredentialsError, SystemExit) as e:
-                                # Expected credential or system exit errors
-                                if isinstance(e, NoCredentialsError):
-                                    assert "credential" in str(e).lower()
-                                elif isinstance(e, SystemExit):
-                                    # Should exit with non-zero code for credential errors
-                                    assert (
-                                        e.code != 0
-                                    ), "Should exit with non-zero code for credential errors"
-                                else:
-                                    raise  # Re-raise unexpected exceptions
+                with patch("sys.exit") as mock_exit:
+                    with redirect_stderr(io.StringIO()) as captured_stderr:
+                        try:
+                            main()
+                        except (NoCredentialsError, SystemExit) as e:
+                            # Expected credential or system exit errors
+                            if isinstance(e, NoCredentialsError):
+                                assert "credential" in str(e).lower()
+                            elif isinstance(e, SystemExit):
+                                # Should exit with non-zero code for credential errors
+                                assert (
+                                    e.code != 0
+                                ), "Should exit with non-zero code for credential errors"
+                            else:
+                                raise  # Re-raise unexpected exceptions
 
     def test_missing_service_action_edge_cases(self):
         """Test edge cases for missing service/action arguments."""
@@ -664,7 +660,7 @@ class TestCLIErrorHandling:
         from awsquery.utils import debug_print
 
         # Debug mode is enabled via fixture
-        assert utils.debug_enabled
+        assert utils.get_debug_enabled()
 
         with redirect_stderr(io.StringIO()) as captured:
             debug_print("Test debug message")
@@ -677,7 +673,7 @@ class TestCLIErrorHandling:
         from awsquery.utils import debug_print
 
         # Debug mode is disabled via fixture
-        assert not utils.debug_enabled
+        assert not utils.get_debug_enabled()
 
         with redirect_stderr(io.StringIO()) as captured:
             debug_print("Test debug message")

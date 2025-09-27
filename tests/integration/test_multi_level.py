@@ -83,7 +83,9 @@ class TestCompleteMultiLevelWorkflows:
         # Verify call sequence: initial -> list -> final with resolved parameter
         calls = mock_execute.call_args_list
         assert len(calls) == 3
-        assert calls[0] == call("cloudformation", "describe-stack-events", session=None)
+        assert calls[0] == call(
+            "cloudformation", "describe-stack-events", parameters=None, session=None
+        )
         # The actual operation name may vary based on infer_list_operation logic
         assert "cloudformation" in str(calls[1])
         assert calls[2] == call(
@@ -583,7 +585,7 @@ class TestErrorScenariosIntegration:
             execute_multi_level_call("custom", "describe-unknown", [], [], [])
 
         captured = capsys.readouterr()
-        assert "Could not find a working list operation" in captured.err
+        assert "Could not find working list operation" in captured.err
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.get_correct_parameter_name")
@@ -610,7 +612,7 @@ class TestErrorScenariosIntegration:
             execute_multi_level_call("eks", "describe-cluster", [], [], [])
 
         captured = capsys.readouterr()
-        assert "Could not find a working list operation" in captured.err
+        assert "Could not find working list operation" in captured.err
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.get_correct_parameter_name")
@@ -1701,7 +1703,7 @@ class TestUtilsIntegration:
         from awsquery.utils import debug_print
 
         # Debug mode enabled via fixture
-        assert utils.debug_enabled
+        assert utils.get_debug_enabled()
 
         with redirect_stderr(io.StringIO()) as captured_stderr:
             debug_print("Integration test message")
@@ -1720,7 +1722,7 @@ class TestUtilsIntegration:
         from awsquery.utils import debug_print
 
         # Debug mode disabled via fixture
-        assert not utils.debug_enabled
+        assert not utils.get_debug_enabled()
 
         with redirect_stderr(io.StringIO()) as captured_stderr:
             debug_print("Should not appear")
@@ -1844,7 +1846,7 @@ class TestUtilsIntegration:
         assert normalized_action == "describe_stack_events"
 
         # Test debug output in workflow - debug goes to stderr
-        assert utils.debug_enabled  # Enabled via fixture
+        assert utils.get_debug_enabled()  # Enabled via fixture
         with redirect_stderr(io.StringIO()) as captured:
             debug_print(f"Processing service: {clean_service}")
             debug_print(f"Normalized action: {normalized_action}")

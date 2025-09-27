@@ -295,7 +295,9 @@ class TestExecuteMultiLevelCall:
 
         assert len(result) == 1
         assert result[0]["InstanceId"] == "i-123"
-        mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
+        mock_execute.assert_called_once_with(
+            "ec2", "describe-instances", parameters=None, session=None
+        )
         # Verify the flatten_response was called
         mock_flatten.assert_called_once_with(mock_response)
         # Since we have value_filters, filter_resources should be called
@@ -352,8 +354,8 @@ class TestExecuteMultiLevelCall:
         # Verify call sequence - session parameter should be passed through
         calls = mock_execute.call_args_list
         assert len(calls) == 3
-        # First call attempts describe-cluster without parameters (no parameters, session=None)
-        assert calls[0] == call("eks", "describe-cluster", session=None)
+        # First call attempts describe-cluster without parameters (parameters=None, session=None)
+        assert calls[0] == call("eks", "describe-cluster", parameters=None, session=None)
         # Second call fetches list of clusters (no parameters, session=None)
         assert calls[1] == call("eks", "list_clusters", session=None)
         # Third call with resolved parameter
@@ -379,7 +381,7 @@ class TestExecuteMultiLevelCall:
             execute_multi_level_call("service", "describe-something", [], [], [])
 
         captured = capsys.readouterr()
-        assert "Could not find a working list operation" in captured.err
+        assert "Could not find working list operation" in captured.err
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.infer_list_operation")

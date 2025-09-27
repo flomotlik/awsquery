@@ -40,13 +40,13 @@ test: ## Run all tests
 	python3 -m pytest tests/ -v
 
 test-unit: ## Run unit tests only
-	python3 -m pytest tests/unit/ -v -m "unit"
+	python3 -m pytest tests/unit/ -v
 
 test-integration: ## Run integration tests only
-	python3 -m pytest tests/integration/ -v -m "integration"
+	python3 -m pytest tests/integration/ -v
 
-test-slow: ## Run slow tests
-	python3 -m pytest tests/ -v -m "slow"
+test-slow: ## Run all tests (no selective marking allowed)
+	python3 -m pytest tests/ -v
 
 test-fast: ## Run all tests with parallel execution (optimized for Python 3.8-3.10)
 	python3 -m pytest tests/ -n auto -q
@@ -57,8 +57,8 @@ test-unit-fast: ## Run unit tests with parallel execution (2-5 seconds)
 test-integration-fast: ## Run integration tests with parallel execution
 	python3 -m pytest tests/integration/ -n auto -q
 
-test-critical: ## Run critical path tests
-	python3 -m pytest tests/ -v -m "critical"
+test-critical: ## Run all tests (no selective marking allowed)
+	python3 -m pytest tests/ -v
 
 coverage: ## Run tests with coverage report
 	python3 -m pytest tests/ --cov=src/awsquery --cov-report=term-missing --cov-report=html

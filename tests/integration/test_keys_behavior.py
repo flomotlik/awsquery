@@ -582,15 +582,15 @@ class TestKeysModeDebugIntegration:
             mock_show_keys.return_value = "  Name\n  CreationDate"
 
             # Enable debug mode during test
-            original_debug = utils.debug_enabled
-            utils.debug_enabled = True
+            original_debug = utils.get_debug_enabled()
+            utils.set_debug_enabled(True)
 
             try:
                 main()
             except SystemExit:
                 pass
             finally:
-                utils.debug_enabled = original_debug
+                utils.set_debug_enabled(original_debug)
 
         # Verify debug output was generated (at least one debug call)
         assert mock_debug.called or True  # Debug may not be called if execution path changes
