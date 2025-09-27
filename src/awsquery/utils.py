@@ -1,27 +1,137 @@
 """Utility functions for AWS Query Tool."""
 
 import sys
+import types
 
 import boto3
 
-# Global debug mode flag
-debug_enabled = False
+
+class AWSQueryError(Exception):
+    """Base exception for AWS Query Tool"""
 
 
+class ValidationError(AWSQueryError):
+    """Error in parameter validation"""
+
+
+class SecurityError(AWSQueryError):
+    """Security policy violation"""
+
+
+class CredentialsError(AWSQueryError):
+    """AWS credentials issue"""
+
+
+class OperationError(AWSQueryError):
+    """AWS operation failed"""
+
+
+def convert_parameter_name(parameter_name):
+    """Convert parameter name from camelCase to PascalCase for AWS API compatibility"""
+    if not parameter_name:
+        return parameter_name
+
+    return (
+        parameter_name[0].upper() + parameter_name[1:]
+        if len(parameter_name) > 0
+        else parameter_name
+    )
+
+
+def pascal_to_kebab_case(pascal_case_str):
+    """Convert PascalCase to kebab-case (e.g., 'ListStacks' -> 'list-stacks')"""
+    if not pascal_case_str:
+        return pascal_case_str
+
+    import re
+
+    # Insert hyphens before uppercase letters (except the first one)
+    kebab_case = re.sub(r"(?<!^)(?=[A-Z])", "-", pascal_case_str)
+    return kebab_case.lower()
+
+
+class DebugContext:
+    """Context manager for debug output"""
+
+    def __init__(self, enabled=False):
+        """Initialize debug context with optional enabled state."""
+        self.enabled = enabled
+
+    def print(self, *args, **kwargs):
+        """Print debug messages with [DEBUG] prefix and timestamp when enabled"""
+        if self.enabled:
+            import datetime
+
+            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            debug_prefix = f"[DEBUG] {timestamp}"
+
+            if args:
+                first_arg = f"{debug_prefix} {args[0]}"
+                remaining_args = args[1:]
+                print(first_arg, *remaining_args, file=sys.stderr, **kwargs)
+            else:
+                print(debug_prefix, file=sys.stderr, **kwargs)
+
+    def enable(self):
+        """Enable debug output"""
+        self.enabled = True
+
+    def disable(self):
+        """Disable debug output"""
+        self.enabled = False
+
+
+# Global debug context - can be replaced with dependency injection in the future
+_debug_context = DebugContext()
+
+
+# Compatibility function for existing code
 def debug_print(*args, **kwargs):
     """Print debug messages with [DEBUG] prefix and timestamp when debug mode is enabled"""
-    if debug_enabled:
-        import datetime
+    _debug_context.print(*args, **kwargs)
 
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        debug_prefix = f"[DEBUG] {timestamp}"
 
-        if args:
-            first_arg = f"{debug_prefix} {args[0]}"
-            remaining_args = args[1:]
-            print(first_arg, *remaining_args, file=sys.stderr, **kwargs)
-        else:
-            print(debug_prefix, file=sys.stderr, **kwargs)
+# Compatibility for setting debug mode
+def set_debug_enabled(value):
+    """Set debug mode on or off"""
+    if value:
+        _debug_context.enable()
+    else:
+        _debug_context.disable()
+
+
+def get_debug_enabled():
+    """Get current debug mode state"""
+    return _debug_context.enabled
+
+
+# Module-level compatibility with dynamic property behavior
+class _DebugEnabledProperty:
+    def __bool__(self):
+        return _debug_context.enabled
+
+    def __eq__(self, other):
+        return _debug_context.enabled == other
+
+    def __repr__(self):
+        return str(_debug_context.enabled)
+
+
+debug_enabled = _DebugEnabledProperty()
+
+
+# Allow module-level assignment for backward compatibility
+def __setattr__(name, value):
+    if name == "debug_enabled":
+        set_debug_enabled(value)
+    else:
+        globals()[name] = value
+
+
+# Type-safe module attribute assignment
+current_module = sys.modules[__name__]
+if isinstance(current_module, types.ModuleType):
+    current_module.__setattr__ = __setattr__  # type: ignore[method-assign]
 
 
 def sanitize_input(value):
