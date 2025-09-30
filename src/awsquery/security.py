@@ -7,11 +7,17 @@ from .utils import debug_print
 
 # Common read-only operation prefixes based on AWS ReadOnly policy analysis
 # These prefixes appear 20+ times across AWS services
+# Note: Only specific BatchXxx prefixes are included to avoid false positives
+# with write operations like BatchCreate, BatchDelete, BatchUpdate, etc.
+# Note: "Can" prefix removed as it matches Cancel* operations (write operations)
 SAFE_READONLY_PREFIXES = [
     "List",
     "Get",
     "Describe",
-    "Batch",
+    "BatchGet",
+    "BatchDescribe",
+    "BatchCheck",
+    "BatchDetect",
     "Search",
     "Query",
     "View",
@@ -27,9 +33,7 @@ SAFE_READONLY_PREFIXES = [
     "Estimate",
     "Discover",
     "Retrieve",
-    "Is",
     "Has",
-    "Can",
 ]
 
 
