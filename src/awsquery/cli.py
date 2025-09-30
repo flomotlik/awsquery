@@ -13,6 +13,7 @@ import boto3
 
 from .config import apply_default_filters
 from .core import (
+    check_parameter_requirements,
     execute_aws_call,
     execute_multi_level_call,
     execute_multi_level_call_with_tracking,
@@ -182,6 +183,39 @@ def _convert_type(value):
 
     # Keep as string
     return value
+
+
+def get_parameter_type(service, action, parameter_name, session=None):
+    """Get expected parameter type from boto3 service model.
+
+    Args:
+        service: AWS service name (e.g., 'ec2', 'ssm')
+        action: Operation name (e.g., 'describe-parameters')
+        parameter_name: Parameter to check (e.g., 'Filters')
+        session: Optional boto3 session
+
+    Returns:
+        str or None: Parameter type ('list', 'string', 'structure', 'integer', etc.)
+                     or None if parameter not found or error occurs
+    """
+    try:
+        from .utils import get_client, normalize_action_name
+
+        client = get_client(service, session)
+        normalized_action = normalize_action_name(action)
+
+        # Get operation model
+        operation_model = client.meta.service_model.operation_model(normalized_action)
+
+        if operation_model.input_shape and parameter_name in operation_model.input_shape.members:
+            param_shape = operation_model.input_shape.members[parameter_name]
+            return param_shape.type_name
+
+        return None
+
+    except Exception as e:
+        debug_print(f"Could not determine parameter type for {parameter_name}: {e}")
+        return None
 
 
 # CLI flag constants
@@ -545,14 +579,28 @@ class CLIArgumentProcessor:
             formatter_class=argparse.RawDescriptionHelpFormatter,
             epilog="""  # pragma: no mutate
 Examples:
-  awsquery ec2 describe_instances prod web -- Tags.Name State InstanceId
-  awsquery s3 list_buckets backup
-  awsquery ec2 describe_instances  (shows available keys)
+  awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId
+  awsquery s3 list-buckets backup
+  awsquery ec2 describe-instances  (shows available keys)
   awsquery cloudformation describe-stack-events prod -- Created -- StackName (multi-level)
-  awsquery ec2 describe_instances --keys  (show all keys)
+  awsquery ec2 describe-instances --keys  (show all keys)
   awsquery cloudformation describe-stack-resources workers --keys -- EKS (multi-level keys)
-  awsquery ec2 describe_instances --debug  (enable debug output)
+  awsquery ec2 describe-instances --debug  (enable debug output)
   awsquery cloudformation describe-stack-resources workers --debug -- EKS (debug multi-level)
+
+Autocomplete Setup:
+  Bash:
+    eval "$(register-python-argcomplete awsquery)"
+
+  Zsh:
+    autoload -U bashcompinit && bashcompinit
+    eval "$(register-python-argcomplete awsquery)"
+
+  Fish:
+    register-python-argcomplete --shell fish awsquery | source
+
+  Add the appropriate command to your shell config (~/.bashrc, ~/.zshrc, etc.)
+  For more details: https://github.com/flomotlik/awsquery#enable-shell-autocomplete
         """,
         )
 
@@ -686,14 +734,28 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""  # pragma: no mutate
 Examples:
-  awsquery ec2 describe_instances prod web -- Tags.Name State InstanceId
-  awsquery s3 list_buckets backup
-  awsquery ec2 describe_instances  (shows available keys)
+  awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId
+  awsquery s3 list-buckets backup
+  awsquery ec2 describe-instances  (shows available keys)
   awsquery cloudformation describe-stack-events prod -- Created -- StackName (multi-level)
-  awsquery ec2 describe_instances --keys  (show all keys)
+  awsquery ec2 describe-instances --keys  (show all keys)
   awsquery cloudformation describe-stack-resources workers --keys -- EKS (multi-level keys)
-  awsquery ec2 describe_instances --debug  (enable debug output)
+  awsquery ec2 describe-instances --debug  (enable debug output)
   awsquery cloudformation describe-stack-resources workers --debug -- EKS (debug multi-level)
+
+Autocomplete Setup:
+  Bash:
+    eval "$(register-python-argcomplete awsquery)"
+
+  Zsh:
+    autoload -U bashcompinit && bashcompinit
+    eval "$(register-python-argcomplete awsquery)"
+
+  Fish:
+    register-python-argcomplete --shell fish awsquery | source
+
+  Add the appropriate command to your shell config (~/.bashrc, ~/.zshrc, etc.)
+  For more details: https://github.com/flomotlik/awsquery#enable-shell-autocomplete
         """,
     )
 
@@ -844,7 +906,50 @@ Examples:
                 print(f"ERROR: Invalid parameter format '{param_str}': {e}", file=sys.stderr)
                 sys.exit(1)
 
-    debug_print(f"DEBUG: Parsed parameters: {parsed_parameters}")  # pragma: no mutate
+    debug_print(
+        f"DEBUG: Parsed parameters (before type correction): {parsed_parameters}"
+    )  # pragma: no mutate
+
+    # Validate and correct parameter types
+    if parsed_parameters:
+        corrected_parameters = {}
+        for key, value in parsed_parameters.items():
+            expected_type = get_parameter_type(service, action, key, session=None)
+
+            if expected_type == "list" and not isinstance(value, list):
+                # Auto-wrap single values in list
+                debug_print(
+                    f"Auto-wrapping parameter '{key}' in list "
+                    f"(expected type: list, got: {type(value).__name__})"
+                )
+                corrected_parameters[key] = [value]
+            else:
+                corrected_parameters[key] = value
+
+        parsed_parameters = corrected_parameters
+
+    debug_print(
+        f"DEBUG: Parsed parameters (after type correction): {parsed_parameters}"
+    )  # pragma: no mutate
+
+    def _execute_multi_level_workflow(
+        service, action, filter_argv, session, hint_function, hint_field
+    ):
+        """Helper to execute multi-level call with filter parsing."""
+        _, multi_resource_filters, multi_value_filters, multi_column_filters = (
+            parse_multi_level_filters_for_mode(filter_argv, mode="multi")
+        )
+        final_multi_column_filters = determine_column_filters(multi_column_filters, service, action)
+        return execute_multi_level_call(
+            service,
+            action,
+            multi_resource_filters,
+            multi_value_filters,
+            final_multi_column_filters,
+            session,
+            hint_function,
+            hint_field,
+        )
 
     # Process -i hint if provided
     hint_function = None
@@ -946,43 +1051,57 @@ Examples:
             sys.exit(1)
 
     try:
-        debug_print("Using single-level execution first")  # pragma: no mutate
-        response = execute_aws_call(service, action, parameters=parsed_parameters, session=session)
+        requirements = check_parameter_requirements(service, action, parsed_parameters, session)
 
-        if isinstance(response, dict) and "validation_error" in response:
+        if requirements["needs_params"]:
             debug_print(
-                "ValidationError detected in single-level call, switching to multi-level"
+                f"Preemptive multi-step: missing required parameters "
+                f"{requirements['missing_required']}"
             )  # pragma: no mutate
-            _, multi_resource_filters, multi_value_filters, multi_column_filters = (
-                parse_multi_level_filters_for_mode(filter_argv, mode="multi")
-            )
             debug_print(
-                f"Re-parsed filters for multi-level - "
-                f"Resource: {multi_resource_filters}, Value: {multi_value_filters}, "
-                f"Column: {multi_column_filters}"
+                "Skipping initial API call, going directly to multi-level resolution"
             )  # pragma: no mutate
-            # Apply defaults for multi-level if no user columns specified
-            final_multi_column_filters = determine_column_filters(
-                multi_column_filters, service, action
-            )
-            filtered_resources = execute_multi_level_call(
-                service,
-                action,
-                multi_resource_filters,
-                multi_value_filters,
-                final_multi_column_filters,
-                session,
-                hint_function,
-                hint_field,
+
+            filtered_resources = _execute_multi_level_workflow(
+                service, action, filter_argv, session, hint_function, hint_field
             )
             debug_print(
                 f"Multi-level call completed with {len(filtered_resources)} resources"
             )  # pragma: no mutate
-        else:
+
+        elif requirements["conditional"] and not parsed_parameters:
+            print(f"Note: {requirements['conditional']}", file=sys.stderr)
+            print("Attempting to list all resources...", file=sys.stderr)
+
+            debug_print(
+                "Using single-level execution (conditional requirements noted)"
+            )  # pragma: no mutate
+            response = execute_aws_call(
+                service, action, parameters=parsed_parameters, session=session
+            )
+
             resources = flatten_response(response)
             debug_print(f"Total resources extracted: {len(resources)}")  # pragma: no mutate
-
             filtered_resources = filter_resources(resources, value_filters)
+
+        else:
+            debug_print("Using single-level execution")  # pragma: no mutate
+            response = execute_aws_call(
+                service, action, parameters=parsed_parameters, session=session
+            )
+
+            if isinstance(response, dict) and "validation_error" in response:
+                debug_print(
+                    "Unexpected validation error, switching to multi-level"
+                )  # pragma: no mutate
+                filtered_resources = _execute_multi_level_workflow(
+                    service, action, filter_argv, session, hint_function, hint_field
+                )
+            else:
+                resources = flatten_response(response)
+                debug_print(f"Total resources extracted: {len(resources)}")  # pragma: no mutate
+
+                filtered_resources = filter_resources(resources, value_filters)
 
         if final_column_filters:
             for filter_word in final_column_filters:
