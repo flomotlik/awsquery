@@ -306,8 +306,8 @@ class TestParameterResolutionChain:
         result_str = str(result[0])
         assert "prod-cluster" in result_str
 
-        # Verify parameter resolution chain
-        mock_infer.assert_called_once_with("eks", "clusterName", "describe-cluster")
+        # Verify parameter resolution chain (now includes session parameter)
+        mock_infer.assert_called_once_with("eks", "clusterName", "describe-cluster", None)
         # mock_get_param may or may not be called depending on the execution path
         # The important thing is that the resolution workflow completed successfully
 
