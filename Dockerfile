@@ -34,7 +34,6 @@ WORKDIR /app
 
 # Copy only essential files for package installation
 COPY pyproject.toml .
-COPY policy.json .
 
 # Copy source code (minimal for installation)
 COPY src/ ./src/

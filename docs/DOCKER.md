@@ -59,9 +59,6 @@ make test-in-docker-prod
   - Non-root user for security
 - **Usage**: Production deployments, CI/CD pipelines
 
-### `awsquery` (Legacy)
-- **Purpose**: Backward compatibility
-- **Configuration**: Extends `awsquery-dev`
 
 ## Installation Methods
 
@@ -171,8 +168,7 @@ Environment variables are also supported:
 ├── Makefile           # Development commands
 ├── policy.json        # Security policy
 ├── src/awsquery/      # Modular source code
-├── tests/             # Test suite
-└── awsquery.py        # Original script (backward compatibility)
+└── tests/             # Test suite
 ```
 
 ### Production Container (`/app`)
@@ -180,8 +176,7 @@ Environment variables are also supported:
 /app/
 ├── pyproject.toml      # Project configuration
 ├── policy.json        # Security policy
-├── src/awsquery/      # Modular source code
-└── awsquery.py        # Original script (backward compatibility)
+└── src/awsquery/      # Modular source code
 ```
 
 ## Security Features
