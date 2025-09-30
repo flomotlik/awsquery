@@ -22,6 +22,107 @@ class CallResult:
         self.error_messages: List[str] = []
 
 
+def check_parameter_requirements(
+    service: str, action: str, provided_params: Dict[str, Any], session=None
+) -> Dict[str, Any]:
+    """Check if operation needs parameters that weren't provided.
+
+    Uses boto3 service model to determine:
+    1. Strict required parameters (always needed)
+    2. Conditional requirements (either/or scenarios)
+    3. Which required parameters are missing
+
+    Args:
+        service: AWS service name (e.g., 'ec2', 'ssm')
+        action: Operation name (e.g., 'describe-instances', 'get-parameters')
+        provided_params: Parameters provided by user via -p flag
+        session: Optional boto3 session
+
+    Returns:
+        dict: {
+            'needs_params': bool,           # True if missing required params
+            'required': List[str],          # List of strict required param names
+            'conditional': str or None,     # Conditional requirement hint from docs
+            'missing_required': List[str]   # Required params not provided
+        }
+    """
+    try:
+        client = get_client(service, session)
+        normalized_action = normalize_action_name(action)
+
+        operation_model = client.meta.service_model.operation_model(normalized_action)
+        input_shape = operation_model.input_shape
+
+        required = []
+        if input_shape and hasattr(input_shape, "required_members"):
+            required = list(input_shape.required_members)
+
+        missing_required = [p for p in required if p not in provided_params]
+
+        conditional_hint = None
+        if not required and not provided_params:
+            doc = operation_model.documentation if hasattr(operation_model, "documentation") else ""
+            conditional_hint = _extract_conditional_requirement(doc)
+
+        debug_print(
+            f"Parameter requirements check: required={required}, "
+            f"missing={missing_required}, conditional={'Yes' if conditional_hint else 'No'}"
+        )
+
+        return {
+            "needs_params": len(missing_required) > 0,
+            "required": required,
+            "conditional": conditional_hint,
+            "missing_required": missing_required,
+        }
+
+    except Exception as e:
+        debug_print(f"Error checking parameter requirements: {e}")
+        return {
+            "needs_params": False,
+            "required": [],
+            "conditional": None,
+            "missing_required": [],
+        }
+
+
+def _extract_conditional_requirement(documentation: str) -> Optional[str]:
+    """Extract conditional requirement hint from operation documentation.
+
+    Looks for patterns like:
+    - "must specify either X or Y"
+    - "at least one of X, Y, or Z"
+    - "required if"
+
+    Args:
+        documentation: Operation documentation string
+
+    Returns:
+        Extracted requirement sentence or None
+    """
+    if not documentation:
+        return None
+
+    patterns = [
+        r"must specify (either|one of)",
+        r"either .* or .*",
+        r"at least one of",
+        r"required if",
+        r"one of the following",
+    ]
+
+    for pattern in patterns:
+        if re.search(pattern, documentation, re.IGNORECASE):
+            sentences = documentation.split(".")
+            for sentence in sentences:
+                if re.search(pattern, sentence, re.IGNORECASE):
+                    clean_sentence = re.sub(r"<[^>]+>", "", sentence.strip())
+                    return clean_sentence
+            break
+
+    return None
+
+
 def execute_with_tracking(service, action, parameters=None, session=None):
     """Execute AWS call with tracking for keys mode"""
     result = CallResult()
@@ -205,7 +306,7 @@ def _execute_multi_level_call_internal(
                 file=sys.stderr,
             )
         else:
-            possible_operations = infer_list_operation(service, parameter_name, action)
+            possible_operations = infer_list_operation(service, parameter_name, action, session)
 
         list_response = None
         successful_operation = None
@@ -230,14 +331,23 @@ def _execute_multi_level_call_internal(
 
         if not list_response or not successful_operation:
             error_msg = f"Could not find working list operation for parameter '{parameter_name}'"
+
+            print(f"ERROR: {error_msg}", file=sys.stderr)
+            print(f"Tried operations: {possible_operations}", file=sys.stderr)
+            print("", file=sys.stderr)
+            print(
+                f"Suggestion: Use the -i/--input flag to specify the correct function:",
+                file=sys.stderr,
+            )
+            print(f"  Example: awsquery {service} {action} -i describe-param", file=sys.stderr)
+            print("", file=sys.stderr)
+            print(f"Available operations for '{service}' can be viewed with:", file=sys.stderr)
+            print(f"  aws {service} help", file=sys.stderr)
+
             if with_tracking and call_result is not None:
                 call_result.error_messages.append(error_msg)
-                print(f"ERROR: {error_msg}", file=sys.stderr)
-                print(f"ERROR: Tried operations: {possible_operations}", file=sys.stderr)
                 return call_result, []
             else:
-                print(f"ERROR: {error_msg}", file=sys.stderr)
-                print(f"ERROR: Tried operations: {possible_operations}", file=sys.stderr)
                 sys.exit(1)
 
         from .formatters import flatten_response
@@ -484,23 +594,82 @@ def parse_validation_error(error):
     return None
 
 
-def infer_list_operation(service, parameter_name, action):
-    """Infer the list operation from parameter name first, then action name as fallback"""
+def camel_to_snake_case(name: str) -> str:
+    """Convert camelCase or PascalCase to snake_case.
 
+    Handles common AWS patterns:
+    - LoadBalancer → load_balancer
+    - TargetGroup → target_group
+    - DBInstance → db_instance
+    - VPCId → vpc_id
+    - HTTPSListener → https_listener
+
+    Args:
+        name: CamelCase or PascalCase string
+
+    Returns:
+        snake_case string
+    """
+    # Handle sequences of capitals (e.g., VPC, DB, HTTPS)
+    # Insert underscore before a capital letter followed by a lowercase letter
+    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+
+    # Insert underscore before a capital letter that follows a lowercase letter or number
+    s2 = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1)
+
+    return s2.lower()
+
+
+def infer_list_operation(service, parameter_name, action, session=None):
+    """Infer the list operation from parameter name first, then action name as fallback.
+
+    NEW: Now validates that inferred operations actually exist in the service.
+    """
     possible_operations = []
 
-    if parameter_name.lower() not in ["name", "id", "arn"]:
+    # Skip parameter-based inference for generic AWS parameter names
+    # These are too ambiguous to infer specific resource types from
+    if parameter_name.lower() not in [
+        "name",
+        "id",
+        "arn",
+        "identifier",
+        "names",
+        "ids",
+        "arns",
+        "identifiers",
+    ]:
         resource_name = parameter_name
-        suffixes_to_remove = ["Name", "Id", "Arn", "ARN"]
+        # Try plural suffixes first (longer matches), then singular
+        suffixes_to_remove = [
+            "Identifiers",
+            "Names",
+            "Ids",
+            "Arns",
+            "ARNs",
+            "Identifier",
+            "Name",
+            "Id",
+            "Arn",
+            "ARN",
+        ]
         for suffix in suffixes_to_remove:
             if resource_name.endswith(suffix):
                 resource_name = resource_name[: -len(suffix)]
                 break
 
-        resource_name = resource_name.lower()
+        # Convert camelCase to snake_case to preserve word boundaries
+        resource_name = camel_to_snake_case(resource_name)
 
+        # Pluralization rules
         if resource_name.endswith("y"):
-            plural_name = resource_name[:-1] + "ies"
+            # Check if preceded by a vowel
+            if len(resource_name) >= 2 and resource_name[-2] in "aeiou":
+                # vowel + y → add s (gateway → gateways)
+                plural_name = resource_name + "s"
+            else:
+                # consonant + y → change to ies (policy → policies)
+                plural_name = resource_name[:-1] + "ies"
         elif resource_name.endswith(("s", "sh", "ch", "x", "z")):
             plural_name = resource_name + "es"
         else:
@@ -526,19 +695,29 @@ def infer_list_operation(service, parameter_name, action):
             f"Parameter '{parameter_name}' is too generic, skipping parameter-based inference"
         )  # pragma: no mutate
 
-    prefixes = ["describe", "get", "update", "delete", "create", "list"]
-    action_lower = action.lower().replace("-", "_")
+    prefixes = ["describe", "get", "read", "update", "delete", "create", "list"]
+    # Convert action to snake_case if it's camelCase, or handle kebab-case
+    if "-" in action:
+        action_snake = action.lower().replace("-", "_")
+    else:
+        # CamelCase action - convert to snake_case
+        action_snake = camel_to_snake_case(action)
 
-    action_resource = action_lower
+    action_resource = action_snake
     for prefix in prefixes:
-        if action_lower.startswith(prefix + "_"):
-            action_resource = action_lower[len(prefix) + 1 :]
+        if action_snake.startswith(prefix + "_"):
+            action_resource = action_snake[len(prefix) + 1 :]
             break
 
+    # Pluralization (same rules as resource_name)
     if action_resource.endswith("s") and len(action_resource) > 1:
         action_plural = action_resource
     elif action_resource.endswith("y"):
-        action_plural = action_resource[:-1] + "ies"
+        # Check if preceded by a vowel
+        if len(action_resource) >= 2 and action_resource[-2] in "aeiou":
+            action_plural = action_resource + "s"
+        else:
+            action_plural = action_resource[:-1] + "ies"
     elif action_resource.endswith(("sh", "ch", "x", "z")):
         action_plural = action_resource + "es"
     else:
@@ -561,9 +740,43 @@ def infer_list_operation(service, parameter_name, action):
         f"Action-based inference: '{action}' -> '{action_resource}' -> "
         f"added {len(action_operations)} operations"
     )  # pragma: no mutate
-    debug_print(f"Total possible operations: {possible_operations}")  # pragma: no mutate
 
-    return possible_operations
+    validated_operations = []
+
+    try:
+        client = get_client(service, session)
+        service_model = client.meta.service_model
+        valid_operation_names = set(service_model.operation_names)
+
+        for op in possible_operations:
+            pascal_op = "".join(word.capitalize() for word in op.split("_"))
+
+            if pascal_op in valid_operation_names:
+                validated_operations.append(op)
+                debug_print(
+                    f"✓ Validated operation exists: {op} -> {pascal_op}"
+                )  # pragma: no mutate
+            else:
+                debug_print(f"✗ Operation does not exist: {op} -> {pascal_op}")  # pragma: no mutate
+
+        if not validated_operations:
+            debug_print(
+                f"WARNING: None of the inferred operations exist in service '{service}'"
+            )  # pragma: no mutate
+            debug_print(f"Tried: {possible_operations}")  # pragma: no mutate
+            debug_print(
+                "Falling back to unvalidated list - will attempt execution anyway"
+            )  # pragma: no mutate
+            return possible_operations
+
+    except Exception as e:
+        debug_print(
+            f"Could not validate operations: {e}. Returning all inferred operations."
+        )  # pragma: no mutate
+        return possible_operations
+
+    debug_print(f"Validated operations: {validated_operations}")  # pragma: no mutate
+    return validated_operations
 
 
 def parameter_expects_list(parameter_name):
