@@ -11,6 +11,7 @@ from typing import Any, List, Optional, Tuple
 import argcomplete
 import boto3
 
+from .case_utils import to_kebab_case
 from .config import apply_default_filters
 from .core import (
     check_parameter_requirements,
@@ -29,7 +30,6 @@ from .formatters import (
     show_keys,
 )
 from .security import (
-    action_to_policy_format,
     get_service_valid_operations,
     is_readonly_operation,
     validate_readonly,
@@ -993,9 +993,7 @@ Autocomplete Setup:
         )
         if hint_function:
             # Convert hint function to CLI format for display
-            from .utils import pascal_to_kebab_case
-
-            hint_function_cli = pascal_to_kebab_case(hint_function)
+            hint_function_cli = to_kebab_case(hint_function)
             hint_parts = []
             hint_parts.append(f"function '{hint_function_cli}'")
             if hint_field:
@@ -1009,14 +1007,14 @@ Autocomplete Setup:
             )
             if hint_alternatives:
                 # Convert alternatives to CLI format for display
-                cli_alternatives = [pascal_to_kebab_case(alt) for alt in hint_alternatives]
+                cli_alternatives = [to_kebab_case(alt) for alt in hint_alternatives]
                 print(f"Alternative options: {', '.join(cli_alternatives)}", file=sys.stderr)
             debug_print(
                 f"DEBUG: Hint '{args.input}' matched function: {hint_function}, "
                 f"field: {hint_field}, limit: {hint_limit}"
             )  # pragma: no mutate
             if hint_alternatives:
-                cli_alternatives_debug = [pascal_to_kebab_case(alt) for alt in hint_alternatives]
+                cli_alternatives_debug = [to_kebab_case(alt) for alt in hint_alternatives]
                 debug_print(
                     f"DEBUG: Alternative matches: {', '.join(cli_alternatives_debug)}"
                 )  # pragma: no mutate

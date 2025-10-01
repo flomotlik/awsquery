@@ -4,13 +4,16 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from awsquery.case_utils import to_pascal_case
 from awsquery.security import (
-    action_to_policy_format,
     get_service_valid_operations,
     is_readonly_operation,
     prompt_unsafe_operation,
     validate_readonly,
 )
+
+# Compatibility alias for old function name
+action_to_policy_format = to_pascal_case
 
 
 class TestReadOnlyOperations:

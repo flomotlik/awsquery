@@ -12,12 +12,16 @@ import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 
 # Import modules under test
+from awsquery.case_utils import to_pascal_case
 from awsquery.cli import action_completer, main, service_completer
 from awsquery.core import execute_aws_call, execute_multi_level_call
 from awsquery.filters import parse_multi_level_filters_for_mode
 from awsquery.formatters import format_json_output, format_table_output, show_keys
-from awsquery.security import action_to_policy_format, validate_readonly
+from awsquery.security import validate_readonly
 from awsquery.utils import normalize_action_name
+
+# Compatibility alias for old function name
+action_to_policy_format = to_pascal_case
 
 
 class TestEndToEndScenarios:

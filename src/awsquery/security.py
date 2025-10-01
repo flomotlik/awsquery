@@ -3,6 +3,7 @@
 import sys
 from typing import Optional
 
+from .case_utils import to_pascal_case
 from .utils import debug_print
 
 # Common read-only operation prefixes based on AWS ReadOnly policy analysis
@@ -41,8 +42,7 @@ def is_readonly_operation(action: str) -> bool:
     """Check if an operation is read-only based on common prefixes."""
     # Convert kebab-case to PascalCase for checking
     if "-" in action:
-        parts = action.split("-")
-        action = "".join(part.capitalize() for part in parts)
+        action = to_pascal_case(action.replace("-", "_"))
 
     # Check if action starts with any safe prefix
     for prefix in SAFE_READONLY_PREFIXES:
@@ -91,17 +91,6 @@ def validate_readonly(service: str, action: str, allow_unsafe: bool = False) -> 
 
     # For non-readonly operations, prompt the user
     return prompt_unsafe_operation(service, action)
-
-
-def action_to_policy_format(action: str) -> str:
-    """Convert kebab-case or snake_case action to PascalCase."""
-    if "-" in action:
-        parts = action.split("-")
-        return "".join(part.capitalize() for part in parts)
-    elif "_" in action:
-        parts = action.split("_")
-        return "".join(part.capitalize() for part in parts)
-    return action
 
 
 def get_service_valid_operations(service: str, all_operations: list) -> set:

@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
+from .case_utils import to_pascal_case, to_snake_case
 from .filters import extract_parameter_values, filter_resources
 from .utils import convert_parameter_name, debug_print, get_client, normalize_action_name
 
@@ -312,9 +313,9 @@ def _execute_multi_level_call_internal(
             hint_normalized = normalize_action_name(hint_function)
             possible_operations = [hint_normalized]
             # Convert hint function to CLI format for display
-            from .utils import pascal_to_kebab_case
+            from .case_utils import to_kebab_case
 
-            hint_function_cli = pascal_to_kebab_case(hint_function)
+            hint_function_cli = to_kebab_case(hint_function)
             print(
                 f"Using hint function '{hint_function_cli}' for parameter resolution",
                 file=sys.stderr,
@@ -656,32 +657,6 @@ def parse_validation_error(error):
     return None
 
 
-def camel_to_snake_case(name: str) -> str:
-    """Convert camelCase or PascalCase to snake_case.
-
-    Handles common AWS patterns:
-    - LoadBalancer → load_balancer
-    - TargetGroup → target_group
-    - DBInstance → db_instance
-    - VPCId → vpc_id
-    - HTTPSListener → https_listener
-
-    Args:
-        name: CamelCase or PascalCase string
-
-    Returns:
-        snake_case string
-    """
-    # Handle sequences of capitals (e.g., VPC, DB, HTTPS)
-    # Insert underscore before a capital letter followed by a lowercase letter
-    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
-
-    # Insert underscore before a capital letter that follows a lowercase letter or number
-    s2 = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1)
-
-    return s2.lower()
-
-
 def infer_list_operation(service, parameter_name, action, session=None):
     """Infer the list operation from parameter name first, then action name as fallback.
 
@@ -721,7 +696,7 @@ def infer_list_operation(service, parameter_name, action, session=None):
                 break
 
         # Convert camelCase to snake_case to preserve word boundaries
-        resource_name = camel_to_snake_case(resource_name)
+        resource_name = to_snake_case(resource_name)
 
         # Pluralization rules
         if resource_name.endswith("y"):
@@ -763,7 +738,7 @@ def infer_list_operation(service, parameter_name, action, session=None):
         action_snake = action.lower().replace("-", "_")
     else:
         # CamelCase action - convert to snake_case
-        action_snake = camel_to_snake_case(action)
+        action_snake = to_snake_case(action)
 
     action_resource = action_snake
     for prefix in prefixes:
@@ -811,7 +786,7 @@ def infer_list_operation(service, parameter_name, action, session=None):
         valid_operation_names = set(service_model.operation_names)
 
         for op in possible_operations:
-            pascal_op = "".join(word.capitalize() for word in op.split("_"))
+            pascal_op = to_pascal_case(op)
 
             if pascal_op in valid_operation_names:
                 validated_operations.append(op)
@@ -937,8 +912,7 @@ def filter_valid_parameters(service, action, parameters, session=None):
         client = session.client(service)
 
         # Convert kebab-case action to PascalCase for boto3
-        action_words = action.replace("-", "_").replace("_", " ").split()
-        pascal_case_action = "".join(word.capitalize() for word in action_words)
+        pascal_case_action = to_pascal_case(action.replace("-", "_"))
 
         operation_model = client.meta.service_model.operation_model(pascal_case_action)
         input_shape = operation_model.input_shape
@@ -991,8 +965,7 @@ def get_correct_parameter_name(client, action, parameter_name):
     By introspecting the service model.
     """
     try:
-        action_words = action.replace("-", "_").replace("_", " ").split()
-        pascal_case_action = "".join(word.capitalize() for word in action_words)
+        pascal_case_action = to_pascal_case(action.replace("-", "_"))
 
         operation_model = client.meta.service_model.operation_model(pascal_case_action)
 

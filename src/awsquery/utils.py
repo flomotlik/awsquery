@@ -4,6 +4,8 @@ import sys
 
 import boto3
 
+from .case_utils import to_kebab_case, to_snake_case
+
 
 class AWSQueryError(Exception):
     """Base exception for AWS Query Tool"""
@@ -26,7 +28,11 @@ class OperationError(AWSQueryError):
 
 
 def convert_parameter_name(parameter_name):
-    """Convert parameter name from camelCase to PascalCase for AWS API compatibility"""
+    """Convert parameter name from camelCase to PascalCase for AWS API compatibility.
+
+    Note: This is NOT a general case conversion - it only capitalizes the first letter.
+    For general case conversion, use case_utils module.
+    """
     if not parameter_name:
         return parameter_name
 
@@ -37,16 +43,9 @@ def convert_parameter_name(parameter_name):
     )
 
 
-def pascal_to_kebab_case(pascal_case_str):
-    """Convert PascalCase to kebab-case (e.g., 'ListStacks' -> 'list-stacks')"""
-    if not pascal_case_str:
-        return pascal_case_str
-
-    import re
-
-    # Insert hyphens before uppercase letters (except the first one)
-    kebab_case = re.sub(r"(?<!^)(?=[A-Z])", "-", pascal_case_str)
-    return kebab_case.lower()
+# Compatibility wrappers using new case_utils functions
+pascal_to_kebab_case = to_kebab_case
+normalize_action_name = to_snake_case
 
 
 class DebugContext:
@@ -128,19 +127,6 @@ def sanitize_input(value):
     for char in dangerous:
         value = value.replace(char, "")
     return value.strip()
-
-
-def normalize_action_name(action):
-    """Convert CLI-style action names to boto3 method names"""
-    normalized = action.replace("-", "_")
-
-    import re
-
-    normalized = re.sub("([a-z0-9])([A-Z])", r"\1_\2", normalized)
-
-    normalized = normalized.lower()
-
-    return normalized
 
 
 def simplify_key(full_key):
