@@ -343,8 +343,8 @@ class TestExecuteMultiLevelCall:
         assert len(calls) == 3
         # First call attempts describe-cluster without parameters (parameters=None, session=None)
         assert calls[0] == call("eks", "describe-cluster", parameters=None, session=None)
-        # Second call fetches list of clusters (no parameters, session=None)
-        assert calls[1] == call("eks", "list_clusters", session=None)
+        # Second call fetches list of clusters (parameters=None for list operation, session=None)
+        assert calls[1] == call("eks", "list_clusters", parameters=None, session=None)
         # Third call with resolved parameter
         assert calls[2] == call("eks", "describe-cluster", {"ClusterName": "test-cluster"}, None)
 

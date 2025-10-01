@@ -229,7 +229,9 @@ def _execute_multi_level_call_internal(
     session: Optional[Any] = None,
     hint_function: Optional[str] = None,
     hint_field: Optional[str] = None,
+    limit: Optional[int] = None,
     with_tracking: bool = False,
+    user_parameters: Optional[dict] = None,
 ) -> Union[Tuple[Optional[CallResult], List[Any]], List[Any]]:
     """Unified implementation for multi-level calls with optional tracking"""
     debug_print(f"Starting multi-level call for {service}.{action}")  # pragma: no mutate
@@ -237,6 +239,18 @@ def _execute_multi_level_call_internal(
         f"Resource filters: {resource_filters}, "  # pragma: no mutate
         f"Value filters: {value_filters}, Column filters: {column_filters}"  # pragma: no mutate
     )  # pragma: no mutate
+    if user_parameters:
+        debug_print(f"User-provided parameters: {user_parameters}")  # pragma: no mutate
+
+    # Apply default limit if not specified
+    if limit is None:
+        limit = 10
+        debug_print(f"Applying default multi-step result limit: {limit}")  # pragma: no mutate
+    elif limit == 0:
+        limit = None  # 0 means unlimited
+        debug_print("Result limit set to unlimited (0)")  # pragma: no mutate
+    else:
+        debug_print(f"Using specified result limit: {limit}")  # pragma: no mutate
 
     call_result = CallResult() if with_tracking else None
 
@@ -316,7 +330,18 @@ def _execute_multi_level_call_internal(
                 debug_print(f"Trying list operation: {operation}")  # pragma: no mutate
                 print(f"Calling {operation} to find available resources...", file=sys.stderr)
 
-                list_response = execute_aws_call(service, operation, session=session)
+                # Filter user parameters for this list operation
+                list_params = filter_valid_parameters(
+                    service, operation, user_parameters or {}, session
+                )
+                if list_params:
+                    debug_print(
+                        f"Applying user parameters to list operation {operation}: {list_params}"
+                    )  # pragma: no mutate
+
+                list_response = execute_aws_call(
+                    service, operation, parameters=list_params if list_params else None, session=session
+                )
 
                 if isinstance(list_response, list) and list_response:
                     successful_operation = operation
@@ -365,6 +390,17 @@ def _execute_multi_level_call_internal(
         else:
             filtered_list_resources = list_resources
 
+        # Apply result limit
+        if limit and len(filtered_list_resources) > limit:
+            debug_print(
+                f"Limiting results from {len(filtered_list_resources)} to {limit}"
+            )  # pragma: no mutate
+            filtered_list_resources = filtered_list_resources[:limit]
+            print(
+                f"Limited to first {limit} resources (use -i ::N to adjust)",
+                file=sys.stderr
+            )
+
         print(f"Found {len(filtered_list_resources)} resources matching filters", file=sys.stderr)
 
         if not filtered_list_resources:
@@ -377,8 +413,14 @@ def _execute_multi_level_call_internal(
                 print(f"ERROR: {error_msg}", file=sys.stderr)
                 sys.exit(1)
 
+        # Singularize parameter name for better field matching
+        singular_name = singularize_parameter_name(parameter_name)
+        debug_print(
+            f"Parameter '{parameter_name}' singularized to '{singular_name}' for field matching"
+        )  # pragma: no mutate
+
         parameter_values = extract_parameter_values(
-            filtered_list_resources, parameter_name, hint_field
+            filtered_list_resources, parameter_name, hint_field, singular_name
         )
 
         if not parameter_values:
@@ -435,6 +477,18 @@ def _execute_multi_level_call_internal(
             )  # pragma: no mutate
 
         parameters = {converted_parameter_name: param_value}
+
+        # Merge user parameters with auto-resolved parameter
+        if user_parameters:
+            final_params = filter_valid_parameters(service, action, user_parameters, session)
+            # User parameters should not override auto-resolved ones
+            for key, value in final_params.items():
+                if key not in parameters:
+                    parameters[key] = value
+            if final_params:
+                debug_print(
+                    f"Merged user parameters with resolved: {parameters}"
+                )  # pragma: no mutate
 
         # Final call with resolved parameters
         try:
@@ -506,6 +560,8 @@ def execute_multi_level_call_with_tracking(
     session=None,
     hint_function=None,
     hint_field=None,
+    limit=None,
+    user_parameters=None,
 ):
     """Handle multi-level API calls with automatic parameter resolution and tracking"""
     return _execute_multi_level_call_internal(
@@ -517,7 +573,9 @@ def execute_multi_level_call_with_tracking(
         session,
         hint_function,
         hint_field,
+        limit,
         with_tracking=True,
+        user_parameters=user_parameters,
     )
 
 
@@ -530,6 +588,8 @@ def execute_multi_level_call(
     session=None,
     hint_function=None,
     hint_field=None,
+    limit=None,
+    user_parameters=None,
 ):
     """Handle multi-level API calls with automatic parameter resolution"""
     return _execute_multi_level_call_internal(
@@ -541,7 +601,9 @@ def execute_multi_level_call(
         session,
         hint_function,
         hint_field,
+        limit,
         with_tracking=False,
+        user_parameters=user_parameters,
     )
 
 
@@ -779,6 +841,66 @@ def infer_list_operation(service, parameter_name, action, session=None):
     return validated_operations
 
 
+def singularize_parameter_name(param_name):
+    """Convert plural parameter name to singular form.
+
+    Handles common AWS parameter name patterns:
+    - Names -> Name, Ids -> Id, Arns -> Arn, etc.
+    - Policies -> Policy, Entries -> Entry (ies -> y)
+    - Addresses -> Address, Caches -> Cache (es -> "")
+
+    Args:
+        param_name: Parameter name (may be plural)
+
+    Returns:
+        Singularized parameter name
+    """
+    if not param_name:
+        return param_name
+
+    # Handle special plural suffixes
+    # Check longer patterns first to avoid incorrect matches
+
+    # sses -> ss (Addresses -> Address)
+    if param_name.endswith("sses"):
+        return param_name[:-2]
+
+    # ies -> y (Policies -> Policy, Entries -> Entry)
+    if param_name.endswith("ies") and len(param_name) > 3:
+        return param_name[:-3] + "y"
+
+    # Common AWS patterns: Names, Ids, Arns, Keys, Groups, Users
+    # Check if ends with 's' but preserve acronyms like ARNs
+    if param_name.endswith("ARNs"):
+        return param_name[:-1]  # ARNs -> ARN
+
+    # Standard plurals ending in 's'
+    common_plurals = ["Names", "Ids", "Arns", "Keys", "Groups", "Users", "Items", "Values"]
+    for plural in common_plurals:
+        if param_name.endswith(plural):
+            return param_name[:-1]
+
+    # es -> e for words ending in specific patterns (ches, shes, xes, zes)
+    if param_name.endswith("ches") or param_name.endswith("shes") or \
+       param_name.endswith("xes") or param_name.endswith("zes"):
+        return param_name[:-1]  # Caches -> Cache, Boxes -> Boxe
+
+    # es -> "" for other words ending in 'es'
+    if param_name.endswith("es") and len(param_name) > 2 and not param_name.endswith("ies"):
+        # Check if it's likely plural (Addresses -> Address, not Status -> Statu)
+        # Simple heuristic: if penultimate char is not a vowel, remove 'es'
+        if param_name[-3] not in "aeiou":
+            return param_name[:-2]
+
+    # Generic 's' removal for other standard plurals
+    if param_name.endswith("s") and len(param_name) > 1:
+        # Don't singularize words that end in 'ss' or 'us' (Status, Class, etc.)
+        if not param_name.endswith("ss") and not param_name.endswith("us"):
+            return param_name[:-1]
+
+    return param_name
+
+
 def parameter_expects_list(parameter_name):
     """Determine if parameter expects list or single value"""
     list_indicators = ["s", "Names", "Ids", "Arns", "ARNs"]
@@ -788,6 +910,79 @@ def parameter_expects_list(parameter_name):
             return True
 
     return False
+
+
+def filter_valid_parameters(service, action, parameters, session=None):
+    """Filter parameters to only those valid for the given operation.
+
+    Args:
+        service: AWS service name (e.g., 'ssm', 'ec2')
+        action: Operation name (e.g., 'describe-parameters')
+        parameters: Dict of parameter names and values
+        session: Optional boto3 session
+
+    Returns:
+        Dict containing only parameters valid for this operation
+    """
+    if not parameters:
+        debug_print("filter_valid_parameters: No parameters to filter")  # pragma: no mutate
+        return {}
+
+    try:
+        import boto3
+
+        if session is None:
+            session = boto3.Session()
+
+        client = session.client(service)
+
+        # Convert kebab-case action to PascalCase for boto3
+        action_words = action.replace("-", "_").replace("_", " ").split()
+        pascal_case_action = "".join(word.capitalize() for word in action_words)
+
+        operation_model = client.meta.service_model.operation_model(pascal_case_action)
+        input_shape = operation_model.input_shape
+
+        if not input_shape:
+            debug_print(
+                f"filter_valid_parameters: No input shape for {service}.{action}"
+            )  # pragma: no mutate
+            return {}
+
+        valid_params = {}
+        invalid_params = []
+
+        for param_name, param_value in parameters.items():
+            if param_name in input_shape.members:
+                valid_params[param_name] = param_value
+                debug_print(
+                    f"filter_valid_parameters: '{param_name}' is valid for {action}"
+                )  # pragma: no mutate
+            else:
+                invalid_params.append(param_name)
+                debug_print(
+                    f"filter_valid_parameters: '{param_name}' is NOT valid for {action}"
+                )  # pragma: no mutate
+
+        if invalid_params:
+            debug_print(
+                f"filter_valid_parameters: Filtered out invalid parameters for "
+                f"{action}: {invalid_params}"
+            )  # pragma: no mutate
+
+        debug_print(
+            f"filter_valid_parameters: Returning {len(valid_params)} valid parameters "
+            f"for {action}"
+        )  # pragma: no mutate
+
+        return valid_params
+
+    except Exception as e:
+        debug_print(
+            f"filter_valid_parameters: Error filtering parameters for "
+            f"{service}.{action}: {e}"
+        )  # pragma: no mutate
+        return {}
 
 
 def get_correct_parameter_name(client, action, parameter_name):

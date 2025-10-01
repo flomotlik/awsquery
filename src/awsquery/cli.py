@@ -400,28 +400,57 @@ def find_hint_function(hint, service, session=None):
     """Find the best matching AWS function based on hint string.
 
     Args:
-        hint: The hint string (e.g., "desc-clus" or "desc-clus:clusterarn")
+        hint: The hint string with new formats:
+              - "function" - just function hint
+              - "function:field" - function + field hint
+              - "function:field:N" - function + field + limit
+              - ":field" - just field hint (use inferred function)
+              - ":field:N" - field + limit (use inferred function)
+              - "::N" - just limit (use inferred function, default field)
         service: AWS service name
         session: Optional boto3 session
 
     Returns:
-        tuple: (selected_function, field_hint, alternatives) or (None, None, []) if no matches
-        where field_hint is the suggested field to extract (or None for default heuristic)
+        tuple: (selected_function, field_hint, limit, alternatives)
+               - selected_function: None if no function specified
+               - field_hint: None for default heuristic, string for specific field
+               - limit: Integer limit or None for unlimited
+               - alternatives: List of alternative function matches
     """
 
     if not hint or not service:
-        return None, None, []
+        return None, None, None, []
 
-    # Parse hint format: function:field or just function
-    function_hint = hint
+    # Parse hint format: function:field:N with support for empty parts
+    parts = hint.split(":", 2)  # Split into at most 3 parts
+    function_hint = None
     field_hint = None
-    if ":" in hint:
-        function_hint, field_hint = hint.split(":", 1)
-        field_hint = field_hint.strip() if field_hint else None
+    limit = None
 
-    function_hint = function_hint.strip()
+    debug_print(f"Parsing hint '{hint}' into parts: {parts}")  # pragma: no mutate
+
+    # Position-based parsing: part[0]=function, part[1]=field, part[2]=limit
+    if len(parts) >= 1:
+        function_hint = parts[0].strip() if parts[0].strip() else None
+        if function_hint:
+            debug_print(f"Part 0 is function hint: {function_hint}")  # pragma: no mutate
+
+    if len(parts) >= 2:
+        field_hint = parts[1].strip() if parts[1].strip() else None
+        if field_hint:
+            debug_print(f"Part 1 is field hint: {field_hint}")  # pragma: no mutate
+
+    if len(parts) >= 3:
+        limit_str = parts[2].strip()
+        if limit_str and limit_str.isdigit():
+            limit = int(limit_str)
+            debug_print(f"Part 2 is limit: {limit}")  # pragma: no mutate
+        elif limit_str:
+            debug_print(f"Part 2 '{limit_str}' is not a valid limit (must be numeric)")  # pragma: no mutate
+
     if not function_hint:
-        return None, None, []
+        debug_print("No function hint provided, will use inferred function")  # pragma: no mutate
+        return None, field_hint, limit, []
 
     try:
         # Get all operations for the service first
@@ -444,7 +473,7 @@ def find_hint_function(hint, service, session=None):
         available_operations = get_service_valid_operations(service, all_operations)
 
         if not available_operations:
-            return None, None, []
+            return None, None, None, []
 
         # Create mapping of CLI format to original operation names
         operation_mapping = {}
@@ -459,7 +488,7 @@ def find_hint_function(hint, service, session=None):
                 matched_cli_names.append(cli_op)
 
         if not matched_cli_names:
-            return None, None, []
+            return None, None, None, []
 
         # Sort by preference: shortest first, then alphabetical
         matched_cli_names.sort(key=lambda x: (len(x), x))
@@ -472,10 +501,10 @@ def find_hint_function(hint, service, session=None):
         for cli_name in matched_cli_names[1:]:
             alternative_operations.append(operation_mapping[cli_name])
 
-        return selected_operation, field_hint, alternative_operations
+        return selected_operation, field_hint, limit, alternative_operations
 
     except Exception:
-        return None, None, []
+        return None, None, None, []
 
 
 def _enhanced_completion_validator(completion_candidate, current_input):
@@ -933,7 +962,7 @@ Autocomplete Setup:
     )  # pragma: no mutate
 
     def _execute_multi_level_workflow(
-        service, action, filter_argv, session, hint_function, hint_field
+        service, action, filter_argv, session, hint_function, hint_field, hint_limit, parsed_parameters
     ):
         """Helper to execute multi-level call with filter parsing."""
         _, multi_resource_filters, multi_value_filters, multi_column_filters = (
@@ -949,14 +978,17 @@ Autocomplete Setup:
             session,
             hint_function,
             hint_field,
+            limit=hint_limit,
+            user_parameters=parsed_parameters,
         )
 
     # Process -i hint if provided
     hint_function = None
     hint_field = None
+    hint_limit = None
     hint_alternatives = []
     if args.input:
-        hint_function, hint_field, hint_alternatives = find_hint_function(
+        hint_function, hint_field, hint_limit, hint_alternatives = find_hint_function(
             args.input, service, session=None
         )
         if hint_function:
@@ -964,29 +996,46 @@ Autocomplete Setup:
             from .utils import pascal_to_kebab_case
 
             hint_function_cli = pascal_to_kebab_case(hint_function)
+            hint_parts = []
+            hint_parts.append(f"function '{hint_function_cli}'")
             if hint_field:
-                print(
-                    f"Using hint function '{hint_function_cli}' with field '{hint_field}' "
-                    f"for multi-step calls",
-                    file=sys.stderr,
-                )
-            else:
-                print(
-                    f"Using hint function '{hint_function_cli}' for multi-step calls",
-                    file=sys.stderr,
-                )
+                hint_parts.append(f"field '{hint_field}'")
+            if hint_limit is not None:
+                hint_parts.append(f"limit {hint_limit}")
+
+            print(
+                f"Using hint {' with '.join(hint_parts)} for multi-step calls",
+                file=sys.stderr,
+            )
             if hint_alternatives:
                 # Convert alternatives to CLI format for display
                 cli_alternatives = [pascal_to_kebab_case(alt) for alt in hint_alternatives]
                 print(f"Alternative options: {', '.join(cli_alternatives)}", file=sys.stderr)
             debug_print(
-                f"DEBUG: Hint '{args.input}' matched function: {hint_function}"
+                f"DEBUG: Hint '{args.input}' matched function: {hint_function}, "
+                f"field: {hint_field}, limit: {hint_limit}"
             )  # pragma: no mutate
             if hint_alternatives:
                 cli_alternatives_debug = [pascal_to_kebab_case(alt) for alt in hint_alternatives]
                 debug_print(
                     f"DEBUG: Alternative matches: {', '.join(cli_alternatives_debug)}"
                 )  # pragma: no mutate
+        elif hint_field or hint_limit is not None:
+            # No function hint but we have field or limit
+            hint_parts = []
+            if hint_field:
+                hint_parts.append(f"field '{hint_field}'")
+            if hint_limit is not None:
+                hint_parts.append(f"limit {hint_limit}")
+            print(
+                f"Using hint {' with '.join(hint_parts)} for multi-step calls "
+                f"(function will be inferred)",
+                file=sys.stderr,
+            )
+            debug_print(
+                f"DEBUG: Hint '{args.input}' - field: {hint_field}, limit: {hint_limit}, "
+                f"function will be inferred"
+            )  # pragma: no mutate
         else:
             print(
                 f"Warning: Hint '{args.input}' did not match any available functions",
@@ -1041,6 +1090,8 @@ Autocomplete Setup:
                     session=session,
                     hint_function=hint_function,
                     hint_field=hint_field,
+                    limit=hint_limit,
+                    user_parameters=parsed_parameters,
                 )
 
             result = show_keys_from_result(call_result)
@@ -1063,7 +1114,7 @@ Autocomplete Setup:
             )  # pragma: no mutate
 
             filtered_resources = _execute_multi_level_workflow(
-                service, action, filter_argv, session, hint_function, hint_field
+                service, action, filter_argv, session, hint_function, hint_field, hint_limit, parsed_parameters
             )
             debug_print(
                 f"Multi-level call completed with {len(filtered_resources)} resources"
@@ -1095,7 +1146,7 @@ Autocomplete Setup:
                     "Unexpected validation error, switching to multi-level"
                 )  # pragma: no mutate
                 filtered_resources = _execute_multi_level_workflow(
-                    service, action, filter_argv, session, hint_function, hint_field
+                    service, action, filter_argv, session, hint_function, hint_field, hint_limit, parsed_parameters
                 )
             else:
                 resources = flatten_response(response)

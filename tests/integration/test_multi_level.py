@@ -725,7 +725,7 @@ class TestEdgeCasesIntegration:
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.get_correct_parameter_name")
     def test_parameter_expects_list_vs_single_value(self, mock_get_param, mock_execute):
-        """Test parameter handling for operations expecting lists vs single values."""
+        """Test parameter handling with singularization for plural parameters."""
         validation_error = {
             "parameter_name": "instanceIds",  # Plural - expects list
             "is_required": True,
@@ -757,18 +757,14 @@ class TestEdgeCasesIntegration:
         ]
         mock_get_param.return_value = "InstanceIds"
 
-        # This test expects the parameter to be treated as plural (list)
-        # But the extract_parameter_values logic may not find instanceIds as a field
-        # Let's modify the test to handle the realistic scenario
-        with patch("awsquery.core.parameter_expects_list") as mock_expects_list:
-            mock_expects_list.return_value = True  # Force it to expect a list
+        # With singularization: instanceIds → instanceId, InstanceIds → InstanceId
+        # The system should now successfully extract values from InstanceId field
+        # and pass them as a list to the plural parameter
+        result = execute_multi_level_call("ec2", "describe-instances", [], [], [])
 
-            # The test will likely fail at parameter extraction since instanceIds is not
-            # a real field
-            # This is expected behavior - the system should exit when it can't extract
-            # the required parameters
-            with pytest.raises(SystemExit):
-                execute_multi_level_call("ec2", "describe-instances", [], [], [])
+        # Verify the result contains the expected data
+        assert result is not None
+        assert len(result) > 0
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.get_correct_parameter_name")

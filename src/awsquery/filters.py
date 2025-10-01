@@ -229,8 +229,18 @@ def parse_multi_level_filters_for_mode(argv, mode="single"):
     return base_command, resource_filters, value_filters, column_filters
 
 
-def extract_parameter_values(resources, parameter_name, field_hint=None):
-    """Extract parameter values from list operation results"""
+def extract_parameter_values(resources, parameter_name, field_hint=None, singular_name=None):
+    """Extract parameter values from list operation results.
+
+    Args:
+        resources: List of resource dictionaries
+        parameter_name: Original parameter name (may be plural)
+        field_hint: Optional field hint for targeted extraction
+        singular_name: Optional singular form of parameter_name to try first
+
+    Returns:
+        List of extracted parameter values
+    """
     if not resources:
         return []
 
@@ -284,6 +294,15 @@ def extract_parameter_values(resources, parameter_name, field_hint=None):
     # Fall back to default heuristic search
     pascal_case_name = convert_parameter_name(parameter_name)
     search_names = [parameter_name, pascal_case_name]
+
+    # If singular_name provided, prioritize it in search order
+    if singular_name and singular_name != parameter_name:
+        pascal_case_singular = convert_parameter_name(singular_name)
+        # Try singular forms first before plural
+        search_names = [singular_name, pascal_case_singular] + search_names
+        debug_print(
+            f"Added singular forms to search priority: [{singular_name}, {pascal_case_singular}]"
+        )  # pragma: no mutate
 
     debug_print(f"Looking for parameter values using names: {search_names}")  # pragma: no mutate
 

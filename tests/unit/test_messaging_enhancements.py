@@ -307,13 +307,12 @@ class TestMultiLevelUserMessages:
         for i in range(1, 11):
             assert f"cluster-{i:02d}" in captured.err
 
-        # Should not show clusters 11-15
+        # Should not show clusters 11-15 (due to default limit of 10)
         for i in range(11, 16):
             assert f"cluster-{i:02d}" not in captured.err
 
-        # Should indicate total count
-        assert "15" in captured.err
-        assert "(showing first 10)" in captured.err or "... and 5 more" in captured.err
+        # Should show the new limit message
+        assert "Limited to first 10 resources (use -i ::N to adjust)" in captured.err
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.infer_list_operation")
