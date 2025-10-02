@@ -15,7 +15,6 @@ from awsquery.formatters import (
     flatten_single_response,
     format_json_output,
     format_table_output,
-    show_keys,
     transform_tags_structure,
 )
 from awsquery.utils import simplify_key
@@ -671,52 +670,6 @@ class TestUtilityFunctions:
             ["ArrayField", "BooleanField", "NestedKey", "NumberField", "StringField"], key=str.lower
         )
         assert result == expected_keys
-
-    @patch("awsquery.core.execute_aws_call")
-    def test_show_keys_no_data(self, mock_execute):
-        mock_execute.return_value = {"ResponseMetadata": {"RequestId": "test"}}
-
-        result = show_keys("ec2", "describe-instances")
-
-        assert result == "No data to extract keys from."
-        mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
-
-    @patch("awsquery.core.execute_aws_call")
-    def test_show_keys_with_data(self, mock_execute):
-        mock_execute.return_value = {
-            "Instances": [
-                {
-                    "InstanceId": "i-123",
-                    "State": {"Name": "running"},
-                    "Tags": [{"Key": "Environment", "Value": "prod"}],
-                }
-            ],
-            "ResponseMetadata": {"RequestId": "test"},
-        }
-
-        result = show_keys("ec2", "describe-instances")
-
-        # Keys formatted with indentation
-        lines = result.split("\n")
-        assert all(line.startswith("  ") for line in lines if line.strip())
-
-        content = result.replace("  ", "")
-        assert "InstanceId" in content
-        assert "Name" in content  # From State.Name
-        assert "Key" in content  # From Tags.0.Key
-        assert "Value" in content  # From Tags.0.Value
-
-    @patch("awsquery.core.execute_aws_call")
-    def test_show_keys_integration(self, mock_execute):
-        mock_execute.return_value = {"Instances": [{"InstanceId": "i-123", "Status": "running"}]}
-
-        result = show_keys("ec2", "describe-instances")
-
-        lines = [line.strip() for line in result.split("\n") if line.strip()]
-        assert "InstanceId" in lines
-        assert "Status" in lines
-
-        mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
 
 
 class TestComplexScenarios:

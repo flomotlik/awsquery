@@ -6,7 +6,7 @@ import argparse
 import os
 import re
 import sys
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 import argcomplete
 import boto3
@@ -27,7 +27,6 @@ from .formatters import (
     flatten_response,
     format_json_output,
     format_table_output,
-    show_keys,
 )
 from .security import (
     get_service_valid_operations,
@@ -749,8 +748,8 @@ Autocomplete Setup:
     # But exclude any flags that were already processed
     filter_argv = _build_filter_argv(args, remaining)
 
-    base_command, resource_filters, value_filters, column_filters = (
-        parse_multi_level_filters_for_mode(filter_argv, mode="single")
+    _, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
+        filter_argv, mode="single"
     )
 
     if not args.service or not args.action:

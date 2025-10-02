@@ -410,16 +410,3 @@ def extract_and_sort_keys(resources, simplify=True):
         sorted_keys = sorted(list(all_keys), key=str.lower)
 
     return sorted_keys
-
-
-def show_keys(service, action):
-    """Show all available keys from API response"""
-    from .core import execute_aws_call
-
-    response = execute_aws_call(service, action, session=None)
-    resources = flatten_response(response)
-    if not resources:
-        return "No data to extract keys from."
-
-    sorted_keys = extract_and_sort_keys(resources)
-    return "\n".join(f"  {key}" for key in sorted_keys)

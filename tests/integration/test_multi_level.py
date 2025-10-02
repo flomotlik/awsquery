@@ -1651,45 +1651,6 @@ class TestUtilsIntegration:
         # Should handle gracefully and return empty list or raise appropriate error
         assert isinstance(services, list)
 
-    @patch("boto3.client")
-    def test_get_service_actions_integration(self, mock_boto_client):
-        """Test service action discovery with realistic boto3 client."""
-        from awsquery.utils import get_service_actions
-
-        # Mock client with realistic operation names
-        mock_client = Mock()
-        mock_boto_client.return_value = mock_client
-        mock_client.meta.service_model.operation_names = [
-            "DescribeInstances",
-            "RunInstances",
-            "TerminateInstances",
-            "ListBuckets",
-            "GetObject",
-            "PutObject",
-        ]
-
-        actions = get_service_actions("ec2")
-
-        assert isinstance(actions, list)
-        assert len(actions) > 0
-        assert "DescribeInstances" in actions or "describe-instances" in actions
-
-        # Verify client creation
-        mock_boto_client.assert_called_once_with("ec2")
-
-    @patch("boto3.client")
-    def test_get_service_actions_client_failure(self, mock_boto_client):
-        """Test service action discovery when client creation fails."""
-        from awsquery.utils import get_service_actions
-
-        # Simulate client creation failure
-        mock_boto_client.side_effect = Exception("Unknown service: nonexistent")
-
-        actions = get_service_actions("nonexistent")
-
-        # Should handle gracefully
-        assert isinstance(actions, list)
-
     def test_debug_print_real_scenarios_enabled(self, debug_mode):
         """Test debug print in real integration scenarios when debug is enabled."""
         import io

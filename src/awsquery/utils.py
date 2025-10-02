@@ -7,26 +7,6 @@ import boto3
 from .case_utils import to_kebab_case, to_snake_case
 
 
-class AWSQueryError(Exception):
-    """Base exception for AWS Query Tool"""
-
-
-class ValidationError(AWSQueryError):
-    """Error in parameter validation"""
-
-
-class SecurityError(AWSQueryError):
-    """Security policy violation"""
-
-
-class CredentialsError(AWSQueryError):
-    """AWS credentials issue"""
-
-
-class OperationError(AWSQueryError):
-    """AWS operation failed"""
-
-
 def convert_parameter_name(parameter_name):
     """Convert parameter name from camelCase to PascalCase for AWS API compatibility.
 
@@ -157,22 +137,6 @@ def get_aws_services():
         return sorted(session.get_available_services())
     except Exception as e:
         print(f"ERROR: Failed to get AWS services: {e}", file=sys.stderr)
-        return []
-
-
-def get_service_actions(service):
-    """Get available actions for a service"""
-    try:
-        client = boto3.client(service)
-        operations = client.meta.service_model.operation_names
-        read_ops = [
-            op
-            for op in operations
-            if any(op.lower().startswith(prefix) for prefix in ["describe", "list", "get"])
-        ]
-        return sorted(read_ops)
-    except Exception as e:
-        print(f"ERROR: Failed to get actions for {service}: {e}", file=sys.stderr)
         return []
 
 

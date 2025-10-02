@@ -16,7 +16,7 @@ from awsquery.case_utils import to_pascal_case
 from awsquery.cli import action_completer, main, service_completer
 from awsquery.core import execute_aws_call, execute_multi_level_call
 from awsquery.filters import parse_multi_level_filters_for_mode
-from awsquery.formatters import format_json_output, format_table_output, show_keys
+from awsquery.formatters import format_json_output, format_table_output
 from awsquery.security import validate_readonly
 from awsquery.utils import normalize_action_name
 
@@ -843,20 +843,6 @@ class TestCLIOutputFormats:
             assert "instance-0" in data_str  # Instance name
         except json.JSONDecodeError:
             pytest.fail(f"Large dataset JSON should be valid: {json_output[:200]}...")
-
-    def test_show_keys_functionality(self, sample_ec2_response):
-        """Test show keys functionality with mocked data."""
-        with patch("awsquery.core.execute_aws_call") as mock_execute:
-            mock_execute.return_value = sample_ec2_response
-
-            # Test show_keys function
-            keys_output = show_keys("ec2", "DescribeInstances")
-
-            # Should be a string containing available keys
-            assert isinstance(keys_output, str)
-            # In dry run mode, might return placeholder or execute anyway for keys
-            if keys_output and keys_output.strip():
-                assert "InstanceId" in keys_output or "keys" in keys_output.lower()
 
 
 class TestCLIMainFunctionBasics:
