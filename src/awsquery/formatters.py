@@ -12,7 +12,7 @@ from .utils import debug_print, simplify_key
 
 
 def make_unique_headers(normalized_keys):
-    """Create unique column headers by adding parent context only when needed.
+    """Create unique column headers using minimal parent hierarchy.
 
     Args:
         normalized_keys: List of normalized keys (with indices removed)
@@ -21,33 +21,45 @@ def make_unique_headers(normalized_keys):
         List of unique headers with minimal parent context
 
     Examples:
+        ["Instances.Tags.Name", "Instances.State.Name"] -> ["Tags.Name", "State.Name"]
         ["Tags.Name", "State.Name", "InstanceId"] -> ["Tags.Name", "State.Name", "InstanceId"]
         ["Name", "InstanceId"] -> ["Name", "InstanceId"]
-        ["Buckets.Name", "Owner.Name"] -> ["Buckets.Name", "Owner.Name"]
     """
     if not normalized_keys:
         return []
 
-    # Count occurrences of final segments
-    final_segment_counts: Dict[str, int] = {}
-    key_to_final_segment: Dict[str, str] = {}
-
+    # Build mapping of keys to their parts (reversed for easier suffix matching)
+    key_parts: Dict[str, List[str]] = {}
     for key in normalized_keys:
-        parts = key.split(".")
-        final_segment = parts[-1]
-        key_to_final_segment[key] = final_segment
-        final_segment_counts[final_segment] = final_segment_counts.get(final_segment, 0) + 1
+        key_parts[key] = key.split(".")
 
-    # Create headers: use full path if final segment appears multiple times
+    # For each key, find minimal suffix that's unique
     headers = []
     for key in normalized_keys:
-        final_segment = key_to_final_segment[key]
-        if final_segment_counts[final_segment] > 1:
-            # Conflict detected - use full normalized path
-            headers.append(key)
+        parts = key_parts[key]
+        # Start with just the final segment
+        for depth in range(1, len(parts) + 1):
+            # Take the last 'depth' segments
+            candidate = ".".join(parts[-depth:])
+            # Check if this candidate is unique among all keys
+            is_unique = True
+            for other_key in normalized_keys:
+                if other_key == key:
+                    continue
+                other_parts = key_parts[other_key]
+                # Get the same depth suffix from the other key
+                other_candidate = (
+                    ".".join(other_parts[-depth:]) if depth <= len(other_parts) else other_key
+                )
+                if candidate == other_candidate:
+                    is_unique = False
+                    break
+            if is_unique:
+                headers.append(candidate)
+                break
         else:
-            # No conflict - use just the final segment for simplicity
-            headers.append(final_segment)
+            # Fallback: use full key if no unique suffix found
+            headers.append(key)
 
     return headers
 

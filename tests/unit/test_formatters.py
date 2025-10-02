@@ -405,11 +405,12 @@ class TestMakeUniqueHeaders:
             "Owner.Name",
         ]
         result = make_unique_headers(normalized_keys)
+        # Uses minimal parent hierarchy to make names unique
         assert result == [
-            "SubnetId",
-            "Instances.Tags.Name",
-            "Instances.State.Name",
-            "Owner.Name",
+            "SubnetId",  # Unique without parents
+            "Tags.Name",  # Minimal to distinguish from State.Name and Owner.Name
+            "State.Name",  # Minimal to distinguish from Tags.Name and Owner.Name
+            "Owner.Name",  # Minimal to distinguish from Tags.Name and State.Name
         ]
 
 
