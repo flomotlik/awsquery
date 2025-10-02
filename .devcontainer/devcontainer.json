@@ -58,12 +58,7 @@
   "postStartCommand": "echo 'Welcome to AWSQuery development environment!'",
   "remoteUser": "vscode",
   "mounts": [
-    {
-      "source": "${localEnv:HOME}/.aws",
-      "target": "/home/vscode/.aws",
-      "type": "bind",
-      "consistency": "cached"
-    }
+    "source=${localEnv:HOME}/.aws,target=/home/vscode/.aws,type=bind,consistency=cached,readonly"
   ],
   "containerEnv": {
     "AWS_REGION": "${localEnv:AWS_REGION}",
