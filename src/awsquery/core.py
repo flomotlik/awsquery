@@ -933,14 +933,28 @@ def filter_valid_parameters(service, action, parameters, session=None):
             )  # pragma: no mutate
             return {}
 
+        # Build case-insensitive lookup map once (O(m) instead of O(n*m))
+        lowercase_member_map = {name.lower(): name for name in input_shape.members}
+
         valid_params = {}
         invalid_params = []
 
         for param_name, param_value in parameters.items():
+            # Try exact match first (O(1))
             if param_name in input_shape.members:
                 valid_params[param_name] = param_value
                 debug_print(
                     f"filter_valid_parameters: '{param_name}' is valid for {action}"
+                )  # pragma: no mutate
+            # Try case-insensitive lookup (O(1))
+            elif param_name.lower() in lowercase_member_map:
+                correct_name = lowercase_member_map[param_name.lower()]
+                debug_print(
+                    f"Parameter case correction: '{param_name}' -> '{correct_name}'"
+                )  # pragma: no mutate
+                valid_params[correct_name] = param_value
+                debug_print(
+                    f"filter_valid_parameters: '{correct_name}' is valid for {action}"
                 )  # pragma: no mutate
             else:
                 invalid_params.append(param_name)

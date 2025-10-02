@@ -11,6 +11,7 @@ from awsquery.core import (
     convert_parameter_name,
     execute_aws_call,
     execute_multi_level_call,
+    filter_valid_parameters,
     get_correct_parameter_name,
     infer_list_operation,
     parameter_expects_list,
@@ -903,3 +904,317 @@ class TestResponseFlattening:
         result = extract_parameter_values(resources, "ClusterName")
 
         assert result == ["cluster1", "cluster2"]
+
+
+class TestFilterValidParameters:
+
+    def test_exact_match_parameter(self):
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_input_shape = Mock()
+
+        mock_input_shape.members = {"MaxResults": Mock(), "NextToken": Mock()}
+        mock_operation_model.input_shape = mock_input_shape
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        parameters = {"MaxResults": 10, "NextToken": "abc123"}
+        result = filter_valid_parameters("ssm", "describe-parameters", parameters, mock_session)
+
+        assert result == {"MaxResults": 10, "NextToken": "abc123"}
+        mock_service_model.operation_model.assert_called_once_with("DescribeParameters")
+
+    def test_lowercase_parameter_case_correction(self, capsys):
+        from awsquery import utils
+
+        utils.set_debug_enabled(True)
+
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_input_shape = Mock()
+
+        mock_input_shape.members = {"MaxResults": Mock(), "NextToken": Mock()}
+        mock_operation_model.input_shape = mock_input_shape
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        parameters = {"maxresults": 10}
+        result = filter_valid_parameters("ssm", "describe-parameters", parameters, mock_session)
+
+        assert result == {"MaxResults": 10}
+        assert "MaxResults" in result
+        assert "maxresults" not in result
+
+        captured = capsys.readouterr()
+        assert "Parameter case correction: 'maxresults' -> 'MaxResults'" in captured.err
+
+        utils.set_debug_enabled(False)
+
+    def test_uppercase_parameter_case_correction(self, capsys):
+        from awsquery import utils
+
+        utils.set_debug_enabled(True)
+
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_input_shape = Mock()
+
+        mock_input_shape.members = {"MaxResults": Mock()}
+        mock_operation_model.input_shape = mock_input_shape
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        parameters = {"MAXRESULTS": 20}
+        result = filter_valid_parameters("ssm", "describe-parameters", parameters, mock_session)
+
+        assert result == {"MaxResults": 20}
+        assert "MaxResults" in result
+        assert "MAXRESULTS" not in result
+
+        captured = capsys.readouterr()
+        assert "Parameter case correction: 'MAXRESULTS' -> 'MaxResults'" in captured.err
+
+        utils.set_debug_enabled(False)
+
+    def test_mixed_case_parameter_correction(self, capsys):
+        from awsquery import utils
+
+        utils.set_debug_enabled(True)
+
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_input_shape = Mock()
+
+        mock_input_shape.members = {"MaxResults": Mock(), "InstanceIds": Mock()}
+        mock_operation_model.input_shape = mock_input_shape
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        parameters = {"maxResults": 15, "instanceids": ["i-123"]}
+        result = filter_valid_parameters("ec2", "describe-instances", parameters, mock_session)
+
+        assert result == {"MaxResults": 15, "InstanceIds": ["i-123"]}
+        assert "MaxResults" in result
+        assert "InstanceIds" in result
+        assert "maxResults" not in result
+        assert "instanceids" not in result
+
+        captured = capsys.readouterr()
+        assert "Parameter case correction: 'maxResults' -> 'MaxResults'" in captured.err
+        assert "Parameter case correction: 'instanceids' -> 'InstanceIds'" in captured.err
+
+        utils.set_debug_enabled(False)
+
+    def test_invalid_parameter_rejected(self, capsys):
+        from awsquery import utils
+
+        utils.set_debug_enabled(True)
+
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_input_shape = Mock()
+
+        mock_input_shape.members = {"MaxResults": Mock()}
+        mock_operation_model.input_shape = mock_input_shape
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        parameters = {"InvalidParam": "value"}
+        result = filter_valid_parameters("ssm", "describe-parameters", parameters, mock_session)
+
+        assert result == {}
+        assert "InvalidParam" not in result
+
+        captured = capsys.readouterr()
+        assert "'InvalidParam' is NOT valid for describe-parameters" in captured.err
+
+        utils.set_debug_enabled(False)
+
+    def test_mixed_valid_invalid_case_corrected_parameters(self, capsys):
+        from awsquery import utils
+
+        utils.set_debug_enabled(True)
+
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_input_shape = Mock()
+
+        mock_input_shape.members = {"MaxResults": Mock(), "NextToken": Mock()}
+        mock_operation_model.input_shape = mock_input_shape
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        parameters = {"MaxResults": 10, "nexttoken": "abc", "InvalidParam": "bad"}
+        result = filter_valid_parameters("ssm", "describe-parameters", parameters, mock_session)
+
+        assert result == {"MaxResults": 10, "NextToken": "abc"}
+        assert "MaxResults" in result
+        assert "NextToken" in result
+        assert "nexttoken" not in result
+        assert "InvalidParam" not in result
+
+        captured = capsys.readouterr()
+        assert "'MaxResults' is valid for describe-parameters" in captured.err
+        assert "Parameter case correction: 'nexttoken' -> 'NextToken'" in captured.err
+        assert "'InvalidParam' is NOT valid for describe-parameters" in captured.err
+
+        utils.set_debug_enabled(False)
+
+    def test_empty_parameters(self, capsys):
+        from awsquery import utils
+
+        utils.set_debug_enabled(True)
+
+        result = filter_valid_parameters("ssm", "describe-parameters", {}, None)
+
+        assert result == {}
+
+        captured = capsys.readouterr()
+        assert "No parameters to filter" in captured.err
+
+        utils.set_debug_enabled(False)
+
+    def test_none_parameters(self, capsys):
+        from awsquery import utils
+
+        utils.set_debug_enabled(True)
+
+        result = filter_valid_parameters("ssm", "describe-parameters", None, None)
+
+        assert result == {}
+
+        captured = capsys.readouterr()
+        assert "No parameters to filter" in captured.err
+
+        utils.set_debug_enabled(False)
+
+    def test_no_input_shape(self, capsys):
+        from awsquery import utils
+
+        utils.set_debug_enabled(True)
+
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_operation_model.input_shape = None
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        parameters = {"SomeParam": "value"}
+        result = filter_valid_parameters("s3", "list-buckets", parameters, mock_session)
+
+        assert result == {}
+
+        captured = capsys.readouterr()
+        assert "No input shape for s3.list-buckets" in captured.err
+
+        utils.set_debug_enabled(False)
+
+    def test_exception_handling(self, capsys):
+        from awsquery import utils
+
+        utils.set_debug_enabled(True)
+
+        mock_session = Mock()
+        mock_session.client.side_effect = Exception("Connection error")
+
+        parameters = {"MaxResults": 10}
+        result = filter_valid_parameters("ssm", "describe-parameters", parameters, mock_session)
+
+        assert result == {}
+
+        captured = capsys.readouterr()
+        assert "Error filtering parameters for ssm.describe-parameters" in captured.err
+
+        utils.set_debug_enabled(False)
+
+    def test_case_insensitive_with_special_characters(self):
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_input_shape = Mock()
+
+        mock_input_shape.members = {"DBInstanceIdentifier": Mock(), "DBClusterIdentifier": Mock()}
+        mock_operation_model.input_shape = mock_input_shape
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        parameters = {"dbinstanceidentifier": "my-db", "DBClusterIdentifier": "my-cluster"}
+        result = filter_valid_parameters("rds", "describe-db-instances", parameters, mock_session)
+
+        assert result == {"DBInstanceIdentifier": "my-db", "DBClusterIdentifier": "my-cluster"}
+        assert "dbinstanceidentifier" not in result
+
+    def test_preserves_parameter_values(self):
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_input_shape = Mock()
+
+        mock_input_shape.members = {"InstanceIds": Mock(), "Filters": Mock()}
+        mock_operation_model.input_shape = mock_input_shape
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        complex_value = [{"Name": "tag:Environment", "Values": ["production"]}]
+        parameters = {"instanceids": ["i-123", "i-456"], "filters": complex_value}
+        result = filter_valid_parameters("ec2", "describe-instances", parameters, mock_session)
+
+        assert result == {"InstanceIds": ["i-123", "i-456"], "Filters": complex_value}
+        assert result["InstanceIds"] == ["i-123", "i-456"]
+        assert result["Filters"] == complex_value
+
+    def test_default_session_creation(self):
+        from awsquery import utils
+
+        mock_client = Mock()
+        mock_service_model = Mock()
+        mock_operation_model = Mock()
+        mock_input_shape = Mock()
+
+        mock_input_shape.members = {"MaxResults": Mock()}
+        mock_operation_model.input_shape = mock_input_shape
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_client.meta.service_model = mock_service_model
+
+        mock_session = Mock()
+        mock_session.client.return_value = mock_client
+
+        with patch("awsquery.core.create_session", return_value=mock_session):
+            parameters = {"maxresults": 10}
+            result = filter_valid_parameters("ssm", "describe-parameters", parameters, None)
+
+            assert result == {"MaxResults": 10}
