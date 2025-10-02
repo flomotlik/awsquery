@@ -30,7 +30,6 @@ from .formatters import (
 )
 from .security import (
     get_service_valid_operations,
-    is_readonly_operation,
     validate_readonly,
 )
 from .utils import create_session, debug_print, get_aws_services, sanitize_input
@@ -220,47 +219,6 @@ def get_parameter_type(service, action, parameter_name, session=None):
 # CLI flag constants
 SIMPLE_FLAGS = ["-d", "--debug", "-j", "--json", "-k", "--keys", "--allow-unsafe"]
 VALUE_FLAGS = ["--region", "--profile", "-p", "--parameter", "-i", "--input"]
-
-
-def _extract_flags_from_args(remaining_args):
-    """Extract CLI flags from remaining arguments."""
-    flags = []
-    non_flags = []
-    i = 0
-    while i < len(remaining_args):
-        arg = remaining_args[i]
-        if arg in SIMPLE_FLAGS:
-            flags.append(arg)
-        elif arg in VALUE_FLAGS:
-            flags.append(arg)
-            # Check for value after the flag
-            if i + 1 < len(remaining_args):
-                next_arg = remaining_args[i + 1]
-                if not next_arg.startswith("-"):
-                    flags.append(next_arg)
-                    i += 1
-        else:
-            non_flags.append(arg)
-        i += 1
-    return flags, non_flags
-
-
-def _preserve_parsed_flags(args):
-    """Preserve flags that were already parsed."""
-    flags = []
-    if args.debug:
-        flags.append("-d")
-    if getattr(args, "json", False):
-        flags.append("-j")
-    if getattr(args, "keys", False):
-        flags.append("-k")
-    if getattr(args, "allow_unsafe", False):
-        flags.append("--allow-unsafe")
-    if getattr(args, "region", None):
-        flags.extend(["--region", args.region])
-    if getattr(args, "profile", None):
-        flags.extend(["--profile", args.profile])
-    return flags
 
 
 def service_completer(prefix, parsed_args, **kwargs):

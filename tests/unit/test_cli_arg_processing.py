@@ -9,72 +9,11 @@ import pytest
 from awsquery.cli import (
     _enhanced_completion_validator,
     _extract_flag_and_value,
-    _extract_flags_from_args,
-    _preserve_parsed_flags,
     _process_remaining_args,
     _process_remaining_args_after_separator,
     action_completer,
     service_completer,
 )
-
-
-class TestExtractFlagsFromArgs:
-
-    def test_extract_no_flags(self):
-        flags, non_flags = _extract_flags_from_args(["service", "action", "filter"])
-        assert flags == []
-        assert non_flags == ["service", "action", "filter"]
-
-    def test_extract_single_flag_with_value(self):
-        flags, non_flags = _extract_flags_from_args(["--region", "us-east-1", "service"])
-        assert flags == ["--region", "us-east-1"]
-        assert non_flags == ["service"]
-
-    def test_extract_flag_without_value(self):
-        flags, non_flags = _extract_flags_from_args(["--debug", "service", "action"])
-        assert flags == ["--debug"]
-        assert non_flags == ["service", "action"]
-
-    def test_extract_multiple_flags(self):
-        args = ["--region", "us-west-2", "--profile", "dev", "service"]
-        flags, non_flags = _extract_flags_from_args(args)
-        assert flags == ["--region", "us-west-2", "--profile", "dev"]
-        assert non_flags == ["service"]
-
-    def test_extract_mixed_flags_and_args(self):
-        args = ["service", "--debug", "action", "--json", "filter"]
-        flags, non_flags = _extract_flags_from_args(args)
-        assert "--debug" in flags
-        assert "--json" in flags
-        assert non_flags == ["service", "action", "filter"]
-
-    def test_extract_short_flags(self):
-        flags, non_flags = _extract_flags_from_args(["-j", "-d", "service"])
-        assert flags == ["-j", "-d"]
-        assert non_flags == ["service"]
-
-    def test_extract_profile_flag_no_value(self):
-        # Since "service" doesn't start with -, it's consumed as the profile value
-        flags, non_flags = _extract_flags_from_args(["--profile", "service"])
-        assert flags == ["--profile", "service"]
-        assert non_flags == []
-
-    def test_extract_profile_flag_with_dash_value(self):
-        # --debug starts with -, so it's not consumed as profile value
-        flags, non_flags = _extract_flags_from_args(["--profile", "--debug", "service"])
-        assert "--profile" in flags
-        assert "--debug" in flags
-        assert non_flags == ["service"]
-
-    def test_extract_empty_args(self):
-        flags, non_flags = _extract_flags_from_args([])
-        assert flags == []
-        assert non_flags == []
-
-    def test_extract_keys_flag(self):
-        flags, non_flags = _extract_flags_from_args(["service", "--keys", "action"])
-        assert "--keys" in flags
-        assert non_flags == ["service", "action"]
 
 
 class TestExtractFlagAndValue:
@@ -118,62 +57,6 @@ class TestExtractFlagAndValue:
         flags, consumed = _extract_flag_and_value(["-d"], 0)
         assert flags == ["-d"]
         assert consumed == 1
-
-
-class TestPreserveParsedFlags:
-
-    def test_preserve_no_flags(self):
-        args = argparse.Namespace(debug=False)
-        result = _preserve_parsed_flags(args)
-        assert result == []
-
-    def test_preserve_debug_flag(self):
-        args = argparse.Namespace(debug=True)
-        result = _preserve_parsed_flags(args)
-        assert "-d" in result
-
-    def test_preserve_json_flag(self):
-        args = argparse.Namespace(debug=False, json=True)
-        result = _preserve_parsed_flags(args)
-        assert "-j" in result
-        assert "-d" not in result
-
-    def test_preserve_keys_flag(self):
-        args = argparse.Namespace(debug=False, keys=True)
-        result = _preserve_parsed_flags(args)
-        assert "-k" in result
-
-    def test_preserve_region_flag(self):
-        args = argparse.Namespace(debug=False, region="us-west-2")
-        result = _preserve_parsed_flags(args)
-        assert "--region" in result
-        assert "us-west-2" in result
-
-    def test_preserve_profile_flag(self):
-        args = argparse.Namespace(debug=False, profile="dev")
-        result = _preserve_parsed_flags(args)
-        assert "--profile" in result
-        assert "dev" in result
-
-    def test_preserve_multiple_flags(self):
-        args = argparse.Namespace(debug=True, json=True, region="us-east-1")
-        result = _preserve_parsed_flags(args)
-        assert "-d" in result
-        assert "-j" in result
-        assert "--region" in result
-        assert "us-east-1" in result
-
-    def test_preserve_no_region_if_none(self):
-        args = argparse.Namespace(debug=False, region=None)
-        result = _preserve_parsed_flags(args)
-        assert "--region" not in result
-
-    def test_preserve_missing_attributes(self):
-        args = argparse.Namespace(debug=True)
-        # Missing json, keys, region, profile attributes
-        result = _preserve_parsed_flags(args)
-        assert "-d" in result
-        assert len([f for f in result if f.startswith("-")]) == 1
 
 
 class TestProcessRemainingArgsAfterSeparator:
