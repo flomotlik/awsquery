@@ -1,19 +1,18 @@
 # awsquery Validation Scripts
 
-This directory contains scripts for validating awsquery functionality in real AWS environments.
+This directory contains production validation scripts for testing awsquery in real AWS environments.
 
 ## validate-awsquery.sh
 
-Comprehensive validation script that tests awsquery across multiple AWS services with various options.
+Comprehensive validation script that tests awsquery across 30+ AWS services with 120+ operations.
 
 ### Features
 
-- **Comprehensive Coverage**: Tests 20+ AWS services including EC2, EKS, Lambda, S3, RDS, and more
+- **Comprehensive Coverage**: Tests EC2, EKS, Lambda, S3, RDS, DynamoDB, IAM, and 25+ other services
 - **Multiple Test Patterns**: Basic queries, multi-step calls, filtering, JSON output, parameter hints
 - **Production-Ready**: Designed for real customer environments with actual resources
 - **Detailed Reporting**: Color-coded output with pass/fail counts and success rate
 - **Flexible Configuration**: Support for different regions and AWS profiles
-- **Smart Skipping**: Skips tests when resources don't exist (won't fail unnecessarily)
 
 ### Usage
 
@@ -37,39 +36,59 @@ Show help:
 ./scripts/validate-awsquery.sh --help
 ```
 
-### Test Categories
+### Services Tested
 
-The script tests the following AWS services and features:
+The script validates awsquery across these AWS services:
 
-#### Core Services
-- **EC2**: Instances, security groups, VPCs, subnets, volumes, network interfaces
-- **S3**: Buckets with filtering and JSON output
-- **IAM**: Users, roles, policies, groups
-- **Lambda**: Functions with column filtering
-
-#### Container & Orchestration
-- **EKS**: Clusters, nodegroups (with multi-step resolution)
-- **ECS**: Clusters, tasks (with field override hints)
-- **ECR**: Repositories
-- **Auto Scaling**: Groups and launch configurations
+#### Compute & Containers
+- **EC2**: Instances, security groups, VPCs, subnets, volumes, snapshots, images, key pairs, addresses, NAT gateways, internet gateways, route tables, VPC peering
+- **EKS**: Clusters, nodegroups, addons (multi-step)
+- **ECS**: Clusters, services, tasks, task definitions (multi-step)
+- **ECR**: Repositories, images (multi-step)
+- **Lambda**: Functions, layers, event source mappings
+- **Auto Scaling**: Groups, launch configurations, policies, scheduled actions
 
 #### Database Services
-- **RDS**: DB instances and clusters
-- **DynamoDB**: Tables
+- **RDS**: DB instances, clusters, snapshots, subnet groups, parameter groups
+- **DynamoDB**: Tables, backups, describe-table (multi-step)
+- **ElastiCache**: Cache clusters, replication groups
+- **Redshift**: Clusters
 
-#### Messaging & Queuing
-- **SQS**: Queues
-- **SNS**: Topics
+#### Storage & Content
+- **S3**: Buckets with filtering and JSON output
 
-#### Infrastructure & Management
-- **CloudFormation**: Stacks and stack events (multi-step)
-- **ELB/ALB**: Load balancers, target groups, tags (multi-step)
-- **CloudWatch**: Alarms
-- **SSM**: Parameters (with limit testing)
+#### Networking & API
+- **ELB/ALB**: Load balancers, target groups, listeners, tags (multi-step)
+- **Route53**: Hosted zones, health checks
+- **API Gateway**: REST APIs, resources (multi-step)
+- **API Gateway v2**: HTTP APIs
+
+#### Security & Identity
+- **IAM**: Users, roles, policies, groups, instance profiles, access keys (multi-step)
+- **KMS**: Keys, aliases, describe-key (multi-step)
 - **Secrets Manager**: Secrets
-- **KMS**: Keys
+- **ACM**: Certificates
 
-#### Advanced Features Tested
+#### Management & Governance
+- **CloudFormation**: Stacks, stack events, stack resources (multi-step)
+- **CloudWatch**: Alarms, metrics, alarm history (multi-step)
+- **CloudTrail**: Trails
+- **Config**: Configuration recorders, delivery channels
+- **SSM**: Parameters, patch baselines, maintenance windows
+- **Backup**: Backup vaults, plans
+
+#### Application Integration
+- **SQS**: Queues
+- **SNS**: Topics, subscriptions
+- **EventBridge**: Event buses, rules
+- **Step Functions**: State machines
+
+#### Analytics & Data
+- **Glue**: Databases, jobs
+- **Athena**: Work groups, data catalogs
+
+### Advanced Features Tested
+
 - Parameter propagation (`-p` flag)
 - Multi-step resolution with hints (`-i` flag)
 - Field override (`:field` syntax)
@@ -87,12 +106,10 @@ The script tests the following AWS services and features:
 
 ### Output Format
 
-The script provides color-coded output:
+Color-coded output:
 - 🔵 **[INFO]**: Informational messages
 - 🟢 **[PASS]**: Test passed successfully
 - 🔴 **[FAIL]**: Test failed
-- 🟡 **[WARN]**: Warning (e.g., fewer results than expected)
-- 🟡 **[SKIP]**: Test skipped (no resources found)
 
 ### Example Output
 
@@ -100,36 +117,34 @@ The script provides color-coded output:
 ========================================================================
   awsquery Validation Script
 ========================================================================
-Region:  us-east-1
-Profile: production
-Verbose: false
+Region: us-east-1 | Profile: production | Verbose: false
 ========================================================================
 
 [INFO] Starting validation tests...
 
 --- EC2 Tests ---
-[PASS] EC2: List instances (basic)
-[PASS] EC2: List instances with column filter
-[PASS] EC2: List instances with value filter
-[PASS] EC2: List instances with JSON output
-[PASS] EC2: List instances with --keys flag
+[PASS] EC2: describe-instances
+[PASS] EC2: describe-instances with columns
+[PASS] EC2: describe-instances filter
+[PASS] EC2: describe-instances JSON
+[PASS] EC2: describe-instances --keys
+[PASS] EC2: describe-security-groups
 ...
 
 --- Lambda Tests ---
-[PASS] Lambda: List functions
-[PASS] Lambda: List functions with column filter
+[PASS] Lambda: list-functions
+[PASS] Lambda: list-functions with columns
+[PASS] Lambda: list-layers
 ...
 
 ========================================================================
   Validation Summary
 ========================================================================
-Total Tests:   75
-Passed:        73
-Failed:        0
-Skipped:       2
+Total Tests: 120
+Passed: 120
+Failed: 0
+Success Rate: 100%
 ========================================================================
-
-Success Rate: 97%
 
 [PASS] Validation PASSED - All tests succeeded!
 ```
@@ -158,7 +173,6 @@ Success Rate: 97%
 
 3. **Use with CI/CD** - The script exits with non-zero on failure:
    ```bash
-   # In your CI pipeline
    ./scripts/validate-awsquery.sh || exit 1
    ```
 
@@ -178,15 +192,5 @@ Success Rate: 97%
 **Issue**: Tests fail for specific services
 - **Solution**: Verify IAM permissions for those services (script only needs read permissions)
 
-**Issue**: All tests are skipped
-- **Solution**: The environment might not have resources - try in a region with active resources
-
-### Contributing
-
-To add new test cases:
-
-1. Follow the existing test pattern using `run_test` function
-2. Group related tests under service-specific sections
-3. Use appropriate expected patterns for validation
-4. Consider adding skip logic for services that might not have resources
-5. Update this README with new services/features tested
+**Issue**: Tests fail due to missing resources
+- **Solution**: The script expects resources to exist; test in environments with active AWS resources

@@ -1,537 +1,277 @@
 #!/usr/bin/env bash
-#
-# Comprehensive validation script for awsquery in production AWS environments
-#
-# This script tests awsquery across multiple AWS services with various options
-# to ensure all functionality works correctly with real resources.
-#
-# Usage:
-#   ./scripts/validate-awsquery.sh [--region REGION] [--profile PROFILE] [--verbose]
-#
-# Options:
-#   --region REGION    AWS region to test (default: uses AWS_REGION or us-east-1)
-#   --profile PROFILE  AWS profile to use (default: uses AWS_PROFILE or default)
-#   --verbose          Show detailed output for each test
-#   --help             Show this help message
-#
-
 set -euo pipefail
 
-# Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# Counters
 TOTAL_TESTS=0
 PASSED_TESTS=0
 FAILED_TESTS=0
-SKIPPED_TESTS=0
 
-# Configuration
 REGION="${AWS_REGION:-us-east-1}"
 PROFILE="${AWS_PROFILE:-default}"
 VERBOSE=false
 AWSQUERY_CMD="awsquery"
 
-# Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --region)
-            REGION="$2"
-            shift 2
-            ;;
-        --profile)
-            PROFILE="$2"
-            shift 2
-            ;;
-        --verbose)
-            VERBOSE=true
-            shift
-            ;;
-        --help)
-            head -n 20 "$0" | tail -n +2 | sed 's/^# \?//'
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            echo "Use --help for usage information"
-            exit 1
-            ;;
+        --region) REGION="$2"; shift 2 ;;
+        --profile) PROFILE="$2"; shift 2 ;;
+        --verbose) VERBOSE=true; shift ;;
+        --help) echo "Usage: $0 [--region REGION] [--profile PROFILE] [--verbose]"; exit 0 ;;
+        *) echo "Unknown option: $1"; exit 1 ;;
     esac
 done
 
-# Build base awsquery command with region/profile
 BASE_CMD="$AWSQUERY_CMD --region $REGION --profile $PROFILE"
 
-# Logging functions
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $*"
-}
+log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
+log_success() { echo -e "${GREEN}[PASS]${NC} $*"; }
+log_error() { echo -e "${RED}[FAIL]${NC} $*"; }
 
-log_success() {
-    echo -e "${GREEN}[PASS]${NC} $*"
-}
-
-log_error() {
-    echo -e "${RED}[FAIL]${NC} $*"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARN]${NC} $*"
-}
-
-log_skip() {
-    echo -e "${YELLOW}[SKIP]${NC} $*"
-}
-
-# Test execution function
 run_test() {
     local test_name="$1"
     local test_cmd="$2"
-    local expected_pattern="${3:-.*}"  # Default: any output
-    local min_results="${4:-0}"        # Default: no minimum
+    local expected_pattern="${3:-.*}"
 
     TOTAL_TESTS=$((TOTAL_TESTS + 1))
-
-    if [[ "$VERBOSE" == "true" ]]; then
-        log_info "Running: $test_name"
-        log_info "Command: $test_cmd"
-    fi
+    [[ "$VERBOSE" == "true" ]] && log_info "Running: $test_name"
 
     local output
     local exit_code=0
-
-    # Run command and capture output
     output=$(eval "$test_cmd" 2>&1) || exit_code=$?
 
-    if [[ $exit_code -ne 0 ]]; then
+    if [[ $exit_code -ne 0 ]] || ! echo "$output" | grep -qE "$expected_pattern"; then
         log_error "$test_name"
-        if [[ "$VERBOSE" == "true" ]]; then
-            echo "Exit code: $exit_code"
-            echo "Output: $output"
-        fi
+        [[ "$VERBOSE" == "true" ]] && echo "Output: $output"
         FAILED_TESTS=$((FAILED_TESTS + 1))
         return 1
-    fi
-
-    # Check if output matches expected pattern
-    if ! echo "$output" | grep -qE "$expected_pattern"; then
-        log_error "$test_name - Output doesn't match expected pattern"
-        if [[ "$VERBOSE" == "true" ]]; then
-            echo "Expected pattern: $expected_pattern"
-            echo "Output: $output"
-        fi
-        FAILED_TESTS=$((FAILED_TESTS + 1))
-        return 1
-    fi
-
-    # Check minimum number of results (count lines, excluding headers)
-    if [[ $min_results -gt 0 ]]; then
-        local line_count
-        line_count=$(echo "$output" | grep -v "^Available services:" | wc -l | tr -d ' ')
-        if [[ $line_count -lt $min_results ]]; then
-            log_warning "$test_name - Expected at least $min_results results, got $line_count"
-            # Don't fail, just warn - might be legitimately empty
-        fi
     fi
 
     log_success "$test_name"
     PASSED_TESTS=$((PASSED_TESTS + 1))
-
-    if [[ "$VERBOSE" == "true" ]]; then
-        echo "Output preview:"
-        echo "$output" | head -20
-        echo ""
-    fi
-
+    [[ "$VERBOSE" == "true" ]] && echo "$output" | head -20 && echo ""
     return 0
 }
 
-# Skip test if service has no resources
-skip_if_empty() {
-    local test_name="$1"
-    local check_cmd="$2"
-
-    if ! eval "$check_cmd" > /dev/null 2>&1; then
-        log_skip "$test_name - No resources found"
-        SKIPPED_TESTS=$((SKIPPED_TESTS + 1))
-        return 0
-    fi
-    return 1
-}
-
-# Print header
 echo ""
 echo "========================================================================"
 echo "  awsquery Validation Script"
 echo "========================================================================"
-echo "Region:  $REGION"
-echo "Profile: $PROFILE"
-echo "Verbose: $VERBOSE"
+echo "Region: $REGION | Profile: $PROFILE | Verbose: $VERBOSE"
 echo "========================================================================"
 echo ""
 
-# Verify awsquery is available
-if ! command -v "$AWSQUERY_CMD" &> /dev/null; then
-    log_error "awsquery command not found in PATH"
-    log_info "Install with: pip install -e ."
-    exit 1
-fi
-
+command -v "$AWSQUERY_CMD" &> /dev/null || { log_error "awsquery not found"; exit 1; }
 log_info "Starting validation tests..."
 echo ""
 
-# ============================================================================
-# EC2 Tests
-# ============================================================================
 echo "--- EC2 Tests ---"
-
-run_test "EC2: List instances (basic)" \
-    "$BASE_CMD ec2 describe-instances" \
-    ".*"
-
-run_test "EC2: List instances with column filter" \
-    "$BASE_CMD ec2 describe-instances -- InstanceId State.Name" \
-    "(InstanceId|i-[a-f0-9]+)"
-
-run_test "EC2: List instances with value filter" \
-    "$BASE_CMD ec2 describe-instances running" \
-    ".*"
-
-run_test "EC2: List instances with JSON output" \
-    "$BASE_CMD ec2 describe-instances --json" \
-    "^\[.*\]$|^\{\}"
-
-run_test "EC2: List instances with --keys flag" \
-    "$BASE_CMD ec2 describe-instances --keys" \
-    "(InstanceId|State|LaunchTime)"
-
-run_test "EC2: Multi-step - describe network interfaces" \
-    "$BASE_CMD ec2 describe-network-interfaces" \
-    ".*"
-
-run_test "EC2: List security groups" \
-    "$BASE_CMD ec2 describe-security-groups" \
-    "(GroupId|sg-[a-f0-9]+|GroupName)"
-
-run_test "EC2: List VPCs" \
-    "$BASE_CMD ec2 describe-vpcs" \
-    "(VpcId|vpc-[a-f0-9]+)"
-
-run_test "EC2: List subnets" \
-    "$BASE_CMD ec2 describe-subnets" \
-    "(SubnetId|subnet-[a-f0-9]+)"
-
-run_test "EC2: List volumes" \
-    "$BASE_CMD ec2 describe-volumes" \
-    ".*"
-
+run_test "EC2: describe-instances" "$BASE_CMD ec2 describe-instances" ".*"
+run_test "EC2: describe-instances with columns" "$BASE_CMD ec2 describe-instances -- InstanceId State.Name" "(InstanceId|i-[a-f0-9]+)"
+run_test "EC2: describe-instances filter" "$BASE_CMD ec2 describe-instances running" ".*"
+run_test "EC2: describe-instances JSON" "$BASE_CMD ec2 describe-instances --json" "^\[.*\]$|^\{\}"
+run_test "EC2: describe-instances --keys" "$BASE_CMD ec2 describe-instances --keys" "(InstanceId|State|LaunchTime)"
+run_test "EC2: describe-network-interfaces" "$BASE_CMD ec2 describe-network-interfaces" ".*"
+run_test "EC2: describe-security-groups" "$BASE_CMD ec2 describe-security-groups" "(GroupId|sg-[a-f0-9]+)"
+run_test "EC2: describe-vpcs" "$BASE_CMD ec2 describe-vpcs" "(VpcId|vpc-[a-f0-9]+)"
+run_test "EC2: describe-subnets" "$BASE_CMD ec2 describe-subnets" "(SubnetId|subnet-[a-f0-9]+)"
+run_test "EC2: describe-volumes" "$BASE_CMD ec2 describe-volumes" ".*"
+run_test "EC2: describe-snapshots" "$BASE_CMD ec2 describe-snapshots --owner self" ".*"
+run_test "EC2: describe-images" "$BASE_CMD ec2 describe-images --owner self" ".*"
+run_test "EC2: describe-key-pairs" "$BASE_CMD ec2 describe-key-pairs" ".*"
+run_test "EC2: describe-addresses" "$BASE_CMD ec2 describe-addresses" ".*"
+run_test "EC2: describe-nat-gateways" "$BASE_CMD ec2 describe-nat-gateways" ".*"
+run_test "EC2: describe-internet-gateways" "$BASE_CMD ec2 describe-internet-gateways" ".*"
+run_test "EC2: describe-route-tables" "$BASE_CMD ec2 describe-route-tables" ".*"
+run_test "EC2: describe-vpc-peering-connections" "$BASE_CMD ec2 describe-vpc-peering-connections" ".*"
 echo ""
 
-# ============================================================================
-# Auto Scaling Tests
-# ============================================================================
 echo "--- Auto Scaling Tests ---"
-
-run_test "AutoScaling: List auto scaling groups" \
-    "$BASE_CMD autoscaling describe-auto-scaling-groups" \
-    ".*"
-
-run_test "AutoScaling: List launch configurations" \
-    "$BASE_CMD autoscaling describe-launch-configurations" \
-    ".*"
-
+run_test "AutoScaling: describe-auto-scaling-groups" "$BASE_CMD autoscaling describe-auto-scaling-groups" ".*"
+run_test "AutoScaling: describe-launch-configurations" "$BASE_CMD autoscaling describe-launch-configurations" ".*"
+run_test "AutoScaling: describe-scaling-policies" "$BASE_CMD autoscaling describe-policies" ".*"
+run_test "AutoScaling: describe-scheduled-actions" "$BASE_CMD autoscaling describe-scheduled-actions" ".*"
 echo ""
 
-# ============================================================================
-# EKS Tests
-# ============================================================================
 echo "--- EKS Tests ---"
-
-run_test "EKS: List clusters" \
-    "$BASE_CMD eks list-clusters" \
-    ".*"
-
-# Only run nodegroup test if clusters exist
-if $BASE_CMD eks list-clusters 2>&1 | grep -q "\S"; then
-    run_test "EKS: Multi-step - describe nodegroups (with -i hint)" \
-        "$BASE_CMD eks describe-nodegroup -i list-clus:cluster" \
-        ".*"
-fi
-
+run_test "EKS: list-clusters" "$BASE_CMD eks list-clusters" ".*"
+run_test "EKS: describe-nodegroup multi-step" "$BASE_CMD eks describe-nodegroup -i list-clus:cluster" ".*"
+run_test "EKS: list-addons multi-step" "$BASE_CMD eks list-addons -i list-clus:cluster" ".*"
 echo ""
 
-# ============================================================================
-# Lambda Tests
-# ============================================================================
 echo "--- Lambda Tests ---"
-
-run_test "Lambda: List functions" \
-    "$BASE_CMD lambda list-functions" \
-    ".*"
-
-run_test "Lambda: List functions with column filter" \
-    "$BASE_CMD lambda list-functions -- FunctionName Runtime" \
-    "(FunctionName|Runtime|python|nodejs|java)"
-
+run_test "Lambda: list-functions" "$BASE_CMD lambda list-functions" ".*"
+run_test "Lambda: list-functions with columns" "$BASE_CMD lambda list-functions -- FunctionName Runtime" "(FunctionName|Runtime|python|nodejs|java)"
+run_test "Lambda: list-layers" "$BASE_CMD lambda list-layers" ".*"
+run_test "Lambda: list-event-source-mappings" "$BASE_CMD lambda list-event-source-mappings" ".*"
 echo ""
 
-# ============================================================================
-# S3 Tests
-# ============================================================================
 echo "--- S3 Tests ---"
-
-run_test "S3: List buckets" \
-    "$BASE_CMD s3 list-buckets" \
-    "(Name|CreationDate)"
-
-run_test "S3: List buckets with filter" \
-    "$BASE_CMD s3 list-buckets backup" \
-    ".*"
-
-run_test "S3: List buckets with JSON output" \
-    "$BASE_CMD s3 list-buckets --json" \
-    "^\[.*\]$|^\{\}"
-
+run_test "S3: list-buckets" "$BASE_CMD s3 list-buckets" "(Name|CreationDate)"
+run_test "S3: list-buckets filter" "$BASE_CMD s3 list-buckets backup" ".*"
+run_test "S3: list-buckets JSON" "$BASE_CMD s3 list-buckets --json" "^\[.*\]$|^\{\}"
 echo ""
 
-# ============================================================================
-# IAM Tests
-# ============================================================================
 echo "--- IAM Tests ---"
-
-run_test "IAM: List users" \
-    "$BASE_CMD iam list-users" \
-    ".*"
-
-run_test "IAM: List roles" \
-    "$BASE_CMD iam list-roles" \
-    "(RoleName|Arn)"
-
-run_test "IAM: List policies" \
-    "$BASE_CMD iam list-policies" \
-    ".*"
-
-run_test "IAM: List groups" \
-    "$BASE_CMD iam list-groups" \
-    ".*"
-
+run_test "IAM: list-users" "$BASE_CMD iam list-users" ".*"
+run_test "IAM: list-roles" "$BASE_CMD iam list-roles" "(RoleName|Arn)"
+run_test "IAM: list-policies" "$BASE_CMD iam list-policies" ".*"
+run_test "IAM: list-groups" "$BASE_CMD iam list-groups" ".*"
+run_test "IAM: list-instance-profiles" "$BASE_CMD iam list-instance-profiles" ".*"
+run_test "IAM: list-access-keys multi-step" "$BASE_CMD iam list-access-keys -i list-users:username" ".*"
 echo ""
 
-# ============================================================================
-# SQS Tests
-# ============================================================================
 echo "--- SQS Tests ---"
-
-run_test "SQS: List queues" \
-    "$BASE_CMD sqs list-queues" \
-    ".*"
-
+run_test "SQS: list-queues" "$BASE_CMD sqs list-queues" ".*"
 echo ""
 
-# ============================================================================
-# SNS Tests
-# ============================================================================
 echo "--- SNS Tests ---"
-
-run_test "SNS: List topics" \
-    "$BASE_CMD sns list-topics" \
-    ".*"
-
+run_test "SNS: list-topics" "$BASE_CMD sns list-topics" ".*"
+run_test "SNS: list-subscriptions" "$BASE_CMD sns list-subscriptions" ".*"
 echo ""
 
-# ============================================================================
-# DynamoDB Tests
-# ============================================================================
 echo "--- DynamoDB Tests ---"
-
-run_test "DynamoDB: List tables" \
-    "$BASE_CMD dynamodb list-tables" \
-    ".*"
-
+run_test "DynamoDB: list-tables" "$BASE_CMD dynamodb list-tables" ".*"
+run_test "DynamoDB: list-backups" "$BASE_CMD dynamodb list-backups" ".*"
+run_test "DynamoDB: describe-table multi-step" "$BASE_CMD dynamodb describe-table -i list-tables:tablename" ".*"
 echo ""
 
-# ============================================================================
-# CloudFormation Tests
-# ============================================================================
 echo "--- CloudFormation Tests ---"
-
-run_test "CloudFormation: List stacks" \
-    "$BASE_CMD cloudformation list-stacks" \
-    ".*"
-
-run_test "CloudFormation: Describe stacks" \
-    "$BASE_CMD cloudformation describe-stacks" \
-    ".*"
-
-# Only run stack events test if stacks exist
-if $BASE_CMD cloudformation list-stacks 2>&1 | grep -q "StackName"; then
-    run_test "CloudFormation: Multi-step - describe stack events" \
-        "$BASE_CMD cloudformation describe-stack-events prod -- StackName ResourceStatus" \
-        ".*"
-fi
-
+run_test "CloudFormation: list-stacks" "$BASE_CMD cloudformation list-stacks" ".*"
+run_test "CloudFormation: describe-stacks" "$BASE_CMD cloudformation describe-stacks" ".*"
+run_test "CloudFormation: describe-stack-events multi-step" "$BASE_CMD cloudformation describe-stack-events prod -- StackName ResourceStatus" ".*"
+run_test "CloudFormation: list-stack-resources multi-step" "$BASE_CMD cloudformation list-stack-resources -i list-stacks:stackname" ".*"
 echo ""
 
-# ============================================================================
-# ELB/ALB Tests
-# ============================================================================
 echo "--- ELB/ALB Tests ---"
-
-run_test "ELBv2: List load balancers" \
-    "$BASE_CMD elbv2 describe-load-balancers" \
-    ".*"
-
-run_test "ELBv2: List target groups" \
-    "$BASE_CMD elbv2 describe-target-groups" \
-    ".*"
-
-# Only run tags test if load balancers exist
-if $BASE_CMD elbv2 describe-load-balancers 2>&1 | grep -q "LoadBalancerArn"; then
-    run_test "ELBv2: Multi-step - describe tags with hint" \
-        "$BASE_CMD elbv2 describe-tags -i desc-load:arn:3" \
-        ".*"
-fi
-
+run_test "ELBv2: describe-load-balancers" "$BASE_CMD elbv2 describe-load-balancers" ".*"
+run_test "ELBv2: describe-target-groups" "$BASE_CMD elbv2 describe-target-groups" ".*"
+run_test "ELBv2: describe-listeners multi-step" "$BASE_CMD elbv2 describe-listeners -i desc-load:arn" ".*"
+run_test "ELBv2: describe-tags multi-step" "$BASE_CMD elbv2 describe-tags -i desc-load:arn:3" ".*"
 echo ""
 
-# ============================================================================
-# RDS Tests
-# ============================================================================
 echo "--- RDS Tests ---"
-
-run_test "RDS: List DB instances" \
-    "$BASE_CMD rds describe-db-instances" \
-    ".*"
-
-run_test "RDS: List DB clusters" \
-    "$BASE_CMD rds describe-db-clusters" \
-    ".*"
-
+run_test "RDS: describe-db-instances" "$BASE_CMD rds describe-db-instances" ".*"
+run_test "RDS: describe-db-clusters" "$BASE_CMD rds describe-db-clusters" ".*"
+run_test "RDS: describe-db-snapshots" "$BASE_CMD rds describe-db-snapshots" ".*"
+run_test "RDS: describe-db-subnet-groups" "$BASE_CMD rds describe-db-subnet-groups" ".*"
+run_test "RDS: describe-db-parameter-groups" "$BASE_CMD rds describe-db-parameter-groups" ".*"
 echo ""
 
-# ============================================================================
-# CloudWatch Tests
-# ============================================================================
 echo "--- CloudWatch Tests ---"
-
-run_test "CloudWatch: List alarms" \
-    "$BASE_CMD cloudwatch describe-alarms" \
-    ".*"
-
+run_test "CloudWatch: describe-alarms" "$BASE_CMD cloudwatch describe-alarms" ".*"
+run_test "CloudWatch: list-metrics" "$BASE_CMD cloudwatch list-metrics" ".*"
+run_test "CloudWatch: describe-alarm-history multi-step" "$BASE_CMD cloudwatch describe-alarm-history -i desc-alarms:alarmname" ".*"
 echo ""
 
-# ============================================================================
-# KMS Tests
-# ============================================================================
 echo "--- KMS Tests ---"
-
-run_test "KMS: List keys" \
-    "$BASE_CMD kms list-keys" \
-    ".*"
-
+run_test "KMS: list-keys" "$BASE_CMD kms list-keys" ".*"
+run_test "KMS: list-aliases" "$BASE_CMD kms list-aliases" ".*"
+run_test "KMS: describe-key multi-step" "$BASE_CMD kms describe-key -i list-keys:keyid" ".*"
 echo ""
 
-# ============================================================================
-# Secrets Manager Tests
-# ============================================================================
 echo "--- Secrets Manager Tests ---"
-
-run_test "SecretsManager: List secrets" \
-    "$BASE_CMD secretsmanager list-secrets" \
-    ".*"
-
+run_test "SecretsManager: list-secrets" "$BASE_CMD secretsmanager list-secrets" ".*"
 echo ""
 
-# ============================================================================
-# Systems Manager (SSM) Tests
-# ============================================================================
 echo "--- SSM Tests ---"
-
-run_test "SSM: List parameters" \
-    "$BASE_CMD ssm describe-parameters" \
-    ".*"
-
-# Test parameter retrieval with limit
-run_test "SSM: Get parameters with limit" \
-    "$BASE_CMD ssm get-parameters -i ::5" \
-    ".*"
-
+run_test "SSM: describe-parameters" "$BASE_CMD ssm describe-parameters" ".*"
+run_test "SSM: get-parameters with limit" "$BASE_CMD ssm get-parameters -i ::5" ".*"
+run_test "SSM: describe-patch-baselines" "$BASE_CMD ssm describe-patch-baselines" ".*"
+run_test "SSM: describe-maintenance-windows" "$BASE_CMD ssm describe-maintenance-windows" ".*"
 echo ""
 
-# ============================================================================
-# ECR Tests
-# ============================================================================
 echo "--- ECR Tests ---"
-
-run_test "ECR: List repositories" \
-    "$BASE_CMD ecr describe-repositories" \
-    ".*"
-
+run_test "ECR: describe-repositories" "$BASE_CMD ecr describe-repositories" ".*"
+run_test "ECR: describe-images multi-step" "$BASE_CMD ecr describe-images -i desc-repos:repositoryname" ".*"
 echo ""
 
-# ============================================================================
-# ECS Tests
-# ============================================================================
 echo "--- ECS Tests ---"
-
-run_test "ECS: List clusters" \
-    "$BASE_CMD ecs list-clusters" \
-    ".*"
-
-# Only run task tests if clusters exist
-if $BASE_CMD ecs list-clusters 2>&1 | grep -q "clusterArn"; then
-    run_test "ECS: Multi-step - describe tasks with field override" \
-        "$BASE_CMD ecs describe-tasks -i :clusterarn" \
-        ".*"
-fi
-
+run_test "ECS: list-clusters" "$BASE_CMD ecs list-clusters" ".*"
+run_test "ECS: list-services multi-step" "$BASE_CMD ecs list-services -i list-clus:cluster" ".*"
+run_test "ECS: describe-tasks multi-step" "$BASE_CMD ecs describe-tasks -i :clusterarn" ".*"
+run_test "ECS: list-task-definitions" "$BASE_CMD ecs list-task-definitions" ".*"
 echo ""
 
-# ============================================================================
-# Advanced Feature Tests
-# ============================================================================
+echo "--- API Gateway Tests ---"
+run_test "APIGateway: get-rest-apis" "$BASE_CMD apigateway get-rest-apis" ".*"
+run_test "APIGateway: get-resources multi-step" "$BASE_CMD apigateway get-resources -i get-rest:id" ".*"
+run_test "APIGatewayV2: get-apis" "$BASE_CMD apigatewayv2 get-apis" ".*"
+echo ""
+
+echo "--- Route53 Tests ---"
+run_test "Route53: list-hosted-zones" "$BASE_CMD route53 list-hosted-zones" ".*"
+run_test "Route53: list-health-checks" "$BASE_CMD route53 list-health-checks" ".*"
+echo ""
+
+echo "--- ACM Tests ---"
+run_test "ACM: list-certificates" "$BASE_CMD acm list-certificates" ".*"
+echo ""
+
+echo "--- CloudTrail Tests ---"
+run_test "CloudTrail: describe-trails" "$BASE_CMD cloudtrail describe-trails" ".*"
+run_test "CloudTrail: list-trails" "$BASE_CMD cloudtrail list-trails" ".*"
+echo ""
+
+echo "--- Config Tests ---"
+run_test "Config: describe-configuration-recorders" "$BASE_CMD configservice describe-configuration-recorders" ".*"
+run_test "Config: describe-delivery-channels" "$BASE_CMD configservice describe-delivery-channels" ".*"
+echo ""
+
+echo "--- Backup Tests ---"
+run_test "Backup: list-backup-vaults" "$BASE_CMD backup list-backup-vaults" ".*"
+run_test "Backup: list-backup-plans" "$BASE_CMD backup list-backup-plans" ".*"
+echo ""
+
+echo "--- ElastiCache Tests ---"
+run_test "ElastiCache: describe-cache-clusters" "$BASE_CMD elasticache describe-cache-clusters" ".*"
+run_test "ElastiCache: describe-replication-groups" "$BASE_CMD elasticache describe-replication-groups" ".*"
+echo ""
+
+echo "--- Redshift Tests ---"
+run_test "Redshift: describe-clusters" "$BASE_CMD redshift describe-clusters" ".*"
+echo ""
+
+echo "--- Glue Tests ---"
+run_test "Glue: get-databases" "$BASE_CMD glue get-databases" ".*"
+run_test "Glue: get-jobs" "$BASE_CMD glue get-jobs" ".*"
+echo ""
+
+echo "--- Athena Tests ---"
+run_test "Athena: list-work-groups" "$BASE_CMD athena list-work-groups" ".*"
+run_test "Athena: list-data-catalogs" "$BASE_CMD athena list-data-catalogs" ".*"
+echo ""
+
+echo "--- Step Functions Tests ---"
+run_test "StepFunctions: list-state-machines" "$BASE_CMD stepfunctions list-state-machines" ".*"
+echo ""
+
+echo "--- EventBridge Tests ---"
+run_test "EventBridge: list-event-buses" "$BASE_CMD events list-event-buses" ".*"
+run_test "EventBridge: list-rules" "$BASE_CMD events list-rules" ".*"
+echo ""
+
 echo "--- Advanced Features Tests ---"
-
-run_test "Advanced: Parameter propagation (-p flag)" \
-    "$BASE_CMD ec2 describe-instances -p MaxResults=5" \
-    ".*"
-
-run_test "Advanced: Debug mode" \
-    "$BASE_CMD ec2 describe-instances --debug" \
-    "(DEBUG:|describe-instances)"
-
-run_test "Advanced: Multiple filters with separator" \
-    "$BASE_CMD ec2 describe-instances running web -- InstanceId State" \
-    ".*"
-
+run_test "Advanced: parameter propagation" "$BASE_CMD ec2 describe-instances -p MaxResults=5" ".*"
+run_test "Advanced: debug mode" "$BASE_CMD ec2 describe-instances --debug" "(DEBUG:|describe-instances)"
+run_test "Advanced: multiple filters" "$BASE_CMD ec2 describe-instances running web -- InstanceId State" ".*"
 echo ""
 
-# ============================================================================
-# Print Summary
-# ============================================================================
 echo ""
 echo "========================================================================"
 echo "  Validation Summary"
 echo "========================================================================"
-echo "Total Tests:   $TOTAL_TESTS"
-echo -e "Passed:        ${GREEN}$PASSED_TESTS${NC}"
-echo -e "Failed:        ${RED}$FAILED_TESTS${NC}"
-echo -e "Skipped:       ${YELLOW}$SKIPPED_TESTS${NC}"
+echo "Total Tests: $TOTAL_TESTS"
+echo -e "Passed: ${GREEN}$PASSED_TESTS${NC}"
+echo -e "Failed: ${RED}$FAILED_TESTS${NC}"
+[[ $TOTAL_TESTS -gt 0 ]] && echo "Success Rate: $((PASSED_TESTS * 100 / TOTAL_TESTS))%"
 echo "========================================================================"
 echo ""
 
-# Calculate success rate
-if [[ $TOTAL_TESTS -gt 0 ]]; then
-    SUCCESS_RATE=$((PASSED_TESTS * 100 / TOTAL_TESTS))
-    echo "Success Rate: $SUCCESS_RATE%"
-    echo ""
-fi
-
-# Exit with appropriate code
 if [[ $FAILED_TESTS -gt 0 ]]; then
     log_error "Validation FAILED - $FAILED_TESTS test(s) failed"
     exit 1
