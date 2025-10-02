@@ -21,12 +21,14 @@ from .utils import (
 class CallResult:
     """Track successful responses throughout call chain"""
 
-    def __init__(self) -> None:
+    def __init__(self, service: str = "", operation: str = "") -> None:
         """Initialize CallResult with tracking lists."""
         self.successful_responses: List[Any] = []
         self.final_success: bool = False
         self.last_successful_response: Optional[Any] = None
         self.error_messages: List[str] = []
+        self.service: str = service
+        self.operation: str = operation
 
 
 def check_parameter_requirements(
@@ -259,7 +261,7 @@ def _execute_multi_level_call_internal(
     else:
         debug_print(f"Using specified result limit: {limit}")  # pragma: no mutate
 
-    call_result = CallResult() if with_tracking else None
+    call_result = CallResult(service, action) if with_tracking else None
 
     # First attempt - main call
     response = None
@@ -288,7 +290,7 @@ def _execute_multi_level_call_internal(
 
             from .formatters import flatten_response
 
-            resources = flatten_response(response)
+            resources = flatten_response(response, service, action)
             debug_print(f"Final call returned {len(resources)} resources")  # pragma: no mutate
 
             if value_filters:
@@ -387,7 +389,7 @@ def _execute_multi_level_call_internal(
 
         from .formatters import flatten_response
 
-        list_resources = flatten_response(list_response)
+        list_resources = flatten_response(list_response, service, successful_operation)
         debug_print(
             f"Got {len(list_resources)} resources from {successful_operation}"
         )  # pragma: no mutate
@@ -542,7 +544,7 @@ def _execute_multi_level_call_internal(
     if final_response_to_use:
         from .formatters import flatten_response
 
-        resources = flatten_response(final_response_to_use)
+        resources = flatten_response(final_response_to_use, service, action)
         debug_print(f"Final call returned {len(resources)} resources")  # pragma: no mutate
 
         if value_filters:
@@ -1025,7 +1027,9 @@ def show_keys_from_result(call_result):
     if call_result.final_success and call_result.last_successful_response:
         from .formatters import extract_and_sort_keys, flatten_response
 
-        resources = flatten_response(call_result.last_successful_response)
+        resources = flatten_response(
+            call_result.last_successful_response, call_result.service, call_result.operation
+        )
         if not resources:
             return "Error: No data to extract keys from in successful response"
 

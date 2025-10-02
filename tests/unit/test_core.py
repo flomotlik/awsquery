@@ -286,8 +286,8 @@ class TestExecuteMultiLevelCall:
         mock_execute.assert_called_once_with(
             "ec2", "describe-instances", parameters=None, session=None
         )
-        # Verify the flatten_response was called
-        mock_flatten.assert_called_once_with(mock_response)
+        # Verify the flatten_response was called with service and action
+        mock_flatten.assert_called_once_with(mock_response, "ec2", "describe-instances")
         # Since we have value_filters, filter_resources should be called
         # (Testing the integration rather than the exact mock call)
         assert len(result) == 1

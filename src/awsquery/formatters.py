@@ -123,8 +123,17 @@ def transform_tags_structure(data, max_depth=10, current_depth=0):
         return data
 
 
-def flatten_response(data):
-    """Flatten AWS response to extract resource lists"""
+def flatten_response(data, service: str, operation: str):
+    """Flatten AWS response to extract resource lists
+
+    Args:
+        data: AWS API response data
+        service: AWS service name for shape-aware extraction
+        operation: Operation name for shape-aware extraction
+
+    Returns:
+        List of extracted resource items
+    """
     # First, transform tags in the entire response
     transformed_data = transform_tags_structure(data)
 
@@ -133,7 +142,7 @@ def flatten_response(data):
         all_items = []
         for i, page in enumerate(transformed_data):
             debug_print(f"Processing page {i+1}")  # pragma: no mutate
-            items = flatten_single_response(page)
+            items = flatten_single_response(page, service, operation)
             all_items.extend(items)
         debug_print(
             f"Total resources extracted from all pages: {len(all_items)}"
@@ -141,13 +150,22 @@ def flatten_response(data):
         return all_items
     else:
         debug_print("Single response (not paginated)")  # pragma: no mutate
-        result = flatten_single_response(transformed_data)
+        result = flatten_single_response(transformed_data, service, operation)
         debug_print(f"Total resources extracted: {len(result)}")  # pragma: no mutate
         return result
 
 
-def flatten_single_response(response):
-    """Simple extraction of data from AWS API responses"""
+def flatten_single_response(response, service: str, operation: str):
+    """Simple extraction of data from AWS API responses
+
+    Args:
+        response: AWS API response
+        service: AWS service name for shape-aware extraction
+        operation: Operation name for shape-aware extraction
+
+    Returns:
+        List of extracted resource items
+    """
     if not response:
         debug_print("Empty response, returning empty list")  # pragma: no mutate
         return []
@@ -163,63 +181,58 @@ def flatten_single_response(response):
     original_keys = list(response.keys())
     debug_print(f"Original response keys: {original_keys}")  # pragma: no mutate
 
-    filtered_response = {k: v for k, v in response.items() if k != "ResponseMetadata"}
-    filtered_keys = list(filtered_response.keys())  # pragma: no mutate
+    # Shape-aware data field detection (REQUIRED)
+    from .shapes import ShapeCache
 
-    if "ResponseMetadata" in response:
-        debug_print(
-            f"Removed ResponseMetadata. Filtered keys: {filtered_keys}"
-        )  # pragma: no mutate
-    else:
-        debug_print(f"No ResponseMetadata found. Keys remain: {filtered_keys}")  # pragma: no mutate
+    shape_cache = ShapeCache()
+    data_field, _, _ = shape_cache.get_response_fields(service, operation)
 
-    if len(filtered_response) == 0:
-        debug_print("Only ResponseMetadata present -> RETURNING EMPTY LIST")  # pragma: no mutate
-        return []
-
-    list_keys = []
-    non_list_keys = []
-    for key, value in filtered_response.items():
-        if isinstance(value, list):
-            list_keys.append((key, len(value)))
-        else:
-            non_list_keys.append(key)
-
-    debug_print(
-        f"Found {len(list_keys)} list keys and {len(non_list_keys)} non-list keys"
-    )  # pragma: no mutate
-    if list_keys:
-        debug_print(f"List keys: {[(k, l) for k, l in list_keys]}")  # pragma: no mutate
-    if non_list_keys:
-        debug_print(f"Non-list keys: {non_list_keys}")  # pragma: no mutate
-
-    if len(list_keys) == 1:
-        list_key, list_length = list_keys[0]
-        list_value = filtered_response[list_key]
-        if non_list_keys:
+    if data_field and data_field in response:
+        data_value = response[data_field]
+        if isinstance(data_value, list):
             debug_print(
-                f"Single list key '{list_key}' with {list_length} items, "
-                f"ignoring metadata {non_list_keys} -> EXTRACTING LIST ONLY"
+                f"Shape-aware extraction: using data field '{data_field}' "
+                f"with {len(data_value)} items"
             )  # pragma: no mutate
+            return data_value
         else:
             debug_print(
-                f"Single list key '{list_key}' with {list_length} items -> EXTRACTING LIST"
+                f"Shape-aware extraction: data field '{data_field}' is not a list, wrapping in list"
             )  # pragma: no mutate
-        return list_value
-    elif len(list_keys) > 1:
-        list_keys.sort(key=lambda x: x[1], reverse=True)
-        largest_key, largest_length = list_keys[0]
-        largest_list = filtered_response[largest_key]
-        debug_print(
-            f"Multiple list keys found, using '{largest_key}' with {largest_length} "
-            f"items (largest) -> EXTRACTING LARGEST LIST"
-        )  # pragma: no mutate
-        return largest_list
+            return [data_value]
     else:
+        # Shape didn't identify data field - apply simple extraction
         debug_print(
-            f"No list keys found among {non_list_keys} -> USING WHOLE RESPONSE"
+            f"No data field identified for {service}:{operation}, using simple extraction"
         )  # pragma: no mutate
-        return [filtered_response]
+        # Remove ResponseMetadata
+        filtered = {k: v for k, v in response.items() if k != "ResponseMetadata"}
+        if not filtered:
+            return []
+
+        # Simple heuristic: extract list fields
+        list_fields = [(k, v) for k, v in filtered.items() if isinstance(v, list)]
+        if len(list_fields) == 1:
+            field_name, field_value = list_fields[0]
+            debug_print(
+                f"Simple extraction: found single list field '{field_name}' "
+                f"with {len(field_value)} items"
+            )  # pragma: no mutate
+            return field_value
+        elif len(list_fields) > 1:
+            # Multiple lists - choose the largest
+            field_name, field_value = max(list_fields, key=lambda x: len(x[1]))
+            debug_print(
+                f"Simple extraction: found {len(list_fields)} list fields, "
+                f"using largest '{field_name}' with {len(field_value)} items"
+            )  # pragma: no mutate
+            return field_value
+
+        # No list fields - return filtered response as single item
+        debug_print(
+            f"Simple extraction: no list fields, returning response as item"
+        )  # pragma: no mutate
+        return [filtered]
 
 
 def flatten_dict_keys(d, parent_key="", sep="."):

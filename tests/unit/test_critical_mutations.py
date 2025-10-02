@@ -51,7 +51,7 @@ class TestFlattenSingleResponseCritical:
 
         # Mock debug_print to verify original_keys is passed correctly
         with patch("awsquery.formatters.debug_print") as mock_debug:
-            result = flatten_single_response(response)
+            result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
 
             # Verify debug_print was called with original keys
             debug_calls = mock_debug.call_args_list
@@ -69,7 +69,7 @@ class TestFlattenSingleResponseCritical:
         """Test handling when response has None values."""
         response = {"Data": None, "Items": [{"Id": "1"}], "Status": "ok"}
 
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
 
         # Should handle None values gracefully
         assert result == [{"Id": "1"}]

@@ -23,18 +23,20 @@ from awsquery.utils import simplify_key
 class TestFlattenResponse:
 
     def test_flatten_response_empty_list(self):
-        result = flatten_response([])
+        result = flatten_response([], service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_response_empty_single_response(self):
-        result = flatten_response(None)
+        result = flatten_response(None, service="ec2", operation="DescribeInstances")
         assert result == []
 
-        result = flatten_response({})
+        result = flatten_response({}, service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_response_paginated_responses(self, sample_paginated_responses):
-        result = flatten_response(sample_paginated_responses)
+        result = flatten_response(
+            sample_paginated_responses, service="ec2", operation="DescribeInstances"
+        )
 
         assert len(result) == 4  # 2 instances per page * 2 pages
 
@@ -45,7 +47,7 @@ class TestFlattenResponse:
         assert "i-page2-instance2" in instance_ids
 
     def test_flatten_response_single_non_paginated(self, sample_ec2_response):
-        result = flatten_response(sample_ec2_response)
+        result = flatten_response(sample_ec2_response, service="ec2", operation="DescribeInstances")
 
         # Extracts reservations (largest list) from single response
         assert len(result) == 1
@@ -62,7 +64,7 @@ class TestFlattenResponse:
             {"InstanceId": "i-direct1", "State": {"Name": "running"}},
             {"InstanceId": "i-direct2", "State": {"Name": "stopped"}},
         ]
-        result = flatten_response(direct_list)
+        result = flatten_response(direct_list, service="ec2", operation="DescribeInstances")
 
         # When input is list, it processes each item as a page
         assert len(result) == 2
@@ -73,13 +75,13 @@ class TestFlattenResponse:
 class TestFlattenSingleResponse:
 
     def test_flatten_single_response_empty_inputs(self):
-        result = flatten_single_response(None)
+        result = flatten_single_response(None, service="ec2", operation="DescribeInstances")
         assert result == []
 
-        result = flatten_single_response({})
+        result = flatten_single_response({}, service="ec2", operation="DescribeInstances")
         assert result == []
 
-        result = flatten_single_response([])
+        result = flatten_single_response([], service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_single_response_direct_list(self):
@@ -87,29 +89,33 @@ class TestFlattenSingleResponse:
             {"InstanceId": "i-123", "State": "running"},
             {"InstanceId": "i-456", "State": "stopped"},
         ]
-        result = flatten_single_response(resources)
+        result = flatten_single_response(resources, service="ec2", operation="DescribeInstances")
         assert result == resources
         assert len(result) == 2
 
     def test_flatten_single_response_non_dict_input(self):
         # Non-dict input gets wrapped in list
-        result = flatten_single_response("string value")
+        result = flatten_single_response(
+            "string value", service="ec2", operation="DescribeInstances"
+        )
         assert result == ["string value"]
 
-        result = flatten_single_response(42)
+        result = flatten_single_response(42, service="ec2", operation="DescribeInstances")
         assert result == [42]
 
-        result = flatten_single_response(True)
+        result = flatten_single_response(True, service="ec2", operation="DescribeInstances")
         assert result == [True]
 
     def test_flatten_single_response_only_response_metadata(self):
         # Only ResponseMetadata returns empty list
         response = {"ResponseMetadata": {"RequestId": "test-request-id", "HTTPStatusCode": 200}}
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_single_response_single_list_key(self, sample_ec2_response):
-        result = flatten_single_response(sample_ec2_response)
+        result = flatten_single_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
 
         assert len(result) == 1  # One reservation
         reservation = result[0]
@@ -129,7 +135,7 @@ class TestFlattenSingleResponse:
             "MediumList": [{"id": 1}, {"id": 2}],
             "ResponseMetadata": {"RequestId": "test"},
         }
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
 
         assert len(result) == 3
         assert result == [{"id": 1}, {"id": 2}, {"id": 3}]
@@ -142,7 +148,7 @@ class TestFlattenSingleResponse:
             "Status": "active",
             "ResponseMetadata": {"RequestId": "test"},
         }
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
 
         assert len(result) == 1
         assert result[0]["ResourceId"] == "resource-123"
@@ -152,7 +158,9 @@ class TestFlattenSingleResponse:
 
     def test_flatten_single_response_mixed_list_and_non_list_keys(self, sample_s3_response):
         # Ignores non-list keys when list key present
-        result = flatten_single_response(sample_s3_response)
+        result = flatten_single_response(
+            sample_s3_response, service="ec2", operation="DescribeInstances"
+        )
 
         assert len(result) == 3
         assert all("Name" in bucket for bucket in result)
@@ -676,7 +684,9 @@ class TestComplexScenarios:
 
     def test_format_table_output_aws_ec2_instances(self, sample_ec2_response):
         # Realistic EC2 instances formatting
-        resources = flatten_single_response(sample_ec2_response)
+        resources = flatten_single_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         result = format_table_output(resources, column_filters=["Instance", "State", "Tag"])
 
         assert "InstanceId" in result
@@ -690,7 +700,9 @@ class TestComplexScenarios:
 
     def test_format_json_output_aws_s3_buckets(self, sample_s3_response):
         # Realistic S3 buckets formatting
-        resources = flatten_single_response(sample_s3_response)
+        resources = flatten_single_response(
+            sample_s3_response, service="ec2", operation="DescribeInstances"
+        )
         result = format_json_output(resources, column_filters=["Name", "Creation"])
         parsed = json.loads(result)
 
@@ -771,7 +783,7 @@ class TestComplexScenarios:
         from tests.fixtures.aws_responses import get_paginated_response
 
         paginated_data = get_paginated_response("ec2", "describe_instances", 2, 3)
-        result = flatten_response(paginated_data)
+        result = flatten_response(paginated_data, service="ec2", operation="DescribeInstances")
 
         # Each page has 1 reservation with 3 instances
         assert len(result) == 2  # 2 pages * 1 reservation per page
@@ -795,7 +807,9 @@ class TestComplexScenarios:
         from tests.fixtures.aws_responses import get_complex_nested_response
 
         complex_response = get_complex_nested_response(depth=3, breadth=2)
-        resources = flatten_single_response(complex_response)
+        resources = flatten_single_response(
+            complex_response, service="ec2", operation="DescribeInstances"
+        )
         result = extract_and_sort_keys(resources)
 
         assert len(result) >= 10

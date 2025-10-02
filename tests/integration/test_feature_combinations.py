@@ -83,15 +83,17 @@ class TestAllFeaturesIntegration:
 
         # Should have default columns for ec2.describe_instances
         expected_defaults = [
+            "Name$",
+            "Tags$",
             "InstanceId$",
-            "InstanceLifecycle$",
             "InstanceType$",
+            "State$",
+            "InstanceLifecycle$",
             "LaunchTime$",
-            "Placement.AvailabilityZone$",
-            "0.PrivateIpAddress$",
-            "0.PublicIpAddress$",
-            "State.Name$",
-            "Tags.Name$",
+            "Placement$",
+            "AvailabilityZone$",
+            "PublicIpAddress$",
+            "PrivateIpAddress$",
         ]
         assert column_filters == expected_defaults
 
@@ -439,20 +441,19 @@ class TestAllFeaturesIntegration:
 
         # Test with no user columns - should get defaults
         result = determine_column_filters(None, "s3", "list_buckets")
-        expected = ["CreationDate$", "Name$"]
+        expected = ["Name$", "CreationDate$"]
         assert result == expected
 
         # Test with empty user columns - should get defaults
         result = determine_column_filters([], "lambda", "list_functions")
         expected = [
-            "CodeSize$",
-            "FunctionArn$",
             "FunctionName$",
-            "Handler$",
-            "LastModified$",
-            "MemorySize$",
             "Runtime$",
             "Timeout$",
+            "MemorySize$",
+            "Handler$",
+            "LastModified$",
+            "FunctionArn$",
         ]
         assert result == expected
 

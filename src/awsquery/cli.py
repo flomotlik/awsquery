@@ -325,23 +325,43 @@ def determine_column_filters(column_filters, service, action):
     """Determine which column filters to apply - user specified or defaults"""
     if column_filters:
         debug_print(f"Using user-specified column filters: {column_filters}")  # pragma: no mutate
-        return column_filters
+        column_filters_to_use = column_filters
+    else:
+        # Check for defaults - normalize action name for lookup
+        from .utils import normalize_action_name
 
-    # Check for defaults - normalize action name for lookup
-    from .utils import normalize_action_name
+        normalized_action = normalize_action_name(action)
+        default_columns = apply_default_filters(service, normalized_action)
+        if default_columns:
+            debug_print(
+                f"Applying default column filters for "
+                f"{service}.{normalized_action}: {default_columns}"
+            )  # pragma: no mutate
+            column_filters_to_use = default_columns
+        else:
+            debug_print(
+                f"No column filters (user or default) for {service}.{normalized_action}"
+            )  # pragma: no mutate
+            column_filters_to_use = None
 
-    normalized_action = normalize_action_name(action)
-    default_columns = apply_default_filters(service, normalized_action)
-    if default_columns:
-        debug_print(
-            f"Applying default column filters for {service}.{normalized_action}: {default_columns}"
-        )  # pragma: no mutate
-        return default_columns
+    # Validate column filters against response shapes (MANDATORY)
+    if column_filters_to_use and service and action:
+        from .filter_validator import FilterValidator
 
-    debug_print(
-        f"No column filters (user or default) for {service}.{normalized_action}"
-    )  # pragma: no mutate
-    return None
+        validator = FilterValidator()
+        validation_results = validator.validate_columns(service, action, column_filters_to_use)
+
+        # Print warnings for invalid filters (but don't fail - user might know better)
+        errors = [(filter_pattern, error) for filter_pattern, error in validation_results if error]
+        if errors:
+            print(
+                "⚠️  WARNING: Some column filters may not match response fields:",
+                file=sys.stderr,
+            )
+            for filter_pattern, error in errors:
+                print(f"  - {error}", file=sys.stderr)
+
+    return column_filters_to_use
 
 
 def _has_prefix_matches(current_input, available_operations):
@@ -940,7 +960,7 @@ Autocomplete Setup:
                 service, action, parameters=parsed_parameters, session=session
             )
 
-            resources = flatten_response(response)
+            resources = flatten_response(response, service, action)
             debug_print(f"Total resources extracted: {len(resources)}")  # pragma: no mutate
             filtered_resources = filter_resources(resources, value_filters)
 
@@ -965,7 +985,7 @@ Autocomplete Setup:
                     parsed_parameters,
                 )
             else:
-                resources = flatten_response(response)
+                resources = flatten_response(response, service, action)
                 debug_print(f"Total resources extracted: {len(resources)}")  # pragma: no mutate
 
                 filtered_resources = filter_resources(resources, value_filters)

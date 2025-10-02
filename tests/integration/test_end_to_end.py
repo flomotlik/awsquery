@@ -44,7 +44,9 @@ class TestEndToEndScenarios:
         assert normalized == "describe_instances"
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         assert len(flattened) > 0
 
         table_output = format_table_output(flattened, col_filters)
@@ -64,7 +66,9 @@ class TestEndToEndScenarios:
         # 3. Format as JSON
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
 
         json_output = format_json_output(flattened, [])
         parsed = json.loads(json_output)
@@ -113,7 +117,9 @@ class TestEndToEndScenarios:
         # 3. Test that we can format the output
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_cloudformation_response)
+        flattened = flatten_response(
+            sample_cloudformation_response, service="ec2", operation="DescribeInstances"
+        )
 
         # Apply column filtering
         table_output = format_table_output(flattened, col_filters)
@@ -143,7 +149,9 @@ class TestEndToEndScenarios:
         from awsquery.formatters import flatten_response
 
         # Flatten response
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
 
         # Test column filtering with table output
         column_filters = ["InstanceId", "State", "Tags"]
@@ -183,7 +191,9 @@ class TestEndToEndScenarios:
         from awsquery.formatters import extract_and_sort_keys, flatten_response
 
         # Flatten response to extract keys
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
 
         # Extract and sort keys
         keys = extract_and_sort_keys(flattened)
@@ -692,7 +702,9 @@ class TestCLIOutputFormats:
         """Test table output format structure."""
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         table_output = format_table_output(flattened, [])
 
         # Table format characteristics
@@ -711,7 +723,9 @@ class TestCLIOutputFormats:
         """Test JSON output format structure."""
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         json_output = format_json_output(flattened, [])
 
         # Should be valid JSON
@@ -741,7 +755,9 @@ class TestCLIOutputFormats:
         """Test column filtering effects on both table and JSON output."""
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         column_filters = ["InstanceId", "State"]
 
         # Test table output with filtering
@@ -774,7 +790,7 @@ class TestCLIOutputFormats:
 
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(empty_response)
+        flattened = flatten_response(empty_response, service="ec2", operation="DescribeInstances")
 
         # Test table format with empty results
         table_output = format_table_output(flattened, [])
@@ -817,7 +833,7 @@ class TestCLIOutputFormats:
 
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(large_response)
+        flattened = flatten_response(large_response, service="ec2", operation="DescribeInstances")
 
         # Test table format with large dataset
         table_output = format_table_output(flattened, [])

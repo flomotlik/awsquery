@@ -294,7 +294,7 @@ class TestHintIntegration:
         response = mock_execute.return_value
         from awsquery.formatters import flatten_response
 
-        resources = flatten_response(response)
+        resources = flatten_response(response, service="ec2", operation="DescribeInstances")
 
         parameter_values = extract_parameter_values(resources, "ClusterName")
         assert "prod-cluster" in parameter_values
@@ -319,7 +319,7 @@ class TestHintIntegration:
         from awsquery.filters import extract_parameter_values
         from awsquery.formatters import flatten_response
 
-        resources = flatten_response(cluster_response)
+        resources = flatten_response(cluster_response, service="ec2", operation="DescribeInstances")
         cluster_arns = extract_parameter_values(resources, "ClusterArn")
 
         assert len(cluster_arns) == 2
