@@ -914,11 +914,10 @@ ec2:
     - State$
   describe_instances:
     columns:
-    - Name$
-    - Tags$
+    - Tags.Name$
     - InstanceId$
     - InstanceType$
-    - State$
+    - State.Name$
     - InstanceLifecycle$
     - LaunchTime$
     - Placement$

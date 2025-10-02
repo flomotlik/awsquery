@@ -32,6 +32,12 @@ log_info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 log_success() { echo -e "${GREEN}[PASS]${NC} $*"; }
 log_error() { echo -e "${RED}[FAIL]${NC} $*"; }
 
+is_failure_output() {
+    local output="$1"
+    # Reject any error messages or empty result indicators
+    echo "$output" | grep -qE "(^ERROR:|No results found|No matching columns found)"
+}
+
 run_test() {
     local test_name="$1"
     local test_cmd="$2"
@@ -44,7 +50,7 @@ run_test() {
     local exit_code=0
     output=$(eval "$test_cmd" 2>&1) || exit_code=$?
 
-    if [[ $exit_code -ne 0 ]] || ! echo "$output" | grep -qE "$expected_pattern"; then
+    if [[ $exit_code -ne 0 ]] || is_failure_output "$output" || ! echo "$output" | grep -qE "$expected_pattern"; then
         log_error "$test_name"
         [[ "$VERBOSE" == "true" ]] && echo "Output: $output"
         FAILED_TESTS=$((FAILED_TESTS + 1))
