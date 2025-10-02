@@ -550,8 +550,11 @@ class TestFieldHintParsing:
             mock_ops.return_value = ["DescribeClusters"]
 
             # Test multiple colons - with new format (function:field:limit)
-            # "desc-clus:cluster:arn" parses as: function="desc-clus", field="cluster", third="arn" (ignored as non-numeric)
-            function, field, limit, alternatives = find_hint_function("desc-clus:cluster:arn", "eks")
+            # "desc-clus:cluster:arn" parses as: function="desc-clus",
+            # field="cluster", third="arn" (ignored as non-numeric)
+            function, field, limit, alternatives = find_hint_function(
+                "desc-clus:cluster:arn", "eks"
+            )
 
             assert function == "DescribeClusters"
             assert field == "cluster"  # "arn" is ignored as it's not a valid limit
@@ -730,7 +733,9 @@ class TestFieldHintIntegration:
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
             mock_ops.return_value = ["DescribeClusters"]
 
-            function, field, limit, alternatives = find_hint_function("desc-clus:customfield", "eks")
+            function, field, limit, alternatives = find_hint_function(
+                "desc-clus:customfield", "eks"
+            )
 
             # Should return field information for user feedback
             assert function == "DescribeClusters"

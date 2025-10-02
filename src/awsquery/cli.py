@@ -446,7 +446,9 @@ def find_hint_function(hint, service, session=None):
             limit = int(limit_str)
             debug_print(f"Part 2 is limit: {limit}")  # pragma: no mutate
         elif limit_str:
-            debug_print(f"Part 2 '{limit_str}' is not a valid limit (must be numeric)")  # pragma: no mutate
+            debug_print(
+                f"Part 2 '{limit_str}' is not a valid limit (must be numeric)"
+            )  # pragma: no mutate
 
     if not function_hint:
         debug_print("No function hint provided, will use inferred function")  # pragma: no mutate
@@ -590,171 +592,6 @@ def action_completer(prefix, parsed_args, **kwargs):
         return []
 
 
-class CLIArgumentProcessor:
-    """Handles CLI argument processing and validation"""
-
-    def __init__(self) -> None:
-        """Initialize CLI argument processor."""
-        self.parser: Optional[argparse.ArgumentParser] = None
-        self.args: Optional[argparse.Namespace] = None
-        self.remaining: Optional[List[str]] = None
-
-    def create_parser(self) -> argparse.ArgumentParser:
-        """Create and configure the argument parser"""
-        self.parser = argparse.ArgumentParser(
-            description=(
-                "Query AWS APIs with flexible filtering and automatic parameter resolution"
-            ),  # pragma: no mutate
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            epilog="""  # pragma: no mutate
-Examples:
-  awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId
-  awsquery s3 list-buckets backup
-  awsquery cloudformation describe-stack-events prod -- Created StackName
-  awsquery ssm get-parameters -i ::5  (limit to 5 parameters)
-  awsquery elbv2 describe-tags -i desc-clus:arn prod  (function + field hint)
-  awsquery ec2 describe-instances -p MaxResults=10 prod  (parameter propagation)
-  awsquery ec2 describe-instances --keys  (show all keys)
-  awsquery ec2 describe-instances --debug  (enable debug output)
-
-Autocomplete Setup:
-  Bash:
-    eval "$(register-python-argcomplete awsquery)"
-
-  Zsh:
-    autoload -U bashcompinit && bashcompinit
-    eval "$(register-python-argcomplete awsquery)"
-
-  Fish:
-    register-python-argcomplete --shell fish awsquery | source
-
-  Add the appropriate command to your shell config (~/.bashrc, ~/.zshrc, etc.)
-  For more details: https://github.com/flomotlik/awsquery#enable-shell-autocomplete
-        """,
-        )
-
-        self.parser.add_argument(
-            "-j",
-            "--json",
-            action="store_true",
-            help="Output results in JSON format instead of table",  # pragma: no mutate
-        )
-        self.parser.add_argument(
-            "-k",
-            "--keys",
-            action="store_true",
-            help="Show all available keys for the command",  # pragma: no mutate
-        )
-        self.parser.add_argument(
-            "-d", "--debug", action="store_true", help="Enable debug output"
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "--region", help="AWS region to use for requests"
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "--profile", help="AWS profile to use for requests"
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "-p",
-            "--parameter",
-            action="append",
-            help="Parameter for AWS API call, propagates to list operations (e.g., -p MaxResults=10)",
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "-i",
-            "--input",
-            help="Multi-step hints: function/field/limit (e.g., 'desc-clus', ':arn', '::5', 'desc-clus:arn:5')",
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "--allow-unsafe",
-            action="store_true",
-            help="Allow potentially unsafe operations without prompting",  # pragma: no mutate
-        )
-        self.parser.add_argument(
-            "service", nargs="?", help="AWS service name (e.g., ec2, s3)"
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "action", nargs="?", help="AWS action/operation name"
-        )  # pragma: no mutate
-
-        # Enable autocompletion
-        argcomplete.autocomplete(self.parser)
-
-        return self.parser
-
-    def parse_initial_args(self) -> Tuple[argparse.Namespace, List[str]]:
-        """Parse initial arguments and handle reordering if needed"""
-        if not self.parser:
-            self.create_parser()
-
-        if self.parser is None:
-            raise RuntimeError("Failed to create argument parser")
-
-        self.args, self.remaining = self.parser.parse_known_args()
-
-        if self.remaining:
-            self._reorder_arguments()
-
-        return self.args, self.remaining
-
-    def _reorder_arguments(self) -> None:
-        """Reorder arguments to handle flags mixed with positional args"""
-        if self.args is None or self.remaining is None:
-            raise RuntimeError("Arguments must be parsed before reordering")
-
-        # Check if -- separator was in the original command line
-        has_separator = "--" in sys.argv
-        separator_in_remaining = "--" in self.remaining
-
-        # Re-parse with the full argument list to catch all flags
-        reordered_argv = [sys.argv[0]]  # Program name
-        flags = []
-        non_flags = []
-
-        # Preserve flags that were already successfully parsed
-        if self.args.debug:
-            flags.append("-d")
-        if getattr(self.args, "json", False):
-            flags.append("-j")
-        if getattr(self.args, "keys", False):
-            flags.append("-k")
-        if getattr(self.args, "allow_unsafe", False):
-            flags.append("--allow-unsafe")
-        if getattr(self.args, "region", None):
-            flags.extend(["--region", self.args.region])
-        if getattr(self.args, "profile", None):
-            flags.extend(["--profile", self.args.profile])
-        if getattr(self.args, "parameter", None):
-            for param in self.args.parameter:
-                flags.extend(["-p", param])
-        if getattr(self.args, "input", None):
-            flags.extend(["-i", self.args.input])
-
-        # Process remaining arguments based on separator presence
-        if has_separator and not separator_in_remaining:
-            extracted_flags, non_flags = _process_remaining_args_after_separator(self.remaining)
-            flags.extend(extracted_flags)
-            if non_flags and "--" not in non_flags:
-                non_flags.insert(0, "--")
-        else:
-            extracted_flags, non_flags = _process_remaining_args(self.remaining)
-            flags.extend(extracted_flags)
-
-        # Rebuild argv with proper order
-        reordered_argv.extend(flags)
-        if self.args.service:
-            reordered_argv.append(self.args.service)
-        if self.args.action:
-            reordered_argv.append(self.args.action)
-
-        # Re-parse with reordered arguments
-        if self.parser is None:
-            raise RuntimeError("Parser not available for reordering")
-
-        self.args, _ = self.parser.parse_known_args(reordered_argv[1:])
-        self.remaining = non_flags
-
-
 def main():
     parser = argparse.ArgumentParser(
         description=(
@@ -814,7 +651,10 @@ Autocomplete Setup:
     parser.add_argument(
         "-i",
         "--input",
-        help="Multi-step hints: function/field/limit (e.g., 'desc-clus', ':arn', '::5', 'desc-clus:arn:5')",
+        help=(
+            "Multi-step hints: function/field/limit "
+            "(e.g., 'desc-clus', ':arn', '::5', 'desc-clus:arn:5')"
+        ),
     )  # pragma: no mutate
     parser.add_argument(
         "--allow-unsafe",
@@ -962,7 +802,14 @@ Autocomplete Setup:
     )  # pragma: no mutate
 
     def _execute_multi_level_workflow(
-        service, action, filter_argv, session, hint_function, hint_field, hint_limit, parsed_parameters
+        service,
+        action,
+        filter_argv,
+        session,
+        hint_function,
+        hint_field,
+        hint_limit,
+        parsed_parameters,
     ):
         """Helper to execute multi-level call with filter parsing."""
         _, multi_resource_filters, multi_value_filters, multi_column_filters = (
@@ -1112,7 +959,14 @@ Autocomplete Setup:
             )  # pragma: no mutate
 
             filtered_resources = _execute_multi_level_workflow(
-                service, action, filter_argv, session, hint_function, hint_field, hint_limit, parsed_parameters
+                service,
+                action,
+                filter_argv,
+                session,
+                hint_function,
+                hint_field,
+                hint_limit,
+                parsed_parameters,
             )
             debug_print(
                 f"Multi-level call completed with {len(filtered_resources)} resources"
@@ -1144,7 +998,14 @@ Autocomplete Setup:
                     "Unexpected validation error, switching to multi-level"
                 )  # pragma: no mutate
                 filtered_resources = _execute_multi_level_workflow(
-                    service, action, filter_argv, session, hint_function, hint_field, hint_limit, parsed_parameters
+                    service,
+                    action,
+                    filter_argv,
+                    session,
+                    hint_function,
+                    hint_field,
+                    hint_limit,
+                    parsed_parameters,
                 )
             else:
                 resources = flatten_response(response)

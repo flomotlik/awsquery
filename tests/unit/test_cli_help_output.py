@@ -5,7 +5,7 @@ import sys
 from io import StringIO
 from unittest.mock import patch
 
-from awsquery.cli import CLIArgumentProcessor, main
+from awsquery.cli import main
 
 
 class TestHelpOutputAutocomplete:
@@ -152,50 +152,6 @@ class TestServiceHelpAutocomplete:
         assert "Bash:" in result.stdout
         assert "Zsh:" in result.stdout
         assert "Fish:" in result.stdout
-
-
-class TestCLIArgumentProcessorHelp:
-    """Test CLIArgumentProcessor.create_parser() epilog includes autocomplete."""
-
-    def test_create_parser_epilog_has_autocomplete(self):
-        """Test CLIArgumentProcessor.create_parser() includes autocomplete in epilog."""
-        processor = CLIArgumentProcessor()
-        parser = processor.create_parser()
-
-        epilog = parser.epilog
-        assert epilog is not None
-        assert "Autocomplete Setup:" in epilog
-        assert "Bash:" in epilog
-        assert "Zsh:" in epilog
-        assert "Fish:" in epilog
-        assert "register-python-argcomplete" in epilog
-        assert "https://github.com/flomotlik/awsquery#enable-shell-autocomplete" in epilog
-
-    def test_create_parser_epilog_has_examples(self):
-        """Test CLIArgumentProcessor.create_parser() epilog still has examples."""
-        processor = CLIArgumentProcessor()
-        parser = processor.create_parser()
-
-        epilog = parser.epilog
-        assert epilog is not None
-        assert "Examples:" in epilog
-        assert "awsquery ec2 describe-instances" in epilog
-        assert "awsquery s3 list-buckets backup" in epilog
-
-    def test_epilog_sections_ordered_correctly(self):
-        """Test epilog sections appear in correct order: Examples then Autocomplete."""
-        processor = CLIArgumentProcessor()
-        parser = processor.create_parser()
-
-        epilog = parser.epilog
-        assert epilog is not None
-
-        examples_pos = epilog.find("Examples:")
-        autocomplete_pos = epilog.find("Autocomplete Setup:")
-
-        assert examples_pos > 0, "Examples section not found"
-        assert autocomplete_pos > 0, "Autocomplete Setup section not found"
-        assert autocomplete_pos > examples_pos, "Autocomplete should come after Examples"
 
 
 class TestMainFunctionParserHelp:

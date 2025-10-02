@@ -9,7 +9,13 @@ from botocore.exceptions import ClientError, NoCredentialsError
 
 from .case_utils import to_pascal_case, to_snake_case
 from .filters import extract_parameter_values, filter_resources
-from .utils import convert_parameter_name, debug_print, get_client, normalize_action_name
+from .utils import (
+    convert_parameter_name,
+    create_session,
+    debug_print,
+    get_client,
+    normalize_action_name,
+)
 
 
 class CallResult:
@@ -341,7 +347,10 @@ def _execute_multi_level_call_internal(
                     )  # pragma: no mutate
 
                 list_response = execute_aws_call(
-                    service, operation, parameters=list_params if list_params else None, session=session
+                    service,
+                    operation,
+                    parameters=list_params if list_params else None,
+                    session=session,
                 )
 
                 if isinstance(list_response, list) and list_response:
@@ -397,10 +406,7 @@ def _execute_multi_level_call_internal(
                 f"Limiting results from {len(filtered_list_resources)} to {limit}"
             )  # pragma: no mutate
             filtered_list_resources = filtered_list_resources[:limit]
-            print(
-                f"Limited to first {limit} resources (use -i ::N to adjust)",
-                file=sys.stderr
-            )
+            print(f"Limited to first {limit} resources (use -i ::N to adjust)", file=sys.stderr)
 
         print(f"Found {len(filtered_list_resources)} resources matching filters", file=sys.stderr)
 
@@ -856,8 +862,12 @@ def singularize_parameter_name(param_name):
             return param_name[:-1]
 
     # es -> e for words ending in specific patterns (ches, shes, xes, zes)
-    if param_name.endswith("ches") or param_name.endswith("shes") or \
-       param_name.endswith("xes") or param_name.endswith("zes"):
+    if (
+        param_name.endswith("ches")
+        or param_name.endswith("shes")
+        or param_name.endswith("xes")
+        or param_name.endswith("zes")
+    ):
         return param_name[:-1]  # Caches -> Cache, Boxes -> Boxe
 
     # es -> "" for other words ending in 'es'
@@ -904,10 +914,8 @@ def filter_valid_parameters(service, action, parameters, session=None):
         return {}
 
     try:
-        import boto3
-
         if session is None:
-            session = boto3.Session()
+            session = create_session()
 
         client = session.client(service)
 
@@ -953,8 +961,7 @@ def filter_valid_parameters(service, action, parameters, session=None):
 
     except Exception as e:
         debug_print(
-            f"filter_valid_parameters: Error filtering parameters for "
-            f"{service}.{action}: {e}"
+            f"filter_valid_parameters: Error filtering parameters for " f"{service}.{action}: {e}"
         )  # pragma: no mutate
         return {}
 
