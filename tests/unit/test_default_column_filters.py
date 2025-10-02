@@ -44,11 +44,10 @@ class TestGetDefaultColumns:
         columns = get_default_columns("ec2", "describe_instances")
 
         expected = [
-            "Name$",
-            "Tags$",
+            "Tags.Name$",
             "InstanceId$",
             "InstanceType$",
-            "State$",
+            "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
             "Placement$",
@@ -117,11 +116,10 @@ class TestApplyDefaultFilters:
         result = apply_default_filters("ec2", "describe_instances", None)
 
         expected = [
-            "Name$",
-            "Tags$",
+            "Tags.Name$",
             "InstanceId$",
             "InstanceType$",
-            "State$",
+            "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
             "Placement$",
@@ -136,11 +134,10 @@ class TestApplyDefaultFilters:
         result = apply_default_filters("ec2", "describe_instances", [])
 
         expected = [
-            "Name$",
-            "Tags$",
+            "Tags.Name$",
             "InstanceId$",
             "InstanceType$",
-            "State$",
+            "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
             "Placement$",
@@ -178,11 +175,10 @@ class TestDetermineColumnFilters:
         result = determine_column_filters([], "ec2", "describe_instances")
 
         expected = [
-            "Name$",
-            "Tags$",
+            "Tags.Name$",
             "InstanceId$",
             "InstanceType$",
-            "State$",
+            "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
             "Placement$",

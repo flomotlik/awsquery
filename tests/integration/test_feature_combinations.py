@@ -83,11 +83,10 @@ class TestAllFeaturesIntegration:
 
         # Should have default columns for ec2.describe_instances
         expected_defaults = [
-            "Name$",
-            "Tags$",
+            "Tags.Name$",
             "InstanceId$",
             "InstanceType$",
-            "State$",
+            "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
             "Placement$",

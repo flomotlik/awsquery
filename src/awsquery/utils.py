@@ -110,24 +110,23 @@ def sanitize_input(value):
 
 
 def simplify_key(full_key):
-    """Extract the last non-numeric attribute from a flattened key
+    """Normalize key by removing numeric indices while preserving hierarchy
 
     Examples:
-    - "Instances.0.NetworkInterfaces.0.SubnetId" -> "SubnetId"
-    - "Buckets.0.Name" -> "Name"
-    - "Owner.DisplayName" -> "DisplayName"
+    - "Instances.0.NetworkInterfaces.0.SubnetId" -> "Instances.NetworkInterfaces.SubnetId"
+    - "Buckets.0.Name" -> "Buckets.Name"
+    - "Tags.0.Name" -> "Tags.Name"
+    - "State.Name" -> "State.Name"
+    - "Owner.DisplayName" -> "Owner.DisplayName"
     - "ReservationId" -> "ReservationId"
     """
     if not full_key:
         return full_key
 
     parts = full_key.split(".")
+    non_numeric_parts = [part for part in parts if not part.isdigit()]
 
-    for part in reversed(parts):
-        if not part.isdigit():
-            return part
-
-    return parts[-1] if parts else full_key
+    return ".".join(non_numeric_parts) if non_numeric_parts else full_key
 
 
 def get_aws_services():

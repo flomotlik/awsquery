@@ -25,11 +25,10 @@ class TestDefaultFiltersConfig:
         # Test actual values from the real config file
         ec2_columns = result["ec2"]["describe_instances"]["columns"]
         assert ec2_columns == [
-            "Name$",
-            "Tags$",
+            "Tags.Name$",
             "InstanceId$",
             "InstanceType$",
-            "State$",
+            "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
             "Placement$",

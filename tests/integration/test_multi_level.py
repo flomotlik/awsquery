@@ -1722,19 +1722,19 @@ class TestUtilsIntegration:
         from awsquery.utils import simplify_key
 
         test_cases = [
-            # Based on actual simplify_key behavior: returns last non-numeric part
-            ("Reservations.0.Instances.0.InstanceId", "InstanceId"),
-            ("Reservations.0.Instances.0.State.Name", "Name"),  # Returns "Name", not "State.Name"
-            ("Reservations.0.Instances.0.Tags.0.Key", "Key"),  # Returns "Key", not "Tags.0.Key"
+            # New behavior: normalize by removing indices while preserving hierarchy
+            ("Reservations.0.Instances.0.InstanceId", "Reservations.Instances.InstanceId"),
+            ("Reservations.0.Instances.0.State.Name", "Reservations.Instances.State.Name"),
+            ("Reservations.0.Instances.0.Tags.0.Key", "Reservations.Instances.Tags.Key"),
             # CloudFormation stack keys
-            ("Stacks.0.StackName", "StackName"),
-            ("Stacks.0.Parameters.0.ParameterKey", "ParameterKey"),  # Returns "ParameterKey"
+            ("Stacks.0.StackName", "Stacks.StackName"),
+            ("Stacks.0.Parameters.0.ParameterKey", "Stacks.Parameters.ParameterKey"),
             # S3 bucket keys
-            ("Buckets.0.Name", "Name"),
-            ("Buckets.0.CreationDate", "CreationDate"),
+            ("Buckets.0.Name", "Buckets.Name"),
+            ("Buckets.0.CreationDate", "Buckets.CreationDate"),
             # Nested resource keys
-            ("StackResources.0.LogicalResourceId", "LogicalResourceId"),
-            ("StackResources.0.ResourceStatus", "ResourceStatus"),
+            ("StackResources.0.LogicalResourceId", "StackResources.LogicalResourceId"),
+            ("StackResources.0.ResourceStatus", "StackResources.ResourceStatus"),
             # Already simple keys
             ("InstanceId", "InstanceId"),
             ("Name", "Name"),

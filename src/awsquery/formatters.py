@@ -11,6 +11,47 @@ from tabulate import tabulate
 from .utils import debug_print, simplify_key
 
 
+def make_unique_headers(normalized_keys):
+    """Create unique column headers by adding parent context only when needed.
+
+    Args:
+        normalized_keys: List of normalized keys (with indices removed)
+
+    Returns:
+        List of unique headers with minimal parent context
+
+    Examples:
+        ["Tags.Name", "State.Name", "InstanceId"] -> ["Tags.Name", "State.Name", "InstanceId"]
+        ["Name", "InstanceId"] -> ["Name", "InstanceId"]
+        ["Buckets.Name", "Owner.Name"] -> ["Buckets.Name", "Owner.Name"]
+    """
+    if not normalized_keys:
+        return []
+
+    # Count occurrences of final segments
+    final_segment_counts: Dict[str, int] = {}
+    key_to_final_segment: Dict[str, str] = {}
+
+    for key in normalized_keys:
+        parts = key.split(".")
+        final_segment = parts[-1]
+        key_to_final_segment[key] = final_segment
+        final_segment_counts[final_segment] = final_segment_counts.get(final_segment, 0) + 1
+
+    # Create headers: use full path if final segment appears multiple times
+    headers = []
+    for key in normalized_keys:
+        final_segment = key_to_final_segment[key]
+        if final_segment_counts[final_segment] > 1:
+            # Conflict detected - use full normalized path
+            headers.append(key)
+        else:
+            # No conflict - use just the final segment for simplicity
+            headers.append(final_segment)
+
+    return headers
+
+
 def filter_columns(flattened_data, column_filters):
     """Filter columns based on filter patterns with ! operators.
 
@@ -298,24 +339,30 @@ def format_table_output(resources, column_filters=None):
     if not selected_keys:
         return "No matching columns found."
 
-    simplified_to_full_keys: Dict[str, List[str]] = {}
-    unique_headers_ordered = []
+    # Normalize keys by removing numeric indices
+    normalized_keys = []
+    normalized_to_full_keys: Dict[str, List[str]] = {}
 
     for key in selected_keys:
-        simplified = simplify_key(key)
-        if simplified not in simplified_to_full_keys:
-            simplified_to_full_keys[simplified] = []
-            unique_headers_ordered.append(simplified)
-        simplified_to_full_keys[simplified].append(key)
+        normalized = simplify_key(key)
+        if normalized not in normalized_to_full_keys:
+            normalized_keys.append(normalized)
+            normalized_to_full_keys[normalized] = []
+        normalized_to_full_keys[normalized].append(key)
 
-    unique_headers = unique_headers_ordered
+    # Create unique headers with parent context only when needed
+    unique_headers = make_unique_headers(normalized_keys)
+
+    # Build mapping from headers to normalized keys
+    header_to_normalized = {header: norm for header, norm in zip(unique_headers, normalized_keys)}
 
     table_data = []
     for resource in flattened_resources:
         row = []
-        for simplified_key in unique_headers:
+        for header in unique_headers:
+            normalized_key = header_to_normalized[header]
             values = set()
-            for full_key in simplified_to_full_keys[simplified_key]:
+            for full_key in normalized_to_full_keys[normalized_key]:
                 value = resource.get(full_key, "")
                 if value:
                     if isinstance(value, str) and len(value) > 80:
@@ -341,22 +388,37 @@ def _process_json_resource_with_filters(resource, column_filters):
     # Use filter_columns to apply pattern matching with ! operators
     filtered_flat = filter_columns(flat, column_filters)
 
-    # Preserve order by using ordered dictionary
-    simplified_ordered: Dict[str, List[str]] = OrderedDict()
+    # Normalize keys by removing numeric indices
+    normalized_to_full_keys: Dict[str, List[str]] = OrderedDict()
+    normalized_keys = []
 
     # Process keys in the order they appear in filtered_flat
-    for key, value in filtered_flat.items():
-        simplified = simplify_key(key)
-        if simplified not in simplified_ordered:
-            simplified_ordered[simplified] = []
-        if value:
-            simplified_ordered[simplified].append(str(value))
+    for key in filtered_flat.keys():
+        normalized = simplify_key(key)
+        if normalized not in normalized_to_full_keys:
+            normalized_keys.append(normalized)
+            normalized_to_full_keys[normalized] = []
+        normalized_to_full_keys[normalized].append(key)
+
+    # Create unique headers with parent context only when needed
+    unique_headers = make_unique_headers(normalized_keys)
+
+    # Build mapping from headers to normalized keys
+    header_to_normalized = {header: norm for header, norm in zip(unique_headers, normalized_keys)}
 
     # Build final filtered dict preserving order
     filtered: Dict[str, str] = OrderedDict()
-    for simplified_key, values in simplified_ordered.items():
+    for header in unique_headers:
+        normalized_key = header_to_normalized[header]
+        values = []
+        for full_key in normalized_to_full_keys[normalized_key]:
+            value = filtered_flat.get(full_key)
+            if value:
+                values.append(str(value))
+
         if not values:
             continue
+
         # Deduplicate values while preserving order
         unique_values = []
         seen = set()
@@ -364,9 +426,7 @@ def _process_json_resource_with_filters(resource, column_filters):
             if v not in seen:
                 unique_values.append(v)
                 seen.add(v)
-        filtered[simplified_key] = (
-            ", ".join(unique_values) if len(unique_values) > 1 else unique_values[0]
-        )
+        filtered[header] = ", ".join(unique_values) if len(unique_values) > 1 else unique_values[0]
 
     return dict(filtered) if filtered else None
 
