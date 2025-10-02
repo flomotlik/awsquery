@@ -197,19 +197,37 @@ def get_parameter_type(service, action, parameter_name, session=None):
                      or None if parameter not found or error occurs
     """
     try:
-        from .utils import get_client, normalize_action_name
+        import botocore.session
 
-        client = get_client(service, session)
-        normalized_action = normalize_action_name(action)
+        from .case_utils import to_pascal_case
 
-        # Get operation model
-        operation_model = client.meta.service_model.operation_model(normalized_action)
+        # Use botocore directly to avoid credential requirements
+        old_profile = os.environ.pop("AWS_PROFILE", None)
+        try:
+            botocore_session = botocore.session.Session()
+            service_model = botocore_session.get_service_model(service)
 
-        if operation_model.input_shape and parameter_name in operation_model.input_shape.members:
-            param_shape = operation_model.input_shape.members[parameter_name]
-            return param_shape.type_name
+            # Convert action to PascalCase for operation model lookup
+            # Handle kebab-case first (describe-snapshots -> DescribeSnapshots)
+            if "-" in action:
+                pascal_action = to_pascal_case(action.replace("-", "_"))
+            else:
+                pascal_action = to_pascal_case(action)
 
-        return None
+            # Get operation model
+            operation_model = service_model.operation_model(pascal_action)
+
+            if (
+                operation_model.input_shape
+                and parameter_name in operation_model.input_shape.members
+            ):
+                param_shape = operation_model.input_shape.members[parameter_name]
+                return param_shape.type_name
+
+            return None
+        finally:
+            if old_profile is not None:
+                os.environ["AWS_PROFILE"] = old_profile
 
     except Exception as e:
         debug_print(f"Could not determine parameter type for {parameter_name}: {e}")

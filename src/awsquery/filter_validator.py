@@ -80,6 +80,12 @@ class FilterValidator:
             debug_print(f"Filter '{column_filter}' valid - map-wildcard response type")
             return True, None
 
+        # Special case: Tags are transformed during processing from list to map format
+        # Skip validation for Tag-related patterns since they won't match the original shape
+        if "tag" in column_filter.lower():
+            debug_print(f"Filter '{column_filter}' skipped - Tags are transformed at runtime")
+            return True, None
+
         # Parse the filter pattern using existing logic from filters.py
         pattern, mode = parse_filter_pattern(column_filter)
 

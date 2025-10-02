@@ -15,10 +15,11 @@ from awsquery.cli import get_parameter_type, parse_parameter_string
 class TestGetParameterType:
     """Test get_parameter_type() function."""
 
-    @patch("awsquery.utils.get_client")
-    def test_returns_list_type_for_filters(self, mock_get_client):
+    @patch("botocore.session.Session")
+    def test_returns_list_type_for_filters(self, mock_session_class):
         """Returns 'list' for SSM Filters parameter."""
-        mock_client = Mock()
+        mock_session = Mock()
+        mock_service_model = Mock()
         mock_operation_model = Mock()
         mock_input_shape = Mock()
         mock_param_shape = Mock()
@@ -26,17 +27,19 @@ class TestGetParameterType:
 
         mock_input_shape.members = {"Filters": mock_param_shape}
         mock_operation_model.input_shape = mock_input_shape
-
-        mock_client.meta.service_model.operation_model.return_value = mock_operation_model
-        mock_get_client.return_value = mock_client
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_session.get_service_model.return_value = mock_service_model
+        mock_session_class.return_value = mock_session
 
         result = get_parameter_type("ssm", "describe-parameters", "Filters")
         assert result == "list"
+        mock_service_model.operation_model.assert_called_once_with("DescribeParameters")
 
-    @patch("awsquery.utils.get_client")
-    def test_returns_string_type(self, mock_get_client):
+    @patch("botocore.session.Session")
+    def test_returns_string_type(self, mock_session_class):
         """Returns 'string' for string parameters."""
-        mock_client = Mock()
+        mock_session = Mock()
+        mock_service_model = Mock()
         mock_operation_model = Mock()
         mock_input_shape = Mock()
         mock_param_shape = Mock()
@@ -44,17 +47,19 @@ class TestGetParameterType:
 
         mock_input_shape.members = {"InstanceId": mock_param_shape}
         mock_operation_model.input_shape = mock_input_shape
-
-        mock_client.meta.service_model.operation_model.return_value = mock_operation_model
-        mock_get_client.return_value = mock_client
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_session.get_service_model.return_value = mock_service_model
+        mock_session_class.return_value = mock_session
 
         result = get_parameter_type("ec2", "describe-instances", "InstanceId")
         assert result == "string"
+        mock_service_model.operation_model.assert_called_once_with("DescribeInstances")
 
-    @patch("awsquery.utils.get_client")
-    def test_returns_integer_type(self, mock_get_client):
+    @patch("botocore.session.Session")
+    def test_returns_integer_type(self, mock_session_class):
         """Returns 'integer' for integer parameters."""
-        mock_client = Mock()
+        mock_session = Mock()
+        mock_service_model = Mock()
         mock_operation_model = Mock()
         mock_input_shape = Mock()
         mock_param_shape = Mock()
@@ -62,17 +67,19 @@ class TestGetParameterType:
 
         mock_input_shape.members = {"MaxResults": mock_param_shape}
         mock_operation_model.input_shape = mock_input_shape
-
-        mock_client.meta.service_model.operation_model.return_value = mock_operation_model
-        mock_get_client.return_value = mock_client
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_session.get_service_model.return_value = mock_service_model
+        mock_session_class.return_value = mock_session
 
         result = get_parameter_type("ec2", "describe-instances", "MaxResults")
         assert result == "integer"
+        mock_service_model.operation_model.assert_called_once_with("DescribeInstances")
 
-    @patch("awsquery.utils.get_client")
-    def test_returns_structure_type(self, mock_get_client):
+    @patch("botocore.session.Session")
+    def test_returns_structure_type(self, mock_session_class):
         """Returns 'structure' for complex object parameters."""
-        mock_client = Mock()
+        mock_session = Mock()
+        mock_service_model = Mock()
         mock_operation_model = Mock()
         mock_input_shape = Mock()
         mock_param_shape = Mock()
@@ -80,53 +87,59 @@ class TestGetParameterType:
 
         mock_input_shape.members = {"LaunchTemplate": mock_param_shape}
         mock_operation_model.input_shape = mock_input_shape
-
-        mock_client.meta.service_model.operation_model.return_value = mock_operation_model
-        mock_get_client.return_value = mock_client
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_session.get_service_model.return_value = mock_service_model
+        mock_session_class.return_value = mock_session
 
         result = get_parameter_type("ec2", "run-instances", "LaunchTemplate")
         assert result == "structure"
+        mock_service_model.operation_model.assert_called_once_with("RunInstances")
 
-    @patch("awsquery.utils.get_client")
-    def test_returns_none_when_parameter_not_found(self, mock_get_client):
+    @patch("botocore.session.Session")
+    def test_returns_none_when_parameter_not_found(self, mock_session_class):
         """Returns None when parameter doesn't exist in operation."""
-        mock_client = Mock()
+        mock_session = Mock()
+        mock_service_model = Mock()
         mock_operation_model = Mock()
         mock_input_shape = Mock()
         mock_input_shape.members = {}
 
         mock_operation_model.input_shape = mock_input_shape
-        mock_client.meta.service_model.operation_model.return_value = mock_operation_model
-        mock_get_client.return_value = mock_client
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_session.get_service_model.return_value = mock_service_model
+        mock_session_class.return_value = mock_session
 
         result = get_parameter_type("ec2", "describe-instances", "NonExistentParam")
         assert result is None
 
-    @patch("awsquery.utils.get_client")
-    def test_returns_none_when_no_input_shape(self, mock_get_client):
+    @patch("botocore.session.Session")
+    def test_returns_none_when_no_input_shape(self, mock_session_class):
         """Returns None when operation has no input shape."""
-        mock_client = Mock()
+        mock_session = Mock()
+        mock_service_model = Mock()
         mock_operation_model = Mock()
         mock_operation_model.input_shape = None
 
-        mock_client.meta.service_model.operation_model.return_value = mock_operation_model
-        mock_get_client.return_value = mock_client
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_session.get_service_model.return_value = mock_service_model
+        mock_session_class.return_value = mock_session
 
         result = get_parameter_type("s3", "list-buckets", "SomeParam")
         assert result is None
 
-    @patch("awsquery.utils.get_client")
-    def test_handles_errors_gracefully(self, mock_get_client):
+    @patch("botocore.session.Session")
+    def test_handles_errors_gracefully(self, mock_session_class):
         """Returns None when errors occur."""
-        mock_get_client.side_effect = Exception("Service error")
+        mock_session_class.side_effect = Exception("Service error")
 
         result = get_parameter_type("invalid", "invalid-action", "SomeParam")
         assert result is None
 
-    @patch("awsquery.utils.get_client")
-    def test_normalizes_action_name(self, mock_get_client):
+    @patch("botocore.session.Session")
+    def test_normalizes_action_name(self, mock_session_class):
         """Action name is normalized before lookup."""
-        mock_client = Mock()
+        mock_session = Mock()
+        mock_service_model = Mock()
         mock_operation_model = Mock()
         mock_input_shape = Mock()
         mock_param_shape = Mock()
@@ -134,16 +147,16 @@ class TestGetParameterType:
 
         mock_input_shape.members = {"InstanceIds": mock_param_shape}
         mock_operation_model.input_shape = mock_input_shape
-
-        mock_client.meta.service_model.operation_model.return_value = mock_operation_model
-        mock_get_client.return_value = mock_client
+        mock_service_model.operation_model.return_value = mock_operation_model
+        mock_session.get_service_model.return_value = mock_service_model
+        mock_session_class.return_value = mock_session
 
         result = get_parameter_type("ec2", "describe-instances", "InstanceIds")
         assert result == "list"
 
-        mock_client.meta.service_model.operation_model.assert_called_once()
-        call_args = mock_client.meta.service_model.operation_model.call_args[0]
-        assert call_args[0] == "describe_instances"
+        mock_service_model.operation_model.assert_called_once()
+        call_args = mock_service_model.operation_model.call_args[0]
+        assert call_args[0] == "DescribeInstances"
 
 
 class TestAutoWrappingLogic:
