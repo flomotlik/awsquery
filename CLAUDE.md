@@ -107,7 +107,6 @@ This project has **ZERO EXTERNAL CONSUMERS** and **NO BACKWARD COMPATIBILITY OBL
 - `make format-check` - Check code formatting without changes
 - `make type-check` - Run mypy type checking
 - `make security-check` - Run security checks (bandit, safety)
-- `make pre-commit` - Run pre-commit hooks on all files
 
 ### Docker Development
 - `make docker-build` - Build development container
@@ -278,4 +277,42 @@ grep -r "test.*filter" tests/
 - `pyproject.toml` - Main project configuration with dependencies and tool settings
 - `pytest.ini` - Test configuration with coverage settings (80% minimum)
 - `Makefile` - Comprehensive development and AWS sampling commands
-- `.pre-commit-config.yaml` - Pre-commit hooks configuration
+
+## Git Commit Guidelines
+
+### MANDATORY: Concise Commit Messages
+
+**STRICT REQUIREMENTS:**
+- **Single-line summary ONLY** - Maximum 72 characters
+- **No multi-line descriptions** - Keep it to one concise line
+- **No bullet points** - Avoid listing multiple changes
+- **No verbose explanations** - Code speaks for itself
+- **Combine related changes** - One commit for logically grouped changes
+
+**GOOD EXAMPLES:**
+- `Fix parameter auto-wrapping for list types`
+- `Add validation script with feature coverage`
+- `Skip Tag filter validation (runtime transform)`
+- `Update tests for new parameter handling`
+
+**BAD EXAMPLES:**
+- ❌ Multi-line commits with bullets and explanations
+- ❌ "Add X, fix Y, update Z, refactor A, improve B"
+- ❌ Detailed descriptions of implementation choices
+- ❌ Multiple unrelated changes in one commit
+
+**COMMIT FORMAT:**
+```
+<short description>
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+```
+
+**ENFORCEMENT:**
+- Commits MUST be atomic and focused
+- Summary line MUST be clear and complete
+- NO additional description beyond the trailer
+- Related changes MUST be combined into single commit
+- Unrelated changes MUST be separate commits

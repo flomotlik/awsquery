@@ -12,12 +12,16 @@ import pytest
 from botocore.exceptions import ClientError, NoCredentialsError
 
 # Import modules under test
+from awsquery.case_utils import to_pascal_case
 from awsquery.cli import action_completer, main, service_completer
 from awsquery.core import execute_aws_call, execute_multi_level_call
 from awsquery.filters import parse_multi_level_filters_for_mode
-from awsquery.formatters import format_json_output, format_table_output, show_keys
-from awsquery.security import action_to_policy_format, validate_readonly
+from awsquery.formatters import format_json_output, format_table_output
+from awsquery.security import validate_readonly
 from awsquery.utils import normalize_action_name
+
+# Compatibility alias for old function name
+action_to_policy_format = to_pascal_case
 
 
 class TestEndToEndScenarios:
@@ -40,7 +44,9 @@ class TestEndToEndScenarios:
         assert normalized == "describe_instances"
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         assert len(flattened) > 0
 
         table_output = format_table_output(flattened, col_filters)
@@ -60,7 +66,9 @@ class TestEndToEndScenarios:
         # 3. Format as JSON
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
 
         json_output = format_json_output(flattened, [])
         parsed = json.loads(json_output)
@@ -109,7 +117,9 @@ class TestEndToEndScenarios:
         # 3. Test that we can format the output
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_cloudformation_response)
+        flattened = flatten_response(
+            sample_cloudformation_response, service="ec2", operation="DescribeInstances"
+        )
 
         # Apply column filtering
         table_output = format_table_output(flattened, col_filters)
@@ -139,7 +149,9 @@ class TestEndToEndScenarios:
         from awsquery.formatters import flatten_response
 
         # Flatten response
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
 
         # Test column filtering with table output
         column_filters = ["InstanceId", "State", "Tags"]
@@ -179,7 +191,9 @@ class TestEndToEndScenarios:
         from awsquery.formatters import extract_and_sort_keys, flatten_response
 
         # Flatten response to extract keys
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
 
         # Extract and sort keys
         keys = extract_and_sort_keys(flattened)
@@ -688,7 +702,9 @@ class TestCLIOutputFormats:
         """Test table output format structure."""
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         table_output = format_table_output(flattened, [])
 
         # Table format characteristics
@@ -707,7 +723,9 @@ class TestCLIOutputFormats:
         """Test JSON output format structure."""
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         json_output = format_json_output(flattened, [])
 
         # Should be valid JSON
@@ -737,7 +755,9 @@ class TestCLIOutputFormats:
         """Test column filtering effects on both table and JSON output."""
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(sample_ec2_response)
+        flattened = flatten_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         column_filters = ["InstanceId", "State"]
 
         # Test table output with filtering
@@ -770,7 +790,7 @@ class TestCLIOutputFormats:
 
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(empty_response)
+        flattened = flatten_response(empty_response, service="ec2", operation="DescribeInstances")
 
         # Test table format with empty results
         table_output = format_table_output(flattened, [])
@@ -813,7 +833,7 @@ class TestCLIOutputFormats:
 
         from awsquery.formatters import flatten_response
 
-        flattened = flatten_response(large_response)
+        flattened = flatten_response(large_response, service="ec2", operation="DescribeInstances")
 
         # Test table format with large dataset
         table_output = format_table_output(flattened, [])
@@ -839,20 +859,6 @@ class TestCLIOutputFormats:
             assert "instance-0" in data_str  # Instance name
         except json.JSONDecodeError:
             pytest.fail(f"Large dataset JSON should be valid: {json_output[:200]}...")
-
-    def test_show_keys_functionality(self, sample_ec2_response):
-        """Test show keys functionality with mocked data."""
-        with patch("awsquery.core.execute_aws_call") as mock_execute:
-            mock_execute.return_value = sample_ec2_response
-
-            # Test show_keys function
-            keys_output = show_keys("ec2", "DescribeInstances")
-
-            # Should be a string containing available keys
-            assert isinstance(keys_output, str)
-            # In dry run mode, might return placeholder or execute anyway for keys
-            if keys_output and keys_output.strip():
-                assert "InstanceId" in keys_output or "keys" in keys_output.lower()
 
 
 class TestCLIMainFunctionBasics:

@@ -508,7 +508,7 @@ def workflow_validator():
     def _validate_formatting_workflow(response, filters, expected_content):
         from awsquery.formatters import flatten_response, format_table_output
 
-        flattened = flatten_response(response)
+        flattened = flatten_response(response, service="ec2", operation="DescribeInstances")
         assert len(flattened) > 0
 
         table_output = format_table_output(flattened, filters)

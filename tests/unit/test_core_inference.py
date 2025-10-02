@@ -170,3 +170,79 @@ class TestInferListOperation:
         # instances -> instances (already plural with 's')
         operations = infer_list_operation("ec2", "InstancesName", "describe-instance")
         assert "list_instances" in operations
+
+    def test_camelcase_action_inference(self):
+        """Test CamelCase action names are converted to snake_case for inference."""
+        # DescribeDocument (CamelCase) -> describe_document -> list_documents
+        operations = infer_list_operation("ssm", "Name", "DescribeDocument")
+        assert "list_documents" in operations
+        assert "describe_documents" in operations
+        assert "list_document" in operations
+
+        # GetBucketPolicy (CamelCase) -> get_bucket_policy -> list_bucket_policies
+        operations = infer_list_operation("s3", "Name", "GetBucketPolicy")
+        assert "list_bucket_policies" in operations
+        assert "list_bucket_policy" in operations
+
+    def test_vowel_y_pluralization(self):
+        """Test words ending in vowel+y get 's' not 'ies'."""
+        # gateway -> gateways (not gatewaies)
+        operations = infer_list_operation(
+            "storagegateway", "GatewayARN", "DescribeGatewayInformation"
+        )
+        assert "list_gateways" in operations
+        assert "gatewaies" not in str(operations)
+
+        # holiday -> holidays (not holidaies)
+        operations = infer_list_operation("service", "HolidayId", "GetHoliday")
+        assert "list_holidays" in operations
+
+    def test_consonant_y_pluralization(self):
+        """Test words ending in consonant+y get 'ies'."""
+        # policy -> policies
+        operations = infer_list_operation("iam", "PolicyArn", "GetPolicy")
+        assert "list_policies" in operations
+        assert "policys" not in str(operations)
+
+        # repository -> repositories
+        operations = infer_list_operation("ecr", "RepositoryName", "DescribeRepository")
+        assert "list_repositories" in operations
+
+    def test_plural_suffix_support(self):
+        """Test parameters with plural suffixes (ARNs, Ids, Names, Identifiers)."""
+        # VolumeARNs (plural) -> volume -> volumes
+        operations = infer_list_operation(
+            "storagegateway", "VolumeARNs", "DescribeCachediSCSIVolumes"
+        )
+        assert "list_volumes" in operations
+        assert "describe_volumes" in operations
+
+        # InstanceIds (plural) -> instance -> instances
+        operations = infer_list_operation("ec2", "InstanceIds", "DescribeInstances")
+        assert "list_instances" in operations
+
+        # ResourceArns (plural) -> resource -> resources
+        operations = infer_list_operation("service", "ResourceArns", "DescribeResources")
+        assert "list_resources" in operations
+
+    def test_identifier_suffix_support(self):
+        """Test Identifier suffix is recognized alongside Name/Id/Arn."""
+        # targetGroupIdentifier -> target_group -> target_groups
+        operations = infer_list_operation("vpc-lattice", "targetGroupIdentifier", "ListTargets")
+        assert "list_target_groups" in operations
+        assert "get_target_group" in operations
+
+        # domainIdentifier -> domain -> domains
+        operations = infer_list_operation("datazone", "domainIdentifier", "GetAsset")
+        assert "list_domains" in operations
+
+    def test_action_based_fallback_for_generic_params(self):
+        """Test action-based inference works when parameter is too generic."""
+        # Parameter is just "Name" (generic), should fall back to action-based
+        operations = infer_list_operation("ssm", "Name", "DescribeDocument")
+        assert "list_documents" in operations, "Should infer from DescribeDocument action"
+        assert "describe_documents" in operations
+
+        # Parameter is "Id" (generic), should use action-based
+        operations = infer_list_operation("service", "Id", "GetResource")
+        assert "list_resources" in operations, "Should infer from GetResource action"

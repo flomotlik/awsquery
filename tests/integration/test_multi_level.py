@@ -306,8 +306,8 @@ class TestParameterResolutionChain:
         result_str = str(result[0])
         assert "prod-cluster" in result_str
 
-        # Verify parameter resolution chain
-        mock_infer.assert_called_once_with("eks", "clusterName", "describe-cluster")
+        # Verify parameter resolution chain (now includes session parameter)
+        mock_infer.assert_called_once_with("eks", "clusterName", "describe-cluster", None)
         # mock_get_param may or may not be called depending on the execution path
         # The important thing is that the resolution workflow completed successfully
 
@@ -725,7 +725,7 @@ class TestEdgeCasesIntegration:
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.get_correct_parameter_name")
     def test_parameter_expects_list_vs_single_value(self, mock_get_param, mock_execute):
-        """Test parameter handling for operations expecting lists vs single values."""
+        """Test parameter handling with singularization for plural parameters."""
         validation_error = {
             "parameter_name": "instanceIds",  # Plural - expects list
             "is_required": True,
@@ -757,18 +757,14 @@ class TestEdgeCasesIntegration:
         ]
         mock_get_param.return_value = "InstanceIds"
 
-        # This test expects the parameter to be treated as plural (list)
-        # But the extract_parameter_values logic may not find instanceIds as a field
-        # Let's modify the test to handle the realistic scenario
-        with patch("awsquery.core.parameter_expects_list") as mock_expects_list:
-            mock_expects_list.return_value = True  # Force it to expect a list
+        # With singularization: instanceIds → instanceId, InstanceIds → InstanceId
+        # The system should now successfully extract values from InstanceId field
+        # and pass them as a list to the plural parameter
+        result = execute_multi_level_call("ec2", "describe-instances", [], [], [])
 
-            # The test will likely fail at parameter extraction since instanceIds is not
-            # a real field
-            # This is expected behavior - the system should exit when it can't extract
-            # the required parameters
-            with pytest.raises(SystemExit):
-                execute_multi_level_call("ec2", "describe-instances", [], [], [])
+        # Verify the result contains the expected data
+        assert result is not None
+        assert len(result) > 0
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.get_correct_parameter_name")
@@ -1655,45 +1651,6 @@ class TestUtilsIntegration:
         # Should handle gracefully and return empty list or raise appropriate error
         assert isinstance(services, list)
 
-    @patch("boto3.client")
-    def test_get_service_actions_integration(self, mock_boto_client):
-        """Test service action discovery with realistic boto3 client."""
-        from awsquery.utils import get_service_actions
-
-        # Mock client with realistic operation names
-        mock_client = Mock()
-        mock_boto_client.return_value = mock_client
-        mock_client.meta.service_model.operation_names = [
-            "DescribeInstances",
-            "RunInstances",
-            "TerminateInstances",
-            "ListBuckets",
-            "GetObject",
-            "PutObject",
-        ]
-
-        actions = get_service_actions("ec2")
-
-        assert isinstance(actions, list)
-        assert len(actions) > 0
-        assert "DescribeInstances" in actions or "describe-instances" in actions
-
-        # Verify client creation
-        mock_boto_client.assert_called_once_with("ec2")
-
-    @patch("boto3.client")
-    def test_get_service_actions_client_failure(self, mock_boto_client):
-        """Test service action discovery when client creation fails."""
-        from awsquery.utils import get_service_actions
-
-        # Simulate client creation failure
-        mock_boto_client.side_effect = Exception("Unknown service: nonexistent")
-
-        actions = get_service_actions("nonexistent")
-
-        # Should handle gracefully
-        assert isinstance(actions, list)
-
     def test_debug_print_real_scenarios_enabled(self, debug_mode):
         """Test debug print in real integration scenarios when debug is enabled."""
         import io
@@ -1765,19 +1722,19 @@ class TestUtilsIntegration:
         from awsquery.utils import simplify_key
 
         test_cases = [
-            # Based on actual simplify_key behavior: returns last non-numeric part
-            ("Reservations.0.Instances.0.InstanceId", "InstanceId"),
-            ("Reservations.0.Instances.0.State.Name", "Name"),  # Returns "Name", not "State.Name"
-            ("Reservations.0.Instances.0.Tags.0.Key", "Key"),  # Returns "Key", not "Tags.0.Key"
+            # New behavior: normalize by removing indices while preserving hierarchy
+            ("Reservations.0.Instances.0.InstanceId", "Reservations.Instances.InstanceId"),
+            ("Reservations.0.Instances.0.State.Name", "Reservations.Instances.State.Name"),
+            ("Reservations.0.Instances.0.Tags.0.Key", "Reservations.Instances.Tags.Key"),
             # CloudFormation stack keys
-            ("Stacks.0.StackName", "StackName"),
-            ("Stacks.0.Parameters.0.ParameterKey", "ParameterKey"),  # Returns "ParameterKey"
+            ("Stacks.0.StackName", "Stacks.StackName"),
+            ("Stacks.0.Parameters.0.ParameterKey", "Stacks.Parameters.ParameterKey"),
             # S3 bucket keys
-            ("Buckets.0.Name", "Name"),
-            ("Buckets.0.CreationDate", "CreationDate"),
+            ("Buckets.0.Name", "Buckets.Name"),
+            ("Buckets.0.CreationDate", "Buckets.CreationDate"),
             # Nested resource keys
-            ("StackResources.0.LogicalResourceId", "LogicalResourceId"),
-            ("StackResources.0.ResourceStatus", "ResourceStatus"),
+            ("StackResources.0.LogicalResourceId", "StackResources.LogicalResourceId"),
+            ("StackResources.0.ResourceStatus", "StackResources.ResourceStatus"),
             # Already simple keys
             ("InstanceId", "InstanceId"),
             ("Name", "Name"),

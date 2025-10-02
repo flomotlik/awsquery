@@ -19,12 +19,7 @@
         "ms-python.black-formatter",
         "ms-python.pylint",
         "ms-python.isort",
-        "ms-python.mypy-type-checker",
-        "charliermarsh.ruff",
-        "littlefoxteam.vscode-python-test-adapter",
-        "tamasfe.even-better-toml",
-        "eamodio.gitlens",
-        "GitHub.vscode-pull-request-github"
+        "ms-python.mypy-type-checker"
       ],
       "settings": {
         "python.defaultInterpreter": "/usr/local/bin/python",
@@ -59,16 +54,11 @@
       }
     }
   },
-  "postCreateCommand": "pip install -e '.[dev]' && pre-commit install",
+  "postCreateCommand": "pip install -e '.[dev]'",
   "postStartCommand": "echo 'Welcome to AWSQuery development environment!'",
   "remoteUser": "vscode",
   "mounts": [
-    {
-      "source": "${localEnv:HOME}/.aws",
-      "target": "/home/vscode/.aws",
-      "type": "bind",
-      "consistency": "cached"
-    }
+    "source=${localEnv:HOME}/.aws,target=/home/vscode/.aws,type=bind,consistency=cached,readonly"
   ],
   "containerEnv": {
     "AWS_REGION": "${localEnv:AWS_REGION}",

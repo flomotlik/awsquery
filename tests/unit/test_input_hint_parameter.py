@@ -294,7 +294,7 @@ class TestHintIntegration:
         response = mock_execute.return_value
         from awsquery.formatters import flatten_response
 
-        resources = flatten_response(response)
+        resources = flatten_response(response, service="ec2", operation="DescribeInstances")
 
         parameter_values = extract_parameter_values(resources, "ClusterName")
         assert "prod-cluster" in parameter_values
@@ -319,7 +319,7 @@ class TestHintIntegration:
         from awsquery.filters import extract_parameter_values
         from awsquery.formatters import flatten_response
 
-        resources = flatten_response(cluster_response)
+        resources = flatten_response(cluster_response, service="ec2", operation="DescribeInstances")
         cluster_arns = extract_parameter_values(resources, "ClusterArn")
 
         assert len(cluster_arns) == 2
@@ -512,7 +512,7 @@ class TestFieldHintParsing:
             mock_ops.return_value = ["DescribeClusters", "ListClusters"]
 
             # Test function:field format
-            function, field, alternatives = find_hint_function("desc-clus:clusterarn", "eks")
+            function, field, limit, alternatives = find_hint_function("desc-clus:clusterarn", "eks")
 
             assert function == "DescribeClusters"
             assert field == "clusterarn"
@@ -525,7 +525,7 @@ class TestFieldHintParsing:
             mock_ops.return_value = ["DescribeClusters", "ListClusters"]
 
             # Test function only format
-            function, field, alternatives = find_hint_function("desc-clus", "eks")
+            function, field, limit, alternatives = find_hint_function("desc-clus", "eks")
 
             assert function == "DescribeClusters"
             assert field is None
@@ -538,7 +538,7 @@ class TestFieldHintParsing:
             mock_ops.return_value = ["DescribeClusters"]
 
             # Test empty field after colon
-            function, field, alternatives = find_hint_function("desc-clus:", "eks")
+            function, field, limit, alternatives = find_hint_function("desc-clus:", "eks")
 
             assert function == "DescribeClusters"
             assert field is None
@@ -549,11 +549,16 @@ class TestFieldHintParsing:
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
             mock_ops.return_value = ["DescribeClusters"]
 
-            # Test multiple colons - should split on first only
-            function, field, alternatives = find_hint_function("desc-clus:cluster:arn", "eks")
+            # Test multiple colons - with new format (function:field:limit)
+            # "desc-clus:cluster:arn" parses as: function="desc-clus",
+            # field="cluster", third="arn" (ignored as non-numeric)
+            function, field, limit, alternatives = find_hint_function(
+                "desc-clus:cluster:arn", "eks"
+            )
 
             assert function == "DescribeClusters"
-            assert field == "cluster:arn"
+            assert field == "cluster"  # "arn" is ignored as it's not a valid limit
+            assert limit is None  # "arn" is not numeric, so no limit is set
 
     def test_whitespace_handling(self):
         from awsquery.cli import find_hint_function
@@ -568,7 +573,7 @@ class TestFieldHintParsing:
             ]
 
             for hint in test_cases:
-                function, field, alternatives = find_hint_function(hint, "eks")
+                function, field, limit, alternatives = find_hint_function(hint, "eks")
                 assert function == "DescribeClusters"
                 assert field == "clusterarn"
 
@@ -728,7 +733,9 @@ class TestFieldHintIntegration:
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
             mock_ops.return_value = ["DescribeClusters"]
 
-            function, field, alternatives = find_hint_function("desc-clus:customfield", "eks")
+            function, field, limit, alternatives = find_hint_function(
+                "desc-clus:customfield", "eks"
+            )
 
             # Should return field information for user feedback
             assert function == "DescribeClusters"
@@ -780,7 +787,7 @@ class TestFieldHintErrorHandling:
 
             for hint in test_cases:
                 try:
-                    function, field, alternatives = find_hint_function(hint, "eks")
+                    function, field, limit, alternatives = find_hint_function(hint, "eks")
                     # Should handle gracefully, returning None or valid values
                     assert function is None or isinstance(function, str)
                     assert field is None or isinstance(field, str)
@@ -870,7 +877,7 @@ class TestFieldHintErrorHandling:
             mock_ops.return_value = ["DescribeClusters", "ListClusters", "DescribeTargetGroups"]
 
             # 1. Parse the function:field hint
-            function, field, alternatives = find_hint_function("desc-clus:rolearn", "eks")
+            function, field, limit, alternatives = find_hint_function("desc-clus:rolearn", "eks")
             assert function == "DescribeClusters"
             assert field == "rolearn"
 

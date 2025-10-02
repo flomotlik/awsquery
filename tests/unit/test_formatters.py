@@ -15,7 +15,7 @@ from awsquery.formatters import (
     flatten_single_response,
     format_json_output,
     format_table_output,
-    show_keys,
+    make_unique_headers,
     transform_tags_structure,
 )
 from awsquery.utils import simplify_key
@@ -24,18 +24,20 @@ from awsquery.utils import simplify_key
 class TestFlattenResponse:
 
     def test_flatten_response_empty_list(self):
-        result = flatten_response([])
+        result = flatten_response([], service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_response_empty_single_response(self):
-        result = flatten_response(None)
+        result = flatten_response(None, service="ec2", operation="DescribeInstances")
         assert result == []
 
-        result = flatten_response({})
+        result = flatten_response({}, service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_response_paginated_responses(self, sample_paginated_responses):
-        result = flatten_response(sample_paginated_responses)
+        result = flatten_response(
+            sample_paginated_responses, service="ec2", operation="DescribeInstances"
+        )
 
         assert len(result) == 4  # 2 instances per page * 2 pages
 
@@ -46,7 +48,7 @@ class TestFlattenResponse:
         assert "i-page2-instance2" in instance_ids
 
     def test_flatten_response_single_non_paginated(self, sample_ec2_response):
-        result = flatten_response(sample_ec2_response)
+        result = flatten_response(sample_ec2_response, service="ec2", operation="DescribeInstances")
 
         # Extracts reservations (largest list) from single response
         assert len(result) == 1
@@ -63,7 +65,7 @@ class TestFlattenResponse:
             {"InstanceId": "i-direct1", "State": {"Name": "running"}},
             {"InstanceId": "i-direct2", "State": {"Name": "stopped"}},
         ]
-        result = flatten_response(direct_list)
+        result = flatten_response(direct_list, service="ec2", operation="DescribeInstances")
 
         # When input is list, it processes each item as a page
         assert len(result) == 2
@@ -74,13 +76,13 @@ class TestFlattenResponse:
 class TestFlattenSingleResponse:
 
     def test_flatten_single_response_empty_inputs(self):
-        result = flatten_single_response(None)
+        result = flatten_single_response(None, service="ec2", operation="DescribeInstances")
         assert result == []
 
-        result = flatten_single_response({})
+        result = flatten_single_response({}, service="ec2", operation="DescribeInstances")
         assert result == []
 
-        result = flatten_single_response([])
+        result = flatten_single_response([], service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_single_response_direct_list(self):
@@ -88,29 +90,33 @@ class TestFlattenSingleResponse:
             {"InstanceId": "i-123", "State": "running"},
             {"InstanceId": "i-456", "State": "stopped"},
         ]
-        result = flatten_single_response(resources)
+        result = flatten_single_response(resources, service="ec2", operation="DescribeInstances")
         assert result == resources
         assert len(result) == 2
 
     def test_flatten_single_response_non_dict_input(self):
         # Non-dict input gets wrapped in list
-        result = flatten_single_response("string value")
+        result = flatten_single_response(
+            "string value", service="ec2", operation="DescribeInstances"
+        )
         assert result == ["string value"]
 
-        result = flatten_single_response(42)
+        result = flatten_single_response(42, service="ec2", operation="DescribeInstances")
         assert result == [42]
 
-        result = flatten_single_response(True)
+        result = flatten_single_response(True, service="ec2", operation="DescribeInstances")
         assert result == [True]
 
     def test_flatten_single_response_only_response_metadata(self):
         # Only ResponseMetadata returns empty list
         response = {"ResponseMetadata": {"RequestId": "test-request-id", "HTTPStatusCode": 200}}
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_single_response_single_list_key(self, sample_ec2_response):
-        result = flatten_single_response(sample_ec2_response)
+        result = flatten_single_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
 
         assert len(result) == 1  # One reservation
         reservation = result[0]
@@ -130,7 +136,7 @@ class TestFlattenSingleResponse:
             "MediumList": [{"id": 1}, {"id": 2}],
             "ResponseMetadata": {"RequestId": "test"},
         }
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
 
         assert len(result) == 3
         assert result == [{"id": 1}, {"id": 2}, {"id": 3}]
@@ -143,7 +149,7 @@ class TestFlattenSingleResponse:
             "Status": "active",
             "ResponseMetadata": {"RequestId": "test"},
         }
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
 
         assert len(result) == 1
         assert result[0]["ResourceId"] == "resource-123"
@@ -153,7 +159,9 @@ class TestFlattenSingleResponse:
 
     def test_flatten_single_response_mixed_list_and_non_list_keys(self, sample_s3_response):
         # Ignores non-list keys when list key present
-        result = flatten_single_response(sample_s3_response)
+        result = flatten_single_response(
+            sample_s3_response, service="ec2", operation="DescribeInstances"
+        )
 
         assert len(result) == 3
         assert all("Name" in bucket for bucket in result)
@@ -306,25 +314,31 @@ class TestSimplifyKey:
             ("Name", "Name"),
             ("InstanceId", "InstanceId"),
             ("Status", "Status"),
-            # Nested keys with indices
-            ("Instances.0.InstanceId", "InstanceId"),
-            ("Instances.0.NetworkInterfaces.0.SubnetId", "SubnetId"),
-            ("Tags.0.Value", "Value"),
-            ("SecurityGroups.1.GroupName", "GroupName"),
-            # Multiple levels
-            ("Level1.Level2.Level3.FinalValue", "FinalValue"),
-            ("Owner.DisplayName", "DisplayName"),
-            ("State.Name", "Name"),
-            ("Reservation.Instances.0.State.Code", "Code"),
+            ("ReservationId", "ReservationId"),
+            # Nested keys with indices - normalized to remove indices but preserve hierarchy
+            ("Instances.0.InstanceId", "Instances.InstanceId"),
+            ("Instances.0.NetworkInterfaces.0.SubnetId", "Instances.NetworkInterfaces.SubnetId"),
+            ("Tags.0.Name", "Tags.Name"),
+            ("Tags.0.Value", "Tags.Value"),
+            ("Buckets.0.Name", "Buckets.Name"),
+            ("SecurityGroups.1.GroupName", "SecurityGroups.GroupName"),
+            # Multiple levels without indices
+            ("Level1.Level2.Level3.FinalValue", "Level1.Level2.Level3.FinalValue"),
+            ("Owner.DisplayName", "Owner.DisplayName"),
+            ("State.Name", "State.Name"),
+            ("Reservation.Instances.0.State.Code", "Reservation.Instances.State.Code"),
             # Edge cases
             ("", ""),
-            ("123", "123"),  # All numeric
-            ("0.1.2", "2"),  # All numeric
-            ("Resource.0.1.Name", "Name"),
+            ("123", "123"),
+            ("0.1.2", "0.1.2"),
+            ("Resource.0.1.Name", "Resource.Name"),
             # Complex AWS-style keys
-            ("Reservations.0.Instances.0.NetworkInterfaces.0.Association.PublicIp", "PublicIp"),
-            ("Stacks.0.Parameters.1.ParameterValue", "ParameterValue"),
-            ("Buckets.2.CreationDate", "CreationDate"),
+            (
+                "Reservations.0.Instances.0.NetworkInterfaces.0.Association.PublicIp",
+                "Reservations.Instances.NetworkInterfaces.Association.PublicIp",
+            ),
+            ("Stacks.0.Parameters.1.ParameterValue", "Stacks.Parameters.ParameterValue"),
+            ("Buckets.2.CreationDate", "Buckets.CreationDate"),
         ],
     )
     def test_simplify_key_patterns(self, full_key, expected):
@@ -341,6 +355,63 @@ class TestSimplifyKey:
 
         result = simplify_key("123")
         assert result == "123"
+
+
+class TestMakeUniqueHeaders:
+
+    def test_make_unique_headers_empty_list(self):
+        result = make_unique_headers([])
+        assert result == []
+
+    def test_make_unique_headers_single_key(self):
+        result = make_unique_headers(["InstanceId"])
+        assert result == ["InstanceId"]
+
+    def test_make_unique_headers_no_conflicts(self):
+        normalized_keys = ["Name", "InstanceId", "Status"]
+        result = make_unique_headers(normalized_keys)
+        assert result == ["Name", "InstanceId", "Status"]
+
+    def test_make_unique_headers_with_conflicts(self):
+        normalized_keys = ["Tags.Name", "State.Name", "InstanceId"]
+        result = make_unique_headers(normalized_keys)
+        assert result == ["Tags.Name", "State.Name", "InstanceId"]
+
+    def test_make_unique_headers_multiple_conflicts(self):
+        normalized_keys = ["Tags.Name", "State.Name", "Owner.Name", "InstanceId"]
+        result = make_unique_headers(normalized_keys)
+        assert result == ["Tags.Name", "State.Name", "Owner.Name", "InstanceId"]
+
+    def test_make_unique_headers_simplifies_unique_keys(self):
+        normalized_keys = ["Tags.Name", "State.Name", "InstanceId", "VpcId"]
+        result = make_unique_headers(normalized_keys)
+        assert result == ["Tags.Name", "State.Name", "InstanceId", "VpcId"]
+
+    def test_make_unique_headers_mixed_conflicts_and_unique(self):
+        normalized_keys = ["Instance.State.Name", "Tag.State.Name", "InstanceId", "Status"]
+        result = make_unique_headers(normalized_keys)
+        assert result == ["Instance.State.Name", "Tag.State.Name", "InstanceId", "Status"]
+
+    def test_make_unique_headers_preserves_order(self):
+        normalized_keys = ["Zebra.Name", "Apple.Name", "Banana"]
+        result = make_unique_headers(normalized_keys)
+        assert result == ["Zebra.Name", "Apple.Name", "Banana"]
+
+    def test_make_unique_headers_complex_paths_with_conflicts(self):
+        normalized_keys = [
+            "Instances.NetworkInterfaces.SubnetId",
+            "Instances.Tags.Name",
+            "Instances.State.Name",
+            "Owner.Name",
+        ]
+        result = make_unique_headers(normalized_keys)
+        # Uses minimal parent hierarchy to make names unique
+        assert result == [
+            "SubnetId",  # Unique without parents
+            "Tags.Name",  # Minimal to distinguish from State.Name and Owner.Name
+            "State.Name",  # Minimal to distinguish from Tags.Name and Owner.Name
+            "Owner.Name",  # Minimal to distinguish from Tags.Name and State.Name
+        ]
 
 
 class TestTableOutput:
@@ -407,26 +478,32 @@ class TestTableOutput:
 
         assert result == "No matching columns found."
 
-    def test_format_table_output_key_deduplication(self):
-        # Duplicate simplified keys get combined
+    def test_format_table_output_key_deduplication_with_conflicts(self):
         resources = [
-            {"Instance.Name": "instance1", "Resource.Name": "resource1", "Tag.Name": "tag1"}
+            {
+                "Tags": [{"Key": "Name", "Value": "my-instance"}],
+                "State": {"Name": "running"},
+                "InstanceId": "i-123",
+            }
         ]
         result = format_table_output(resources)
 
+        assert "Tags.Name" in result
+        assert "State.Name" in result
+        assert "InstanceId" in result
+        assert "my-instance" in result
+        assert "running" in result
+        assert "i-123" in result
+
+    def test_format_table_output_no_conflicts_simplifies(self):
+        resources = [{"Name": "simple-resource", "Status": "active", "InstanceId": "i-123"}]
+        result = format_table_output(resources)
+
         assert "Name" in result
-
-        assert "instance1" in result
-        assert "resource1" in result
-        assert "tag1" in result
-
-        # Check that the values are combined in a single row
-        data_lines = [line for line in result.split("\n") if "instance1" in line]
-        assert len(data_lines) == 1
-        data_line = data_lines[0]
-        assert "instance1" in data_line
-        assert "resource1" in data_line
-        assert "tag1" in data_line
+        assert "Status" in result
+        assert "InstanceId" in result
+        assert "simple-resource" in result
+        assert "active" in result
 
     def test_format_table_output_long_value_truncation(self):
         # Long values get truncated with ellipsis
@@ -534,19 +611,42 @@ class TestJsonOutput:
         assert "Name" in resource  # Simplified from State.Name
         assert "PublicIpAddress" not in resource
 
-    def test_format_json_output_key_deduplication(self):
-        # Duplicate simplified keys get combined
+    def test_format_json_output_key_deduplication_with_conflicts(self):
         resources = [
-            {"Instance.Name": "instance1", "Resource.Name": "resource1", "Status": "active"}
+            {
+                "Tags": [{"Key": "Name", "Value": "my-instance"}],
+                "State": {"Name": "running"},
+                "InstanceId": "i-123",
+            }
         ]
-        result = format_json_output(resources, column_filters=["Name"])
+        result = format_json_output(resources, column_filters=["Name", "InstanceId"])
         parsed = json.loads(result)
 
         assert len(parsed["results"]) == 1
         resource = parsed["results"][0]
-        assert "Name" in resource
-        name_value = resource["Name"]
-        assert "instance1" in name_value or "resource1" in name_value
+        assert "Tags.Name" in resource
+        assert "State.Name" in resource
+        assert "InstanceId" in resource
+        assert resource["Tags.Name"] == "my-instance"
+        assert resource["State.Name"] == "running"
+        assert resource["InstanceId"] == "i-123"
+
+    def test_format_json_output_no_conflicts_simplifies(self):
+        resources = [
+            {
+                "Tags": [{"Key": "Environment", "Value": "prod"}],
+                "InstanceId": "i-123",
+            }
+        ]
+        result = format_json_output(resources, column_filters=["Environment", "InstanceId"])
+        parsed = json.loads(result)
+
+        assert len(parsed["results"]) == 1
+        resource = parsed["results"][0]
+        assert "Environment" in resource
+        assert "InstanceId" in resource
+        assert resource["Environment"] == "prod"
+        assert resource["InstanceId"] == "i-123"
 
     def test_format_json_output_filters_empty_values(self):
         # Empty/null values get filtered out
@@ -631,10 +731,11 @@ class TestUtilityFunctions:
         result = extract_and_sort_keys(resources)
 
         assert "InstanceId" in result
-        assert "Name" in result  # From State.Name
-        assert "Code" in result  # From State.Code
-        assert "Key" in result  # From Tags.0.Key
-        assert "Value" in result  # From Tags.0.Value
+        assert "State.Name" in result  # Normalized from State.Name
+        assert "State.Code" in result  # Normalized from State.Code
+        assert "Tags_Original.Key" in result  # From Tags.0.Key (original preserved)
+        assert "Tags_Original.Value" in result  # From Tags.0.Value (original preserved)
+        assert "Tags.Environment" in result  # Transformed tag map
 
         assert result == sorted(result, key=str.lower)
 
@@ -646,14 +747,16 @@ class TestUtilityFunctions:
         assert result == ["Apple", "Banana", "cherry", "zebra"]
 
     def test_extract_and_sort_keys_deduplication(self):
-        # Duplicate simplified keys get deduplicated
+        # Keys are normalized but preserve full path
         resources = [
             {"Instance.Name": "instance1", "Resource.Name": "resource1", "State.Name": "running"}
         ]
         result = extract_and_sort_keys(resources)
 
-        assert result.count("Name") == 1
-        assert "Name" in result
+        # With new normalization, each keeps its full path
+        assert "Instance.Name" in result
+        assert "Resource.Name" in result
+        assert "State.Name" in result
 
     def test_extract_and_sort_keys_with_various_data_types(self):
         resources = [
@@ -667,63 +770,107 @@ class TestUtilityFunctions:
         ]
         result = extract_and_sort_keys(resources)
 
+        # ArrayField becomes ArrayField.0, ArrayField.1, ArrayField.2 which normalize to ArrayField
         expected_keys = sorted(
-            ["ArrayField", "BooleanField", "NestedKey", "NumberField", "StringField"], key=str.lower
+            ["ArrayField", "BooleanField", "ObjectField.NestedKey", "NumberField", "StringField"],
+            key=str.lower,
         )
         assert result == expected_keys
 
-    @patch("awsquery.core.execute_aws_call")
-    def test_show_keys_no_data(self, mock_execute):
-        mock_execute.return_value = {"ResponseMetadata": {"RequestId": "test"}}
 
-        result = show_keys("ec2", "describe-instances")
+class TestColumnNamingIntegration:
 
-        assert result == "No data to extract keys from."
-        mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
+    def test_ec2_instances_with_conflicting_name_fields(self):
+        resources = [
+            {
+                "InstanceId": "i-123",
+                "InstanceType": "t2.micro",
+                "Tags": [
+                    {"Key": "Name", "Value": "web-server-01"},
+                    {"Key": "Environment", "Value": "production"},
+                ],
+                "State": {"Name": "running", "Code": 16},
+                "NetworkInterfaces": [{"NetworkInterfaceId": "eni-123", "SubnetId": "subnet-abc"}],
+            }
+        ]
 
-    @patch("awsquery.core.execute_aws_call")
-    def test_show_keys_with_data(self, mock_execute):
-        mock_execute.return_value = {
-            "Instances": [
-                {
-                    "InstanceId": "i-123",
-                    "State": {"Name": "running"},
-                    "Tags": [{"Key": "Environment", "Value": "prod"}],
-                }
-            ],
-            "ResponseMetadata": {"RequestId": "test"},
-        }
+        table_result = format_table_output(resources)
+        assert "Tags.Name" in table_result
+        assert "State.Name" in table_result
+        assert "web-server-01" in table_result
+        assert "running" in table_result
 
-        result = show_keys("ec2", "describe-instances")
+        json_result = format_json_output(resources)
+        parsed = json.loads(json_result)
+        resource = parsed["results"][0]
+        assert resource["Tags"]["Name"] == "web-server-01"
+        assert resource["State"]["Name"] == "running"
 
-        # Keys formatted with indentation
-        lines = result.split("\n")
-        assert all(line.startswith("  ") for line in lines if line.strip())
+    def test_s3_buckets_with_conflicting_name_fields(self):
+        resources = [
+            {
+                "Name": "my-bucket",
+                "Owner": {"Name": "john-doe", "ID": "123456"},
+                "CreationDate": "2023-01-01T00:00:00Z",
+            }
+        ]
 
-        content = result.replace("  ", "")
-        assert "InstanceId" in content
-        assert "Name" in content  # From State.Name
-        assert "Key" in content  # From Tags.0.Key
-        assert "Value" in content  # From Tags.0.Value
+        table_result = format_table_output(resources)
+        assert "Name" in table_result or "Owner.Name" in table_result
+        assert "my-bucket" in table_result
+        assert "john-doe" in table_result
 
-    @patch("awsquery.core.execute_aws_call")
-    def test_show_keys_integration(self, mock_execute):
-        mock_execute.return_value = {"Instances": [{"InstanceId": "i-123", "Status": "running"}]}
+        json_result = format_json_output(resources, column_filters=["Name"])
+        parsed = json.loads(json_result)
+        assert len(parsed["results"]) == 1
 
-        result = show_keys("ec2", "describe-instances")
+    def test_multiple_nested_levels_with_same_final_segment(self):
+        resources = [
+            {
+                "InstanceId": "i-123",
+                "NetworkInterfaces": [
+                    {
+                        "NetworkInterfaceId": "eni-123",
+                        "Association": {"PublicIp": "1.2.3.4"},
+                        "PrivateIpAddresses": [{"Association": {"PublicIp": "1.2.3.5"}}],
+                    }
+                ],
+            }
+        ]
 
-        lines = [line.strip() for line in result.split("\n") if line.strip()]
-        assert "InstanceId" in lines
-        assert "Status" in lines
+        table_result = format_table_output(resources)
+        assert "InstanceId" in table_result
 
-        mock_execute.assert_called_once_with("ec2", "describe-instances", session=None)
+        json_result = format_json_output(resources)
+        parsed = json.loads(json_result)
+        assert len(parsed["results"]) == 1
+
+    def test_index_removal_in_normalized_keys(self):
+        resources = [
+            {
+                "Instances": [
+                    {
+                        "InstanceId": "i-123",
+                        "Tags": [{"Key": "Name", "Value": "instance-1"}],
+                    }
+                ]
+            }
+        ]
+
+        keys = extract_and_sort_keys(resources)
+        assert "Instances.InstanceId" in keys
+        assert "Instances.Tags.Name" in keys
+
+        assert not any(".0." in key or ".1." in key for key in keys)
 
 
 class TestComplexScenarios:
 
     def test_format_table_output_aws_ec2_instances(self, sample_ec2_response):
         # Realistic EC2 instances formatting
-        resources = flatten_single_response(sample_ec2_response)
+        resources = flatten_single_response(
+            sample_ec2_response, service="ec2", operation="DescribeInstances"
+        )
         result = format_table_output(resources, column_filters=["Instance", "State", "Tag"])
 
         assert "InstanceId" in result
@@ -737,7 +884,9 @@ class TestComplexScenarios:
 
     def test_format_json_output_aws_s3_buckets(self, sample_s3_response):
         # Realistic S3 buckets formatting
-        resources = flatten_single_response(sample_s3_response)
+        resources = flatten_single_response(
+            sample_s3_response, service="ec2", operation="DescribeInstances"
+        )
         result = format_json_output(resources, column_filters=["Name", "Creation"])
         parsed = json.loads(result)
 
@@ -818,7 +967,7 @@ class TestComplexScenarios:
         from tests.fixtures.aws_responses import get_paginated_response
 
         paginated_data = get_paginated_response("ec2", "describe_instances", 2, 3)
-        result = flatten_response(paginated_data)
+        result = flatten_response(paginated_data, service="ec2", operation="DescribeInstances")
 
         # Each page has 1 reservation with 3 instances
         assert len(result) == 2  # 2 pages * 1 reservation per page
@@ -842,7 +991,9 @@ class TestComplexScenarios:
         from tests.fixtures.aws_responses import get_complex_nested_response
 
         complex_response = get_complex_nested_response(depth=3, breadth=2)
-        resources = flatten_single_response(complex_response)
+        resources = flatten_single_response(
+            complex_response, service="ec2", operation="DescribeInstances"
+        )
         result = extract_and_sort_keys(resources)
 
         assert len(result) >= 10
@@ -1168,8 +1319,8 @@ class TestTagTransformation:
         keys = extract_and_sort_keys(resources)
 
         assert "InstanceId" in keys
-        assert "Name" in keys  # From Tags.Name
-        assert "Environment" in keys  # From Tags.Environment
+        assert "Tags.Name" in keys  # From Tags.Name (normalized)
+        assert "Tags.Environment" in keys  # From Tags.Environment (normalized)
 
     def test_performance_with_large_tag_sets(self):
         # Performance test with many tags

@@ -57,12 +57,13 @@ class TestColumnOrderingConsistency:
         # Split by | and filter out empty strings
         headers = [h.strip() for h in header_line.split("|") if h.strip()]
 
-        # Headers are simplified (e.g., "Tags.Name" becomes "Name", "State.Name" becomes "Name")
-        # Since both are "Name", they get merged, so we check the order of unique simplified headers
+        # Headers preserve parent context when there are conflicts
+        # Tags.Name and State.Name both have "Name" so full paths are kept
         expected_order = [
-            "Name",
+            "Tags.Name",
             "InstanceId",
             "InstanceType",
+            "State.Name",
             "PublicIpAddress",
             "PrivateIpAddress",
         ]

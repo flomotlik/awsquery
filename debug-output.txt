@@ -1,0 +1,86 @@
+[DEBUG] 2025-09-27 12:03:46 Multi-level parsing (mode=single) - Base: ['cloudformation', 'describe-stack-resources'], Resource: [], Value: ['CDK'], Column: []
+[DEBUG] 2025-09-27 12:03:46 DEBUG: Parsed parameters: {}
+[DEBUG] 2025-09-27 12:03:46 DEBUG: Operation DescribeStackResources matches safe prefix Describe
+[DEBUG] 2025-09-27 12:03:46 DEBUG: Operation cloudformation:describe-stack-resources validated successfully
+[DEBUG] 2025-09-27 12:03:46 create_session called with region=None, profile=None
+[DEBUG] 2025-09-27 12:03:46 Creating session with kwargs: {}
+[DEBUG] 2025-09-27 12:03:46 DEBUG: Created session with region=None, profile=None
+[DEBUG] 2025-09-27 12:03:46 Loaded default filters configuration from /app/src/awsquery/default_filters.yaml
+[DEBUG] 2025-09-27 12:03:46 Found default columns for cloudformation.describe_stack_resources: ['LogicalResourceId$', 'PhysicalResourceId$', 'StackId$', 'StackName$', 'StackResourceDriftStatus$', 'ResourceStatus$', 'ResourceType$', 'LastCheckTimestamp$']
+[DEBUG] 2025-09-27 12:03:46 Using default columns for cloudformation.describe_stack_resources: ['LogicalResourceId$', 'PhysicalResourceId$', 'StackId$', 'StackName$', 'StackResourceDriftStatus$', 'ResourceStatus$', 'ResourceType$', 'LastCheckTimestamp$']
+[DEBUG] 2025-09-27 12:03:46 Applying default column filters for cloudformation.describe_stack_resources: ['LogicalResourceId$', 'PhysicalResourceId$', 'StackId$', 'StackName$', 'StackResourceDriftStatus$', 'ResourceStatus$', 'ResourceType$', 'LastCheckTimestamp$']
+[DEBUG] 2025-09-27 12:03:46 Using single-level execution first
+[DEBUG] 2025-09-27 12:03:46 Operation not pageable, falling back to direct call
+[DEBUG] 2025-09-27 12:03:51 ValidationError detected in single-level call, switching to multi-level
+[DEBUG] 2025-09-27 12:03:51 Multi-level parsing (mode=multi) - Base: ['cloudformation', 'describe-stack-resources'], Resource: [], Value: ['CDK'], Column: []
+[DEBUG] 2025-09-27 12:03:51 Re-parsed filters for multi-level - Resource: [], Value: ['CDK'], Column: []
+[DEBUG] 2025-09-27 12:03:51 Found default columns for cloudformation.describe_stack_resources: ['LogicalResourceId$', 'PhysicalResourceId$', 'StackId$', 'StackName$', 'StackResourceDriftStatus$', 'ResourceStatus$', 'ResourceType$', 'LastCheckTimestamp$']
+[DEBUG] 2025-09-27 12:03:51 Using default columns for cloudformation.describe_stack_resources: ['LogicalResourceId$', 'PhysicalResourceId$', 'StackId$', 'StackName$', 'StackResourceDriftStatus$', 'ResourceStatus$', 'ResourceType$', 'LastCheckTimestamp$']
+[DEBUG] 2025-09-27 12:03:51 Applying default column filters for cloudformation.describe_stack_resources: ['LogicalResourceId$', 'PhysicalResourceId$', 'StackId$', 'StackName$', 'StackResourceDriftStatus$', 'ResourceStatus$', 'ResourceType$', 'LastCheckTimestamp$']
+[DEBUG] 2025-09-27 12:03:51 Starting multi-level call for cloudformation.describe-stack-resources
+[DEBUG] 2025-09-27 12:03:51 Resource filters: [], Value filters: ['CDK'], Column filters: ['LogicalResourceId$', 'PhysicalResourceId$', 'StackId$', 'StackName$', 'StackResourceDriftStatus$', 'ResourceStatus$', 'ResourceType$', 'LastCheckTimestamp$']
+[DEBUG] 2025-09-27 12:03:51 Operation not pageable, falling back to direct call
+[DEBUG] 2025-09-27 12:03:51 Validation error - missing parameter: StackName
+[DEBUG] 2025-09-27 12:03:51 Validation error - missing parameter: StackName
+Resolving required parameter 'StackName'
+[DEBUG] 2025-09-27 12:03:51 Parameter-based inference: 'StackName' -> 'stack' -> 6 operations
+[DEBUG] 2025-09-27 12:03:51 Action-based inference: 'describe-stack-resources' -> 'stack_resources' -> added 6 operations
+[DEBUG] 2025-09-27 12:03:51 Total possible operations: ['list_stacks', 'describe_stacks', 'get_stacks', 'list_stack', 'describe_stack', 'get_stack', 'list_stack_resources', 'describe_stack_resources', 'get_stack_resources']
+[DEBUG] 2025-09-27 12:03:51 Trying list operation: list_stacks
+Calling list_stacks to find available resources...
+[DEBUG] 2025-09-27 12:03:51 Successfully executed: list_stacks
+[DEBUG] 2025-09-27 12:03:51 Paginated response with 1 pages
+[DEBUG] 2025-09-27 12:03:51 Processing page 1
+[DEBUG] 2025-09-27 12:03:51 Original response keys: ['StackSummaries', 'ResponseMetadata']
+[DEBUG] 2025-09-27 12:03:51 Removed ResponseMetadata. Filtered keys: ['StackSummaries']
+[DEBUG] 2025-09-27 12:03:51 Found 1 list keys and 0 non-list keys
+[DEBUG] 2025-09-27 12:03:51 List keys: [('StackSummaries', 21)]
+[DEBUG] 2025-09-27 12:03:51 Single list key 'StackSummaries' with 21 items -> EXTRACTING LIST
+[DEBUG] 2025-09-27 12:03:51 Total resources extracted from all pages: 21
+[DEBUG] 2025-09-27 12:03:51 Got 21 resources from list_stacks
+Found 21 resources matching filters
+[DEBUG] 2025-09-27 12:03:51 Looking for parameter values using names: ['StackName', 'StackName']
+[DEBUG] 2025-09-27 12:03:51 Extracted 21 values for parameter 'StackName': ['awsinfo-logs-test', 'CDKToolkit', 'nested-test-stack-NestedStack-18PIUJBUO6R4Q']...
+Multiple StackName values found matching filters:
+- awsinfo-logs-test
+- CDKToolkit
+- nested-test-stack-NestedStack-18PIUJBUO6R4Q
+- nested-test-stack
+- formica-nested-stack-NestedStack-W5UDFUDBUSGA
+- formica-nested-stack
+- formica-it-d7844c15-a1fe-46a6-8937-e497f6eb43fe
+- s3-lambda
+- formica-it-9a6ac772-755c-4ea6-a536-83c1e7b112b9
+- formica-it-8410b96d-9098-4b20-9f70-c0b87de5ff38
+... and 11 more (showing first 10 of 21 total)
+Using first match: awsinfo-logs-test
+[DEBUG] 2025-09-27 12:03:51 Using parameter value(s): awsinfo-logs-test
+[DEBUG] 2025-09-27 12:03:51 Introspecting parameter name for describe-stack-resources (PascalCase: DescribeStackResources)
+[DEBUG] 2025-09-27 12:03:51 Available parameters: ['StackName', 'LogicalResourceId', 'PhysicalResourceId']
+[DEBUG] 2025-09-27 12:03:51 Found exact match: StackName
+[DEBUG] 2025-09-27 12:03:51 Parameter name resolution: StackName -> StackName
+[DEBUG] 2025-09-27 12:03:51 Operation not pageable, falling back to direct call
+[DEBUG] 2025-09-27 12:03:52 Paginated response with 1 pages
+[DEBUG] 2025-09-27 12:03:52 Processing page 1
+[DEBUG] 2025-09-27 12:03:52 Original response keys: ['StackResources', 'ResponseMetadata']
+[DEBUG] 2025-09-27 12:03:52 Removed ResponseMetadata. Filtered keys: ['StackResources']
+[DEBUG] 2025-09-27 12:03:52 Found 1 list keys and 0 non-list keys
+[DEBUG] 2025-09-27 12:03:52 List keys: [('StackResources', 1)]
+[DEBUG] 2025-09-27 12:03:52 Single list key 'StackResources' with 1 items -> EXTRACTING LIST
+[DEBUG] 2025-09-27 12:03:52 Total resources extracted from all pages: 1
+[DEBUG] 2025-09-27 12:03:52 Final call returned 1 resources
+[DEBUG] 2025-09-27 12:03:52 Applying value filter: CDK (mode: contains)
+[DEBUG] 2025-09-27 12:03:52 Sample flattened keys: ['StackName', 'StackId', 'LogicalResourceId', 'PhysicalResourceId', 'ResourceType']
+[DEBUG] 2025-09-27 12:03:52 Sample searchable items: ['StackName', 'StackId', 'LogicalResourceId', 'PhysicalResourceId', 'ResourceType', 'Timestamp', 'ResourceStatus', 'DriftInformation.StackResourceDriftStatus', 'awsinfo-logs-test', 'arn:aws:cloudformation:eu-central-1:080551076419:stack/awsinfo-logs-test/8a2654d0-dd30-11ed-8a5b-0a403f4e90a4']
+[DEBUG] 2025-09-27 12:03:52 Found 0 resources matching filters (out of 1 total)
+[DEBUG] 2025-09-27 12:03:52 After value filtering: 0 resources
+[DEBUG] 2025-09-27 12:03:52 Multi-level call completed with 0 resources
+[DEBUG] 2025-09-27 12:03:52 Applying column filter: LogicalResourceId$
+[DEBUG] 2025-09-27 12:03:52 Applying column filter: PhysicalResourceId$
+[DEBUG] 2025-09-27 12:03:52 Applying column filter: StackId$
+[DEBUG] 2025-09-27 12:03:52 Applying column filter: StackName$
+[DEBUG] 2025-09-27 12:03:52 Applying column filter: StackResourceDriftStatus$
+[DEBUG] 2025-09-27 12:03:52 Applying column filter: ResourceStatus$
+[DEBUG] 2025-09-27 12:03:52 Applying column filter: ResourceType$
+[DEBUG] 2025-09-27 12:03:52 Applying column filter: LastCheckTimestamp$
+No results found.

@@ -44,15 +44,16 @@ class TestGetDefaultColumns:
         columns = get_default_columns("ec2", "describe_instances")
 
         expected = [
-            "InstanceId$",
-            "InstanceLifecycle$",
-            "InstanceType$",
-            "LaunchTime$",
-            "Placement.AvailabilityZone$",
-            "0.PrivateIpAddress$",
-            "0.PublicIpAddress$",
-            "State.Name$",
             "Tags.Name$",
+            "InstanceId$",
+            "InstanceType$",
+            "State.Name$",
+            "InstanceLifecycle$",
+            "LaunchTime$",
+            "Placement$",
+            "AvailabilityZone$",
+            "PublicIpAddress$",
+            "PrivateIpAddress$",
         ]
         assert columns == expected
 
@@ -60,7 +61,7 @@ class TestGetDefaultColumns:
         """Test retrieving columns for different action of same service."""
         columns = get_default_columns("ec2", "describe_security_groups")
 
-        expected = ["Description$", "GroupId$", "GroupName$", "VpcId$"]
+        expected = ["GroupName$", "Description$", "GroupId$", "VpcId$"]
         assert columns == expected
 
     def test_case_insensitive_service_action(self):
@@ -88,16 +89,15 @@ class TestGetDefaultColumns:
         s3_columns = get_default_columns("s3", "list_buckets")
         lambda_columns = get_default_columns("lambda", "list_functions")
 
-        assert s3_columns == ["CreationDate$", "Name$"]
+        assert s3_columns == ["Name$", "CreationDate$"]
         assert lambda_columns == [
-            "CodeSize$",
-            "FunctionArn$",
             "FunctionName$",
-            "Handler$",
-            "LastModified$",
-            "MemorySize$",
             "Runtime$",
             "Timeout$",
+            "MemorySize$",
+            "Handler$",
+            "LastModified$",
+            "FunctionArn$",
         ]
 
 
@@ -116,15 +116,16 @@ class TestApplyDefaultFilters:
         result = apply_default_filters("ec2", "describe_instances", None)
 
         expected = [
-            "InstanceId$",
-            "InstanceLifecycle$",
-            "InstanceType$",
-            "LaunchTime$",
-            "Placement.AvailabilityZone$",
-            "0.PrivateIpAddress$",
-            "0.PublicIpAddress$",
-            "State.Name$",
             "Tags.Name$",
+            "InstanceId$",
+            "InstanceType$",
+            "State.Name$",
+            "InstanceLifecycle$",
+            "LaunchTime$",
+            "Placement$",
+            "AvailabilityZone$",
+            "PublicIpAddress$",
+            "PrivateIpAddress$",
         ]
         assert result == expected
 
@@ -133,15 +134,16 @@ class TestApplyDefaultFilters:
         result = apply_default_filters("ec2", "describe_instances", [])
 
         expected = [
-            "InstanceId$",
-            "InstanceLifecycle$",
-            "InstanceType$",
-            "LaunchTime$",
-            "Placement.AvailabilityZone$",
-            "0.PrivateIpAddress$",
-            "0.PublicIpAddress$",
-            "State.Name$",
             "Tags.Name$",
+            "InstanceId$",
+            "InstanceType$",
+            "State.Name$",
+            "InstanceLifecycle$",
+            "LaunchTime$",
+            "Placement$",
+            "AvailabilityZone$",
+            "PublicIpAddress$",
+            "PrivateIpAddress$",
         ]
         assert result == expected
 
@@ -173,15 +175,16 @@ class TestDetermineColumnFilters:
         result = determine_column_filters([], "ec2", "describe_instances")
 
         expected = [
-            "InstanceId$",
-            "InstanceLifecycle$",
-            "InstanceType$",
-            "LaunchTime$",
-            "Placement.AvailabilityZone$",
-            "0.PrivateIpAddress$",
-            "0.PublicIpAddress$",
-            "State.Name$",
             "Tags.Name$",
+            "InstanceId$",
+            "InstanceType$",
+            "State.Name$",
+            "InstanceLifecycle$",
+            "LaunchTime$",
+            "Placement$",
+            "AvailabilityZone$",
+            "PublicIpAddress$",
+            "PrivateIpAddress$",
         ]
         assert result == expected
 
@@ -189,7 +192,7 @@ class TestDetermineColumnFilters:
         """Test that defaults are applied when user columns are None."""
         result = determine_column_filters(None, "s3", "list_buckets")
 
-        expected = ["CreationDate$", "Name$"]
+        expected = ["Name$", "CreationDate$"]
         assert result == expected
 
     def test_unknown_service_action_returns_none(self):

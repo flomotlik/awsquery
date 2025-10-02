@@ -279,7 +279,7 @@ class TestTagsIntegrationWithFormatters:
         mock_response = [{"Instances": [{"InstanceId": "i-123"}]}]
         mock_transform.return_value = mock_response
 
-        flatten_response(mock_response)
+        flatten_response(mock_response, service="ec2", operation="DescribeInstances")
 
         mock_transform.assert_called_once_with(mock_response)
 
@@ -300,7 +300,7 @@ class TestTagsIntegrationWithFormatters:
             }
         ]
 
-        result = flatten_response(response)
+        result = flatten_response(response, service="ec2", operation="DescribeInstances")
 
         # Verify tags were transformed
         assert len(result) == 1
@@ -353,7 +353,7 @@ class TestTagsIntegrationWithFormatters:
             }
         ]
 
-        result = flatten_response(response)
+        result = flatten_response(response, service="ec2", operation="DescribeInstances")
 
         assert len(result) == 1
         stack = result[0]

@@ -19,14 +19,14 @@ class TestFlattenResponseEdgeCases:
 
     def test_empty_response(self):
         """Test with empty response."""
-        assert flatten_response(None) == []
-        assert flatten_response([]) == []
-        assert flatten_response({}) == []
+        assert flatten_response(None, service="ec2", operation="DescribeInstances") == []
+        assert flatten_response([], service="ec2", operation="DescribeInstances") == []
+        assert flatten_response({}, service="ec2", operation="DescribeInstances") == []
 
     def test_single_page_response(self):
         """Test non-paginated response."""
         response = {"Instances": [{"Id": "i-123"}, {"Id": "i-456"}]}
-        result = flatten_response(response)
+        result = flatten_response(response, service="ec2", operation="DescribeInstances")
         assert len(result) == 2
         assert result[0]["Id"] == "i-123"
 
@@ -37,13 +37,13 @@ class TestFlattenResponseEdgeCases:
             {"Instances": [{"Id": "i-456"}]},
             {"Instances": [{"Id": "i-789"}]},
         ]
-        result = flatten_response(response)
+        result = flatten_response(response, service="ec2", operation="DescribeInstances")
         assert len(result) == 3
 
     def test_response_metadata_only(self):
         """Test response with only ResponseMetadata."""
         response = {"ResponseMetadata": {"RequestId": "12345"}}
-        result = flatten_response(response)
+        result = flatten_response(response, service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_mixed_list_and_metadata(self):
@@ -53,7 +53,7 @@ class TestFlattenResponseEdgeCases:
             "NextToken": "token",
             "ResponseMetadata": {"RequestId": "12345"},
         }
-        result = flatten_response(response)
+        result = flatten_response(response, service="ec2", operation="DescribeInstances")
         assert len(result) == 1
         assert result[0]["Id"] == "i-123"
 
@@ -64,7 +64,7 @@ class TestFlattenResponseEdgeCases:
             "Volumes": [{"Id": "v-1"}],
             "SecurityGroups": [{"Id": "sg-1"}, {"Id": "sg-2"}, {"Id": "sg-3"}],
         }
-        result = flatten_response(response)
+        result = flatten_response(response, service="ec2", operation="DescribeInstances")
         # Should return the largest list
         assert len(result) == 3
         assert all("sg-" in r["Id"] for r in result)
@@ -72,7 +72,7 @@ class TestFlattenResponseEdgeCases:
     def test_non_dict_non_list_response(self):
         """Test response that's neither dict nor list."""
         response = "simple-string-response"
-        result = flatten_response(response)
+        result = flatten_response(response, service="ec2", operation="DescribeInstances")
         assert result == ["simple-string-response"]
 
     def test_nested_empty_pages(self):
@@ -82,7 +82,7 @@ class TestFlattenResponseEdgeCases:
             {"Instances": [{"Id": "i-123"}]},
             {"Instances": []},
         ]
-        result = flatten_response(response)
+        result = flatten_response(response, service="ec2", operation="DescribeInstances")
         assert len(result) == 1
 
 
@@ -92,25 +92,25 @@ class TestFlattenSingleResponseEdgeCases:
     def test_direct_list(self):
         """Test direct list response."""
         response = [{"Id": "1"}, {"Id": "2"}]
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
         assert result == response
 
     def test_no_list_keys(self):
         """Test response with no list keys."""
         response = {"Name": "test", "Status": "active"}
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
         assert result == [response]
 
     def test_empty_list_value(self):
         """Test response with empty list value."""
         response = {"Instances": [], "Status": "ok"}
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_equal_length_lists(self):
         """Test response with equal length lists."""
         response = {"List1": [{"a": 1}, {"a": 2}], "List2": [{"b": 1}, {"b": 2}]}
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
         # Should pick first in alphabetical order when equal
         assert len(result) == 2
 

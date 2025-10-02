@@ -148,7 +148,9 @@ class TestShowKeysFromResult:
 
         expected = "  InstanceId\n  State"
         assert output == expected
-        mock_flatten.assert_called_once_with(result.last_successful_response)
+        mock_flatten.assert_called_once_with(
+            result.last_successful_response, result.service, result.operation
+        )
         mock_extract_keys.assert_called_once()
 
     def test_show_keys_failed_result(self):
@@ -475,7 +477,7 @@ class TestKeysModeBehavior:
             output = show_keys_from_result(result)
 
             # Should only use the last successful response, not the first
-            mock_flatten.assert_called_once_with(second_response)
+            mock_flatten.assert_called_once_with(second_response, result.service, result.operation)
             assert "Name" in output
             assert "CreationDate" in output
 

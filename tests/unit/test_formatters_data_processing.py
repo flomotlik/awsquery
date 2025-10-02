@@ -121,7 +121,7 @@ class TestResponseFlattening:
             "ANumber": 42,
         }
 
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
 
         # Should extract the longest list
         assert len(result) == 4
@@ -135,7 +135,7 @@ class TestResponseFlattening:
             "NextToken": "token",
         }
 
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
 
         assert result == [{"id": 1}, {"id": 2}]
         # ResponseMetadata should not affect result
@@ -143,41 +143,52 @@ class TestResponseFlattening:
     def test_flatten_single_response_non_dict(self):
         """Test handling of non-dict responses."""
         # List response
-        assert flatten_single_response([1, 2, 3]) == [1, 2, 3]
+        assert flatten_single_response([1, 2, 3], service="ec2", operation="DescribeInstances") == [
+            1,
+            2,
+            3,
+        ]
 
         # String response
-        assert flatten_single_response("string") == ["string"]
+        assert flatten_single_response("string", service="ec2", operation="DescribeInstances") == [
+            "string"
+        ]
 
         # Number response
-        assert flatten_single_response(42) == [42]
+        assert flatten_single_response(42, service="ec2", operation="DescribeInstances") == [42]
 
         # None response returns empty list
-        assert flatten_single_response(None) == []
+        assert flatten_single_response(None, service="ec2", operation="DescribeInstances") == []
 
     def test_flatten_single_response_filtered_keys_boundary(self):
         """Test filtered_keys variable usage and None assignment boundary."""
         with patch("awsquery.formatters.debug_print") as mock_debug:
             response = {"Items": [{"Id": "test"}], "ResponseMetadata": {"RequestId": "123"}}
-            result = flatten_single_response(response)
+            result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
 
             # Should extract items correctly
             assert result == [{"Id": "test"}]
 
-            # Verify that filtered_keys is actually used (not None)
+            # Verify that debug output contains key processing information
             debug_calls = [str(call) for call in mock_debug.call_args_list]
-            # Should contain debug message about filtered keys
-            filtered_keys_logged = any("Filtered keys:" in call for call in debug_calls)
-            assert filtered_keys_logged
+            # Should contain debug message about response processing
+            keys_logged = any(
+                "Original response keys:" in call
+                or "Shape-aware extraction:" in call
+                or "Simple extraction:" in call
+                for call in debug_calls
+            )
+            assert keys_logged
 
     def test_flatten_single_response_empty_dict(self):
         """Test empty dict response."""
-        result = flatten_single_response({})
+        result = flatten_single_response({}, service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_single_response_only_response_metadata(self):
         """Test dict with only ResponseMetadata."""
         response = {"ResponseMetadata": {"RequestId": "123"}}
-        result = flatten_single_response(response)
+        result = flatten_single_response(response, service="ec2", operation="DescribeInstances")
         assert result == []
 
     def test_flatten_single_response_list_length_boundary(self):
@@ -188,9 +199,28 @@ class TestResponseFlattening:
         long_response = {"LongList": [1, 2, 3, 4], "Items": [{"id": "a"}]}
 
         # All should extract the longest list, not just > some threshold
-        assert len(flatten_single_response(short_response)) == 1
-        assert len(flatten_single_response(medium_response)) == 2
-        assert len(flatten_single_response(long_response)) == 4
+        assert (
+            len(
+                flatten_single_response(
+                    short_response, service="ec2", operation="DescribeInstances"
+                )
+            )
+            == 1
+        )
+        assert (
+            len(
+                flatten_single_response(
+                    medium_response, service="ec2", operation="DescribeInstances"
+                )
+            )
+            == 2
+        )
+        assert (
+            len(
+                flatten_single_response(long_response, service="ec2", operation="DescribeInstances")
+            )
+            == 4
+        )
 
     def test_flatten_response_pagination(self):
         """Test flattening of paginated responses."""
@@ -200,7 +230,7 @@ class TestResponseFlattening:
             {"Items": [{"id": 3}]},
         ]
 
-        result = flatten_response(paginated)
+        result = flatten_response(paginated, service="ec2", operation="DescribeInstances")
 
         assert len(result) == 3
         assert {"id": 1} in result

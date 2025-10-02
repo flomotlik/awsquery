@@ -4,29 +4,15 @@ import sys
 
 import boto3
 
-
-class AWSQueryError(Exception):
-    """Base exception for AWS Query Tool"""
-
-
-class ValidationError(AWSQueryError):
-    """Error in parameter validation"""
-
-
-class SecurityError(AWSQueryError):
-    """Security policy violation"""
-
-
-class CredentialsError(AWSQueryError):
-    """AWS credentials issue"""
-
-
-class OperationError(AWSQueryError):
-    """AWS operation failed"""
+from .case_utils import to_kebab_case, to_snake_case
 
 
 def convert_parameter_name(parameter_name):
-    """Convert parameter name from camelCase to PascalCase for AWS API compatibility"""
+    """Convert parameter name from camelCase to PascalCase for AWS API compatibility.
+
+    Note: This is NOT a general case conversion - it only capitalizes the first letter.
+    For general case conversion, use case_utils module.
+    """
     if not parameter_name:
         return parameter_name
 
@@ -37,16 +23,9 @@ def convert_parameter_name(parameter_name):
     )
 
 
-def pascal_to_kebab_case(pascal_case_str):
-    """Convert PascalCase to kebab-case (e.g., 'ListStacks' -> 'list-stacks')"""
-    if not pascal_case_str:
-        return pascal_case_str
-
-    import re
-
-    # Insert hyphens before uppercase letters (except the first one)
-    kebab_case = re.sub(r"(?<!^)(?=[A-Z])", "-", pascal_case_str)
-    return kebab_case.lower()
+# Compatibility wrappers using new case_utils functions
+pascal_to_kebab_case = to_kebab_case
+normalize_action_name = to_snake_case
 
 
 class DebugContext:
@@ -130,38 +109,24 @@ def sanitize_input(value):
     return value.strip()
 
 
-def normalize_action_name(action):
-    """Convert CLI-style action names to boto3 method names"""
-    normalized = action.replace("-", "_")
-
-    import re
-
-    normalized = re.sub("([a-z0-9])([A-Z])", r"\1_\2", normalized)
-
-    normalized = normalized.lower()
-
-    return normalized
-
-
 def simplify_key(full_key):
-    """Extract the last non-numeric attribute from a flattened key
+    """Normalize key by removing numeric indices while preserving hierarchy
 
     Examples:
-    - "Instances.0.NetworkInterfaces.0.SubnetId" -> "SubnetId"
-    - "Buckets.0.Name" -> "Name"
-    - "Owner.DisplayName" -> "DisplayName"
+    - "Instances.0.NetworkInterfaces.0.SubnetId" -> "Instances.NetworkInterfaces.SubnetId"
+    - "Buckets.0.Name" -> "Buckets.Name"
+    - "Tags.0.Name" -> "Tags.Name"
+    - "State.Name" -> "State.Name"
+    - "Owner.DisplayName" -> "Owner.DisplayName"
     - "ReservationId" -> "ReservationId"
     """
     if not full_key:
         return full_key
 
     parts = full_key.split(".")
+    non_numeric_parts = [part for part in parts if not part.isdigit()]
 
-    for part in reversed(parts):
-        if not part.isdigit():
-            return part
-
-    return parts[-1] if parts else full_key
+    return ".".join(non_numeric_parts) if non_numeric_parts else full_key
 
 
 def get_aws_services():
@@ -171,22 +136,6 @@ def get_aws_services():
         return sorted(session.get_available_services())
     except Exception as e:
         print(f"ERROR: Failed to get AWS services: {e}", file=sys.stderr)
-        return []
-
-
-def get_service_actions(service):
-    """Get available actions for a service"""
-    try:
-        client = boto3.client(service)
-        operations = client.meta.service_model.operation_names
-        read_ops = [
-            op
-            for op in operations
-            if any(op.lower().startswith(prefix) for prefix in ["describe", "list", "get"])
-        ]
-        return sorted(read_ops)
-    except Exception as e:
-        print(f"ERROR: Failed to get actions for {service}: {e}", file=sys.stderr)
         return []
 
 

@@ -6,13 +6,15 @@ import argparse
 import os
 import re
 import sys
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 import argcomplete
 import boto3
 
+from .case_utils import to_kebab_case
 from .config import apply_default_filters
 from .core import (
+    check_parameter_requirements,
     execute_aws_call,
     execute_multi_level_call,
     execute_multi_level_call_with_tracking,
@@ -25,12 +27,9 @@ from .formatters import (
     flatten_response,
     format_json_output,
     format_table_output,
-    show_keys,
 )
 from .security import (
-    action_to_policy_format,
     get_service_valid_operations,
-    is_readonly_operation,
     validate_readonly,
 )
 from .utils import create_session, debug_print, get_aws_services, sanitize_input
@@ -184,50 +183,60 @@ def _convert_type(value):
     return value
 
 
+def get_parameter_type(service, action, parameter_name, session=None):
+    """Get expected parameter type from boto3 service model.
+
+    Args:
+        service: AWS service name (e.g., 'ec2', 'ssm')
+        action: Operation name (e.g., 'describe-parameters')
+        parameter_name: Parameter to check (e.g., 'Filters')
+        session: Optional boto3 session
+
+    Returns:
+        str or None: Parameter type ('list', 'string', 'structure', 'integer', etc.)
+                     or None if parameter not found or error occurs
+    """
+    try:
+        import botocore.session
+
+        from .case_utils import to_pascal_case
+
+        # Use botocore directly to avoid credential requirements
+        old_profile = os.environ.pop("AWS_PROFILE", None)
+        try:
+            botocore_session = botocore.session.Session()
+            service_model = botocore_session.get_service_model(service)
+
+            # Convert action to PascalCase for operation model lookup
+            # Handle kebab-case first (describe-snapshots -> DescribeSnapshots)
+            if "-" in action:
+                pascal_action = to_pascal_case(action.replace("-", "_"))
+            else:
+                pascal_action = to_pascal_case(action)
+
+            # Get operation model
+            operation_model = service_model.operation_model(pascal_action)
+
+            if (
+                operation_model.input_shape
+                and parameter_name in operation_model.input_shape.members
+            ):
+                param_shape = operation_model.input_shape.members[parameter_name]
+                return param_shape.type_name
+
+            return None
+        finally:
+            if old_profile is not None:
+                os.environ["AWS_PROFILE"] = old_profile
+
+    except Exception as e:
+        debug_print(f"Could not determine parameter type for {parameter_name}: {e}")
+        return None
+
+
 # CLI flag constants
 SIMPLE_FLAGS = ["-d", "--debug", "-j", "--json", "-k", "--keys", "--allow-unsafe"]
 VALUE_FLAGS = ["--region", "--profile", "-p", "--parameter", "-i", "--input"]
-
-
-def _extract_flags_from_args(remaining_args):
-    """Extract CLI flags from remaining arguments."""
-    flags = []
-    non_flags = []
-    i = 0
-    while i < len(remaining_args):
-        arg = remaining_args[i]
-        if arg in SIMPLE_FLAGS:
-            flags.append(arg)
-        elif arg in VALUE_FLAGS:
-            flags.append(arg)
-            # Check for value after the flag
-            if i + 1 < len(remaining_args):
-                next_arg = remaining_args[i + 1]
-                if not next_arg.startswith("-"):
-                    flags.append(next_arg)
-                    i += 1
-        else:
-            non_flags.append(arg)
-        i += 1
-    return flags, non_flags
-
-
-def _preserve_parsed_flags(args):
-    """Preserve flags that were already parsed."""
-    flags = []
-    if args.debug:
-        flags.append("-d")
-    if getattr(args, "json", False):
-        flags.append("-j")
-    if getattr(args, "keys", False):
-        flags.append("-k")
-    if getattr(args, "allow_unsafe", False):
-        flags.append("--allow-unsafe")
-    if getattr(args, "region", None):
-        flags.extend(["--region", args.region])
-    if getattr(args, "profile", None):
-        flags.extend(["--profile", args.profile])
-    return flags
 
 
 def service_completer(prefix, parsed_args, **kwargs):
@@ -334,23 +343,43 @@ def determine_column_filters(column_filters, service, action):
     """Determine which column filters to apply - user specified or defaults"""
     if column_filters:
         debug_print(f"Using user-specified column filters: {column_filters}")  # pragma: no mutate
-        return column_filters
+        column_filters_to_use = column_filters
+    else:
+        # Check for defaults - normalize action name for lookup
+        from .utils import normalize_action_name
 
-    # Check for defaults - normalize action name for lookup
-    from .utils import normalize_action_name
+        normalized_action = normalize_action_name(action)
+        default_columns = apply_default_filters(service, normalized_action)
+        if default_columns:
+            debug_print(
+                f"Applying default column filters for "
+                f"{service}.{normalized_action}: {default_columns}"
+            )  # pragma: no mutate
+            column_filters_to_use = default_columns
+        else:
+            debug_print(
+                f"No column filters (user or default) for {service}.{normalized_action}"
+            )  # pragma: no mutate
+            column_filters_to_use = None
 
-    normalized_action = normalize_action_name(action)
-    default_columns = apply_default_filters(service, normalized_action)
-    if default_columns:
-        debug_print(
-            f"Applying default column filters for {service}.{normalized_action}: {default_columns}"
-        )  # pragma: no mutate
-        return default_columns
+    # Validate column filters against response shapes (MANDATORY)
+    if column_filters_to_use and service and action:
+        from .filter_validator import FilterValidator
 
-    debug_print(
-        f"No column filters (user or default) for {service}.{normalized_action}"
-    )  # pragma: no mutate
-    return None
+        validator = FilterValidator()
+        validation_results = validator.validate_columns(service, action, column_filters_to_use)
+
+        # Print warnings for invalid filters (but don't fail - user might know better)
+        errors = [(filter_pattern, error) for filter_pattern, error in validation_results if error]
+        if errors:
+            print(
+                "⚠️  WARNING: Some column filters may not match response fields:",
+                file=sys.stderr,
+            )
+            for filter_pattern, error in errors:
+                print(f"  - {error}", file=sys.stderr)
+
+    return column_filters_to_use
 
 
 def _has_prefix_matches(current_input, available_operations):
@@ -366,28 +395,59 @@ def find_hint_function(hint, service, session=None):
     """Find the best matching AWS function based on hint string.
 
     Args:
-        hint: The hint string (e.g., "desc-clus" or "desc-clus:clusterarn")
+        hint: The hint string with new formats:
+              - "function" - just function hint
+              - "function:field" - function + field hint
+              - "function:field:N" - function + field + limit
+              - ":field" - just field hint (use inferred function)
+              - ":field:N" - field + limit (use inferred function)
+              - "::N" - just limit (use inferred function, default field)
         service: AWS service name
         session: Optional boto3 session
 
     Returns:
-        tuple: (selected_function, field_hint, alternatives) or (None, None, []) if no matches
-        where field_hint is the suggested field to extract (or None for default heuristic)
+        tuple: (selected_function, field_hint, limit, alternatives)
+               - selected_function: None if no function specified
+               - field_hint: None for default heuristic, string for specific field
+               - limit: Integer limit or None for unlimited
+               - alternatives: List of alternative function matches
     """
 
     if not hint or not service:
-        return None, None, []
+        return None, None, None, []
 
-    # Parse hint format: function:field or just function
-    function_hint = hint
+    # Parse hint format: function:field:N with support for empty parts
+    parts = hint.split(":", 2)  # Split into at most 3 parts
+    function_hint = None
     field_hint = None
-    if ":" in hint:
-        function_hint, field_hint = hint.split(":", 1)
-        field_hint = field_hint.strip() if field_hint else None
+    limit = None
 
-    function_hint = function_hint.strip()
+    debug_print(f"Parsing hint '{hint}' into parts: {parts}")  # pragma: no mutate
+
+    # Position-based parsing: part[0]=function, part[1]=field, part[2]=limit
+    if len(parts) >= 1:
+        function_hint = parts[0].strip() if parts[0].strip() else None
+        if function_hint:
+            debug_print(f"Part 0 is function hint: {function_hint}")  # pragma: no mutate
+
+    if len(parts) >= 2:
+        field_hint = parts[1].strip() if parts[1].strip() else None
+        if field_hint:
+            debug_print(f"Part 1 is field hint: {field_hint}")  # pragma: no mutate
+
+    if len(parts) >= 3:
+        limit_str = parts[2].strip()
+        if limit_str and limit_str.isdigit():
+            limit = int(limit_str)
+            debug_print(f"Part 2 is limit: {limit}")  # pragma: no mutate
+        elif limit_str:
+            debug_print(
+                f"Part 2 '{limit_str}' is not a valid limit (must be numeric)"
+            )  # pragma: no mutate
+
     if not function_hint:
-        return None, None, []
+        debug_print("No function hint provided, will use inferred function")  # pragma: no mutate
+        return None, field_hint, limit, []
 
     try:
         # Get all operations for the service first
@@ -410,7 +470,7 @@ def find_hint_function(hint, service, session=None):
         available_operations = get_service_valid_operations(service, all_operations)
 
         if not available_operations:
-            return None, None, []
+            return None, None, None, []
 
         # Create mapping of CLI format to original operation names
         operation_mapping = {}
@@ -425,7 +485,7 @@ def find_hint_function(hint, service, session=None):
                 matched_cli_names.append(cli_op)
 
         if not matched_cli_names:
-            return None, None, []
+            return None, None, None, []
 
         # Sort by preference: shortest first, then alphabetical
         matched_cli_names.sort(key=lambda x: (len(x), x))
@@ -438,10 +498,10 @@ def find_hint_function(hint, service, session=None):
         for cli_name in matched_cli_names[1:]:
             alternative_operations.append(operation_mapping[cli_name])
 
-        return selected_operation, field_hint, alternative_operations
+        return selected_operation, field_hint, limit, alternative_operations
 
     except Exception:
-        return None, None, []
+        return None, None, None, []
 
 
 def _enhanced_completion_validator(completion_candidate, current_input):
@@ -527,157 +587,6 @@ def action_completer(prefix, parsed_args, **kwargs):
         return []
 
 
-class CLIArgumentProcessor:
-    """Handles CLI argument processing and validation"""
-
-    def __init__(self) -> None:
-        """Initialize CLI argument processor."""
-        self.parser: Optional[argparse.ArgumentParser] = None
-        self.args: Optional[argparse.Namespace] = None
-        self.remaining: Optional[List[str]] = None
-
-    def create_parser(self) -> argparse.ArgumentParser:
-        """Create and configure the argument parser"""
-        self.parser = argparse.ArgumentParser(
-            description=(
-                "Query AWS APIs with flexible filtering and automatic parameter resolution"
-            ),  # pragma: no mutate
-            formatter_class=argparse.RawDescriptionHelpFormatter,
-            epilog="""  # pragma: no mutate
-Examples:
-  awsquery ec2 describe_instances prod web -- Tags.Name State InstanceId
-  awsquery s3 list_buckets backup
-  awsquery ec2 describe_instances  (shows available keys)
-  awsquery cloudformation describe-stack-events prod -- Created -- StackName (multi-level)
-  awsquery ec2 describe_instances --keys  (show all keys)
-  awsquery cloudformation describe-stack-resources workers --keys -- EKS (multi-level keys)
-  awsquery ec2 describe_instances --debug  (enable debug output)
-  awsquery cloudformation describe-stack-resources workers --debug -- EKS (debug multi-level)
-        """,
-        )
-
-        self.parser.add_argument(
-            "-j",
-            "--json",
-            action="store_true",
-            help="Output results in JSON format instead of table",  # pragma: no mutate
-        )
-        self.parser.add_argument(
-            "-k",
-            "--keys",
-            action="store_true",
-            help="Show all available keys for the command",  # pragma: no mutate
-        )
-        self.parser.add_argument(
-            "-d", "--debug", action="store_true", help="Enable debug output"
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "--region", help="AWS region to use for requests"
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "--profile", help="AWS profile to use for requests"
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "-p",
-            "--parameter",
-            action="append",
-            help="Add parameter to AWS API call (e.g., -p InstanceIds=i-123,i-456)",
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "-i",
-            "--input",
-            help="Hint for multi-step call function selection (e.g., -i desc-clus)",
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "--allow-unsafe",
-            action="store_true",
-            help="Allow potentially unsafe operations without prompting",  # pragma: no mutate
-        )
-        self.parser.add_argument(
-            "service", nargs="?", help="AWS service name (e.g., ec2, s3)"
-        )  # pragma: no mutate
-        self.parser.add_argument(
-            "action", nargs="?", help="AWS action/operation name"
-        )  # pragma: no mutate
-
-        # Enable autocompletion
-        argcomplete.autocomplete(self.parser)
-
-        return self.parser
-
-    def parse_initial_args(self) -> Tuple[argparse.Namespace, List[str]]:
-        """Parse initial arguments and handle reordering if needed"""
-        if not self.parser:
-            self.create_parser()
-
-        if self.parser is None:
-            raise RuntimeError("Failed to create argument parser")
-
-        self.args, self.remaining = self.parser.parse_known_args()
-
-        if self.remaining:
-            self._reorder_arguments()
-
-        return self.args, self.remaining
-
-    def _reorder_arguments(self) -> None:
-        """Reorder arguments to handle flags mixed with positional args"""
-        if self.args is None or self.remaining is None:
-            raise RuntimeError("Arguments must be parsed before reordering")
-
-        # Check if -- separator was in the original command line
-        has_separator = "--" in sys.argv
-        separator_in_remaining = "--" in self.remaining
-
-        # Re-parse with the full argument list to catch all flags
-        reordered_argv = [sys.argv[0]]  # Program name
-        flags = []
-        non_flags = []
-
-        # Preserve flags that were already successfully parsed
-        if self.args.debug:
-            flags.append("-d")
-        if getattr(self.args, "json", False):
-            flags.append("-j")
-        if getattr(self.args, "keys", False):
-            flags.append("-k")
-        if getattr(self.args, "allow_unsafe", False):
-            flags.append("--allow-unsafe")
-        if getattr(self.args, "region", None):
-            flags.extend(["--region", self.args.region])
-        if getattr(self.args, "profile", None):
-            flags.extend(["--profile", self.args.profile])
-        if getattr(self.args, "parameter", None):
-            for param in self.args.parameter:
-                flags.extend(["-p", param])
-        if getattr(self.args, "input", None):
-            flags.extend(["-i", self.args.input])
-
-        # Process remaining arguments based on separator presence
-        if has_separator and not separator_in_remaining:
-            extracted_flags, non_flags = _process_remaining_args_after_separator(self.remaining)
-            flags.extend(extracted_flags)
-            if non_flags and "--" not in non_flags:
-                non_flags.insert(0, "--")
-        else:
-            extracted_flags, non_flags = _process_remaining_args(self.remaining)
-            flags.extend(extracted_flags)
-
-        # Rebuild argv with proper order
-        reordered_argv.extend(flags)
-        if self.args.service:
-            reordered_argv.append(self.args.service)
-        if self.args.action:
-            reordered_argv.append(self.args.action)
-
-        # Re-parse with reordered arguments
-        if self.parser is None:
-            raise RuntimeError("Parser not available for reordering")
-
-        self.args, _ = self.parser.parse_known_args(reordered_argv[1:])
-        self.remaining = non_flags
-
-
 def main():
     parser = argparse.ArgumentParser(
         description=(
@@ -686,14 +595,28 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""  # pragma: no mutate
 Examples:
-  awsquery ec2 describe_instances prod web -- Tags.Name State InstanceId
-  awsquery s3 list_buckets backup
-  awsquery ec2 describe_instances  (shows available keys)
-  awsquery cloudformation describe-stack-events prod -- Created -- StackName (multi-level)
-  awsquery ec2 describe_instances --keys  (show all keys)
-  awsquery cloudformation describe-stack-resources workers --keys -- EKS (multi-level keys)
-  awsquery ec2 describe_instances --debug  (enable debug output)
-  awsquery cloudformation describe-stack-resources workers --debug -- EKS (debug multi-level)
+  awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId
+  awsquery s3 list-buckets backup
+  awsquery cloudformation describe-stack-events prod -- Created StackName
+  awsquery ssm get-parameters -i ::5  (limit to 5 parameters)
+  awsquery elbv2 describe-tags -i desc-clus:arn prod  (function + field hint)
+  awsquery ec2 describe-instances -p MaxResults=10 prod  (parameter propagation)
+  awsquery ec2 describe-instances --keys  (show all keys)
+  awsquery ec2 describe-instances --debug  (enable debug output)
+
+Autocomplete Setup:
+  Bash:
+    eval "$(register-python-argcomplete awsquery)"
+
+  Zsh:
+    autoload -U bashcompinit && bashcompinit
+    eval "$(register-python-argcomplete awsquery)"
+
+  Fish:
+    register-python-argcomplete --shell fish awsquery | source
+
+  Add the appropriate command to your shell config (~/.bashrc, ~/.zshrc, etc.)
+  For more details: https://github.com/flomotlik/awsquery#enable-shell-autocomplete
         """,
     )
 
@@ -718,12 +641,15 @@ Examples:
         "-p",
         "--parameter",
         action="append",
-        help="Add parameter to AWS API call (e.g., -p InstanceIds=i-123,i-456)",
+        help="Parameter for AWS API call, propagates to list operations (e.g., -p MaxResults=10)",
     )  # pragma: no mutate
     parser.add_argument(
         "-i",
         "--input",
-        help="Hint for multi-step call function selection (e.g., -i desc-clus)",
+        help=(
+            "Multi-step hints: function/field/limit "
+            "(e.g., 'desc-clus', ':arn', '::5', 'desc-clus:arn:5')"
+        ),
     )  # pragma: no mutate
     parser.add_argument(
         "--allow-unsafe",
@@ -818,8 +744,8 @@ Examples:
     # But exclude any flags that were already processed
     filter_argv = _build_filter_argv(args, remaining)
 
-    base_command, resource_filters, value_filters, column_filters = (
-        parse_multi_level_filters_for_mode(filter_argv, mode="single")
+    _, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
+        filter_argv, mode="single"
     )
 
     if not args.service or not args.action:
@@ -844,44 +770,112 @@ Examples:
                 print(f"ERROR: Invalid parameter format '{param_str}': {e}", file=sys.stderr)
                 sys.exit(1)
 
-    debug_print(f"DEBUG: Parsed parameters: {parsed_parameters}")  # pragma: no mutate
+    debug_print(
+        f"DEBUG: Parsed parameters (before type correction): {parsed_parameters}"
+    )  # pragma: no mutate
+
+    # Validate and correct parameter types
+    if parsed_parameters:
+        corrected_parameters = {}
+        for key, value in parsed_parameters.items():
+            expected_type = get_parameter_type(service, action, key, session=None)
+
+            if expected_type == "list" and not isinstance(value, list):
+                # Auto-wrap single values in list
+                debug_print(
+                    f"Auto-wrapping parameter '{key}' in list "
+                    f"(expected type: list, got: {type(value).__name__})"
+                )
+                corrected_parameters[key] = [value]
+            else:
+                corrected_parameters[key] = value
+
+        parsed_parameters = corrected_parameters
+
+    debug_print(
+        f"DEBUG: Parsed parameters (after type correction): {parsed_parameters}"
+    )  # pragma: no mutate
+
+    def _execute_multi_level_workflow(
+        service,
+        action,
+        filter_argv,
+        session,
+        hint_function,
+        hint_field,
+        hint_limit,
+        parsed_parameters,
+    ):
+        """Helper to execute multi-level call with filter parsing."""
+        _, multi_resource_filters, multi_value_filters, multi_column_filters = (
+            parse_multi_level_filters_for_mode(filter_argv, mode="multi")
+        )
+        final_multi_column_filters = determine_column_filters(multi_column_filters, service, action)
+        return execute_multi_level_call(
+            service,
+            action,
+            multi_resource_filters,
+            multi_value_filters,
+            final_multi_column_filters,
+            session,
+            hint_function,
+            hint_field,
+            limit=hint_limit,
+            user_parameters=parsed_parameters,
+        )
 
     # Process -i hint if provided
     hint_function = None
     hint_field = None
+    hint_limit = None
     hint_alternatives = []
     if args.input:
-        hint_function, hint_field, hint_alternatives = find_hint_function(
+        hint_function, hint_field, hint_limit, hint_alternatives = find_hint_function(
             args.input, service, session=None
         )
         if hint_function:
             # Convert hint function to CLI format for display
-            from .utils import pascal_to_kebab_case
-
-            hint_function_cli = pascal_to_kebab_case(hint_function)
+            hint_function_cli = to_kebab_case(hint_function)
+            hint_parts = []
+            hint_parts.append(f"function '{hint_function_cli}'")
             if hint_field:
-                print(
-                    f"Using hint function '{hint_function_cli}' with field '{hint_field}' "
-                    f"for multi-step calls",
-                    file=sys.stderr,
-                )
-            else:
-                print(
-                    f"Using hint function '{hint_function_cli}' for multi-step calls",
-                    file=sys.stderr,
-                )
+                hint_parts.append(f"field '{hint_field}'")
+            if hint_limit is not None:
+                hint_parts.append(f"limit {hint_limit}")
+
+            print(
+                f"Using hint {' with '.join(hint_parts)} for multi-step calls",
+                file=sys.stderr,
+            )
             if hint_alternatives:
                 # Convert alternatives to CLI format for display
-                cli_alternatives = [pascal_to_kebab_case(alt) for alt in hint_alternatives]
+                cli_alternatives = [to_kebab_case(alt) for alt in hint_alternatives]
                 print(f"Alternative options: {', '.join(cli_alternatives)}", file=sys.stderr)
             debug_print(
-                f"DEBUG: Hint '{args.input}' matched function: {hint_function}"
+                f"DEBUG: Hint '{args.input}' matched function: {hint_function}, "
+                f"field: {hint_field}, limit: {hint_limit}"
             )  # pragma: no mutate
             if hint_alternatives:
-                cli_alternatives_debug = [pascal_to_kebab_case(alt) for alt in hint_alternatives]
+                cli_alternatives_debug = [to_kebab_case(alt) for alt in hint_alternatives]
                 debug_print(
                     f"DEBUG: Alternative matches: {', '.join(cli_alternatives_debug)}"
                 )  # pragma: no mutate
+        elif hint_field or hint_limit is not None:
+            # No function hint but we have field or limit
+            hint_parts = []
+            if hint_field:
+                hint_parts.append(f"field '{hint_field}'")
+            if hint_limit is not None:
+                hint_parts.append(f"limit {hint_limit}")
+            print(
+                f"Using hint {' with '.join(hint_parts)} for multi-step calls "
+                f"(function will be inferred)",
+                file=sys.stderr,
+            )
+            debug_print(
+                f"DEBUG: Hint '{args.input}' - field: {hint_field}, limit: {hint_limit}, "
+                f"function will be inferred"
+            )  # pragma: no mutate
         else:
             print(
                 f"Warning: Hint '{args.input}' did not match any available functions",
@@ -936,6 +930,8 @@ Examples:
                     session=session,
                     hint_function=hint_function,
                     hint_field=hint_field,
+                    limit=hint_limit,
+                    user_parameters=parsed_parameters,
                 )
 
             result = show_keys_from_result(call_result)
@@ -946,43 +942,71 @@ Examples:
             sys.exit(1)
 
     try:
-        debug_print("Using single-level execution first")  # pragma: no mutate
-        response = execute_aws_call(service, action, parameters=parsed_parameters, session=session)
+        requirements = check_parameter_requirements(service, action, parsed_parameters, session)
 
-        if isinstance(response, dict) and "validation_error" in response:
+        if requirements["needs_params"]:
             debug_print(
-                "ValidationError detected in single-level call, switching to multi-level"
+                f"Preemptive multi-step: missing required parameters "
+                f"{requirements['missing_required']}"
             )  # pragma: no mutate
-            _, multi_resource_filters, multi_value_filters, multi_column_filters = (
-                parse_multi_level_filters_for_mode(filter_argv, mode="multi")
-            )
             debug_print(
-                f"Re-parsed filters for multi-level - "
-                f"Resource: {multi_resource_filters}, Value: {multi_value_filters}, "
-                f"Column: {multi_column_filters}"
+                "Skipping initial API call, going directly to multi-level resolution"
             )  # pragma: no mutate
-            # Apply defaults for multi-level if no user columns specified
-            final_multi_column_filters = determine_column_filters(
-                multi_column_filters, service, action
-            )
-            filtered_resources = execute_multi_level_call(
+
+            filtered_resources = _execute_multi_level_workflow(
                 service,
                 action,
-                multi_resource_filters,
-                multi_value_filters,
-                final_multi_column_filters,
+                filter_argv,
                 session,
                 hint_function,
                 hint_field,
+                hint_limit,
+                parsed_parameters,
             )
             debug_print(
                 f"Multi-level call completed with {len(filtered_resources)} resources"
             )  # pragma: no mutate
-        else:
-            resources = flatten_response(response)
-            debug_print(f"Total resources extracted: {len(resources)}")  # pragma: no mutate
 
+        elif requirements["conditional"] and not parsed_parameters:
+            print(f"Note: {requirements['conditional']}", file=sys.stderr)
+            print("Attempting to list all resources...", file=sys.stderr)
+
+            debug_print(
+                "Using single-level execution (conditional requirements noted)"
+            )  # pragma: no mutate
+            response = execute_aws_call(
+                service, action, parameters=parsed_parameters, session=session
+            )
+
+            resources = flatten_response(response, service, action)
+            debug_print(f"Total resources extracted: {len(resources)}")  # pragma: no mutate
             filtered_resources = filter_resources(resources, value_filters)
+
+        else:
+            debug_print("Using single-level execution")  # pragma: no mutate
+            response = execute_aws_call(
+                service, action, parameters=parsed_parameters, session=session
+            )
+
+            if isinstance(response, dict) and "validation_error" in response:
+                debug_print(
+                    "Unexpected validation error, switching to multi-level"
+                )  # pragma: no mutate
+                filtered_resources = _execute_multi_level_workflow(
+                    service,
+                    action,
+                    filter_argv,
+                    session,
+                    hint_function,
+                    hint_field,
+                    hint_limit,
+                    parsed_parameters,
+                )
+            else:
+                resources = flatten_response(response, service, action)
+                debug_print(f"Total resources extracted: {len(resources)}")  # pragma: no mutate
+
+                filtered_resources = filter_resources(resources, value_filters)
 
         if final_column_filters:
             for filter_word in final_column_filters:
