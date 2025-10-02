@@ -141,8 +141,8 @@ awsquery [-j|--json] [-k|--keys] [-d|--debug] [-p PARAM] [-i HINT] [--region REG
 - **-j, --json**: Output results in JSON format instead of table
 - **-k, --keys**: Show all available keys for the command
 - **-d, --debug**: Enable debug output for troubleshooting
-- **-p, --parameter PARAM**: Pass parameters directly to AWS API (key=value format)
-- **-i, --input HINT**: Hint for multi-step function selection (e.g., "desc-clus" or "desc-clus:fieldname")
+- **-p, --parameter PARAM**: Pass parameters directly to AWS API (key=value format, propagates to list operations)
+- **-i, --input HINT**: Multi-step control with function/field/limit hints (e.g., "desc-clus", ":arn", "::5", "desc-clus:arn:10")
 - **--region REGION**: AWS region to use for requests (e.g., us-west-2)
 - **--profile PROFILE**: AWS profile to use from ~/.aws/credentials
 
@@ -239,6 +239,21 @@ awsquery ecs describe-services -i desc-task web-service
 # Field-specific extraction with function:field format
 awsquery elbv2 describe-tags -i desc-clus:clusterarn prod  # Extract ClusterArn specifically
 awsquery eks describe-fargate-profile -i desc-clus:rolearn  # Extract RoleArn instead of default
+
+# Limit results from multi-step calls (default is 10)
+awsquery ssm get-parameters -i ::5  # Limit to 5 parameters
+awsquery ec2 describe-network-interfaces -i ::20  # Limit to 20 interfaces
+awsquery ec2 describe-network-interfaces -i ::0  # Unlimited (remove default limit)
+
+# Field override without function hint (uses inferred function)
+awsquery ecs describe-tasks -i :clusterarn  # Extract ClusterArn field
+awsquery rds describe-db-clusters -i :endpoint  # Extract Endpoint field
+
+# Combined: field and limit
+awsquery elbv2 describe-tags -i :arn:3  # Extract ARN field, limit to 3 resources
+
+# Full syntax: function, field, and limit
+awsquery elbv2 describe-tags -i desc-clus:clusterarn:5  # Use desc-clus, extract ClusterArn, limit to 5
 ```
 
 ## Configuration
@@ -450,7 +465,7 @@ awsquery ssm describe-parameters -p ParameterFilters=Key=Name,Option=Contains,Va
 
 ### Hint-Based Resolution (`-i`/`--input`)
 
-Guide multi-step parameter resolution with function hints:
+Guide multi-step parameter resolution with function/field/limit hints:
 
 ```bash
 # Basic function hint - guides which list operation to use
@@ -459,14 +474,30 @@ awsquery cloudformation describe-stack-resources -i list-sta production
 # Field extraction hint - specify exact field to extract
 awsquery elbv2 describe-tags -i desc-clus:clusterarn prod
 
-# Override default field selection
-awsquery eks describe-fargate-profile -i desc-clus:rolearn my-cluster
+# Result limiting - control how many resources are processed (default: 10)
+awsquery ssm get-parameters -i ::5  # Limit to 5 parameters
+awsquery ec2 describe-instances -i ::20  # Limit to 20 instances
+awsquery s3api list-objects -i ::0  # Unlimited (remove default limit)
+
+# Field override without function (uses inferred function)
+awsquery ecs describe-tasks -i :clusterarn  # Extract ClusterArn field
+
+# Combined hints - function:field:limit
+awsquery elbv2 describe-tags -i desc-clus:clusterarn:5  # Function + field + limit
+awsquery rds describe-db-snapshots -i :arn:10  # Field + limit (inferred function)
 ```
+
+**Hint Syntax:** `[function]:[field]:[limit]`
+- **function**: Operation to use (e.g., "desc-clus", smart matching enabled)
+- **field**: Specific field to extract (e.g., "arn", "clusterarn")
+- **limit**: Max resources to process (e.g., "5", "10", "0" for unlimited)
+- Any component can be omitted (e.g., "::5" for limit only, ":arn" for field only)
 
 **Key Features:**
 - **Smart matching**: "desc-inst" matches "describe-instances"
-- **Field targeting**: Use `function:field` to extract specific fields
-- **Automatic fallback**: Uses standard heuristics when no field specified
+- **Field targeting**: Override default field extraction
+- **Result limiting**: Default 10 items, configurable with ::N syntax
+- **Flexible syntax**: Mix and match function/field/limit as needed
 
 ### Filtering Strategies
 

@@ -100,7 +100,7 @@ class TestHelpOutputAutocomplete:
         )
         assert "awsquery s3 list-buckets backup" in result.stdout
         assert (
-            "awsquery cloudformation describe-stack-events prod -- Created -- StackName"
+            "awsquery cloudformation describe-stack-events prod -- Created StackName"
             in result.stdout
         )
 

@@ -610,12 +610,12 @@ class CLIArgumentProcessor:
 Examples:
   awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId
   awsquery s3 list-buckets backup
-  awsquery ec2 describe-instances  (shows available keys)
-  awsquery cloudformation describe-stack-events prod -- Created -- StackName (multi-level)
+  awsquery cloudformation describe-stack-events prod -- Created StackName
+  awsquery ssm get-parameters -i ::5  (limit to 5 parameters)
+  awsquery elbv2 describe-tags -i desc-clus:arn prod  (function + field hint)
+  awsquery ec2 describe-instances -p MaxResults=10 prod  (parameter propagation)
   awsquery ec2 describe-instances --keys  (show all keys)
-  awsquery cloudformation describe-stack-resources workers --keys -- EKS (multi-level keys)
   awsquery ec2 describe-instances --debug  (enable debug output)
-  awsquery cloudformation describe-stack-resources workers --debug -- EKS (debug multi-level)
 
 Autocomplete Setup:
   Bash:
@@ -658,12 +658,12 @@ Autocomplete Setup:
             "-p",
             "--parameter",
             action="append",
-            help="Add parameter to AWS API call (e.g., -p InstanceIds=i-123,i-456)",
+            help="Parameter for AWS API call, propagates to list operations (e.g., -p MaxResults=10)",
         )  # pragma: no mutate
         self.parser.add_argument(
             "-i",
             "--input",
-            help="Hint for multi-step call function selection (e.g., -i desc-clus)",
+            help="Multi-step hints: function/field/limit (e.g., 'desc-clus', ':arn', '::5', 'desc-clus:arn:5')",
         )  # pragma: no mutate
         self.parser.add_argument(
             "--allow-unsafe",
@@ -765,12 +765,12 @@ def main():
 Examples:
   awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId
   awsquery s3 list-buckets backup
-  awsquery ec2 describe-instances  (shows available keys)
-  awsquery cloudformation describe-stack-events prod -- Created -- StackName (multi-level)
+  awsquery cloudformation describe-stack-events prod -- Created StackName
+  awsquery ssm get-parameters -i ::5  (limit to 5 parameters)
+  awsquery elbv2 describe-tags -i desc-clus:arn prod  (function + field hint)
+  awsquery ec2 describe-instances -p MaxResults=10 prod  (parameter propagation)
   awsquery ec2 describe-instances --keys  (show all keys)
-  awsquery cloudformation describe-stack-resources workers --keys -- EKS (multi-level keys)
   awsquery ec2 describe-instances --debug  (enable debug output)
-  awsquery cloudformation describe-stack-resources workers --debug -- EKS (debug multi-level)
 
 Autocomplete Setup:
   Bash:
@@ -809,12 +809,12 @@ Autocomplete Setup:
         "-p",
         "--parameter",
         action="append",
-        help="Add parameter to AWS API call (e.g., -p InstanceIds=i-123,i-456)",
+        help="Parameter for AWS API call, propagates to list operations (e.g., -p MaxResults=10)",
     )  # pragma: no mutate
     parser.add_argument(
         "-i",
         "--input",
-        help="Hint for multi-step call function selection (e.g., -i desc-clus)",
+        help="Multi-step hints: function/field/limit (e.g., 'desc-clus', ':arn', '::5', 'desc-clus:arn:5')",
     )  # pragma: no mutate
     parser.add_argument(
         "--allow-unsafe",
