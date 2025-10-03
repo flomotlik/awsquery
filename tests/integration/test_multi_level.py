@@ -1410,7 +1410,7 @@ class TestMultiLevelCallIssues:
 
         # Should inform user about the list operation being called
         assert (
-            "Calling list_clusters" in captured.err
+            "Calling eks.list_clusters" in captured.err
         ), "User-friendly message about list operation should be present"
 
         # Should inform user about number of resources found
@@ -1607,7 +1607,7 @@ class TestCoreErrorScenariosBasic:
 class TestUtilsIntegration:
     """Integration tests for utils module functions in real scenarios."""
 
-    @patch("boto3.Session")
+    @patch("botocore.session.Session")
     def test_get_aws_services_integration(self, mock_session_class):
         """Test AWS service discovery with real boto3 session patterns."""
         from awsquery.utils import get_aws_services
@@ -1638,7 +1638,7 @@ class TestUtilsIntegration:
         mock_session_class.assert_called_once()
         mock_session.get_available_services.assert_called_once()
 
-    @patch("boto3.Session")
+    @patch("botocore.session.Session")
     def test_get_aws_services_session_failure(self, mock_session_class):
         """Test AWS service discovery when session creation fails."""
         from awsquery.utils import get_aws_services

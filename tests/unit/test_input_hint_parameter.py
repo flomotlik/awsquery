@@ -512,8 +512,11 @@ class TestFieldHintParsing:
             mock_ops.return_value = ["DescribeClusters", "ListClusters"]
 
             # Test function:field format
-            function, field, limit, alternatives = find_hint_function("desc-clus:clusterarn", "eks")
+            service, function, field, limit, alternatives = find_hint_function(
+                "desc-clus:clusterarn", "eks"
+            )
 
+            assert service is None
             assert function == "DescribeClusters"
             assert field == "clusterarn"
             assert isinstance(alternatives, list)
@@ -525,8 +528,9 @@ class TestFieldHintParsing:
             mock_ops.return_value = ["DescribeClusters", "ListClusters"]
 
             # Test function only format
-            function, field, limit, alternatives = find_hint_function("desc-clus", "eks")
+            service, function, field, limit, alternatives = find_hint_function("desc-clus", "eks")
 
+            assert service is None
             assert function == "DescribeClusters"
             assert field is None
             assert isinstance(alternatives, list)
@@ -538,8 +542,9 @@ class TestFieldHintParsing:
             mock_ops.return_value = ["DescribeClusters"]
 
             # Test empty field after colon
-            function, field, limit, alternatives = find_hint_function("desc-clus:", "eks")
+            service, function, field, limit, alternatives = find_hint_function("desc-clus:", "eks")
 
+            assert service is None
             assert function == "DescribeClusters"
             assert field is None
 
@@ -552,10 +557,11 @@ class TestFieldHintParsing:
             # Test multiple colons - with new format (function:field:limit)
             # "desc-clus:cluster:arn" parses as: function="desc-clus",
             # field="cluster", third="arn" (ignored as non-numeric)
-            function, field, limit, alternatives = find_hint_function(
+            service, function, field, limit, alternatives = find_hint_function(
                 "desc-clus:cluster:arn", "eks"
             )
 
+            assert service is None
             assert function == "DescribeClusters"
             assert field == "cluster"  # "arn" is ignored as it's not a valid limit
             assert limit is None  # "arn" is not numeric, so no limit is set
@@ -573,7 +579,8 @@ class TestFieldHintParsing:
             ]
 
             for hint in test_cases:
-                function, field, limit, alternatives = find_hint_function(hint, "eks")
+                service, function, field, limit, alternatives = find_hint_function(hint, "eks")
+                assert service is None
                 assert function == "DescribeClusters"
                 assert field == "clusterarn"
 
@@ -733,11 +740,12 @@ class TestFieldHintIntegration:
         with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
             mock_ops.return_value = ["DescribeClusters"]
 
-            function, field, limit, alternatives = find_hint_function(
+            service, function, field, limit, alternatives = find_hint_function(
                 "desc-clus:customfield", "eks"
             )
 
             # Should return field information for user feedback
+            assert service is None
             assert function == "DescribeClusters"
             assert field == "customfield"
 
@@ -787,8 +795,9 @@ class TestFieldHintErrorHandling:
 
             for hint in test_cases:
                 try:
-                    function, field, limit, alternatives = find_hint_function(hint, "eks")
+                    service, function, field, limit, alternatives = find_hint_function(hint, "eks")
                     # Should handle gracefully, returning None or valid values
+                    assert service is None or isinstance(service, str)
                     assert function is None or isinstance(function, str)
                     assert field is None or isinstance(field, str)
                     assert isinstance(alternatives, list)
@@ -877,7 +886,10 @@ class TestFieldHintErrorHandling:
             mock_ops.return_value = ["DescribeClusters", "ListClusters", "DescribeTargetGroups"]
 
             # 1. Parse the function:field hint
-            function, field, limit, alternatives = find_hint_function("desc-clus:rolearn", "eks")
+            service, function, field, limit, alternatives = find_hint_function(
+                "desc-clus:rolearn", "eks"
+            )
+            assert service is None
             assert function == "DescribeClusters"
             assert field == "rolearn"
 
@@ -992,3 +1004,85 @@ class TestHintImplementationReadiness:
         # Should include cluster-related operations
         cluster_ops = [op for op in operations if "cluster" in op.lower()]
         assert len(cluster_ops) > 0
+
+
+class TestCrossServiceHints:
+    def test_cross_service_hint_parsing(self):
+        from awsquery.cli import find_hint_function
+
+        with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
+            mock_ops.return_value = ["DescribeInstances", "DescribeInstanceTypes"]
+
+            service, function, field, limit, alternatives = find_hint_function(
+                "ec2:desc-inst", "elbv2"
+            )
+
+            assert service == "ec2"
+            assert function == "DescribeInstances"
+            assert field is None
+            assert limit is None
+            assert isinstance(alternatives, list)
+
+    def test_cross_service_with_field_and_limit(self):
+        from awsquery.cli import find_hint_function
+
+        with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
+            mock_ops.return_value = ["DescribeInstances", "DescribeInstanceTypes"]
+
+            service, function, field, limit, alternatives = find_hint_function(
+                "ec2:desc-inst:instanceid:10", "elbv2"
+            )
+
+            assert service == "ec2"
+            assert function == "DescribeInstances"
+            assert field == "instanceid"
+            assert limit == 10
+            assert isinstance(alternatives, list)
+
+    def test_backward_compatibility_no_service(self):
+        from awsquery.cli import find_hint_function
+
+        with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
+            mock_ops.return_value = ["DescribeInstances", "DescribeInstanceTypes"]
+
+            service, function, field, limit, alternatives = find_hint_function(
+                "desc-inst:field:10", "ec2"
+            )
+
+            assert service is None
+            assert function == "DescribeInstances"
+            assert field == "field"
+            assert limit == 10
+            assert isinstance(alternatives, list)
+
+    def test_invalid_service_name(self):
+        from awsquery.cli import find_hint_function
+
+        with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
+            mock_ops.return_value = []
+
+            service, function, field, limit, alternatives = find_hint_function(
+                "invalid-service:describe-something", "ec2"
+            )
+
+            assert service is None
+            assert function is None
+            assert field == "describe-something"
+            assert limit is None
+            assert alternatives == []
+
+    def test_cross_service_function_not_found(self):
+        from awsquery.cli import find_hint_function
+
+        with patch("awsquery.cli.get_service_valid_operations") as mock_ops:
+            mock_ops.return_value = ["DescribeInstances", "DescribeVolumes"]
+
+            service, function, field, limit, alternatives = find_hint_function(
+                "ec2:describe-nonexistent", "elbv2"
+            )
+
+            assert service == "ec2"
+            assert function is None
+            assert field is None
+            assert limit is None
+            assert alternatives == []
