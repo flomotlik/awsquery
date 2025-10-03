@@ -501,7 +501,7 @@ class TestErrorMessageImprovements:
 
         captured = capsys.readouterr()
         assert "-i/--input" in captured.err or "--input" in captured.err
-        assert "Example:" in captured.err
+        assert "Specify function:" in captured.err
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.infer_list_operation")

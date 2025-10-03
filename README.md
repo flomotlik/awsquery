@@ -29,7 +29,7 @@ the data you need during review, debugging or development.
 - **Tag Transformation**: Automatic conversion of AWS Tags list to key-value pairs for better readability
 - **Default Column Filters**: Configuration-based default columns for common AWS queries
 - **Parameter Passing**: Direct parameter passing to AWS APIs with `-p`/`--parameter` for advanced use cases
-- **Hint-Based Resolution**: Function selection hints with `-i`/`--input` for multi-step calls, including field extraction targeting
+- **Hint-Based Resolution**: Function selection hints with `-i`/`--input` for multi-step calls, including cross-service support and field extraction targeting
 
 ## Installation
 
@@ -142,7 +142,7 @@ awsquery [-j|--json] [-k|--keys] [-d|--debug] [-p PARAM] [-i HINT] [--region REG
 - **-k, --keys**: Show all available keys for the command
 - **-d, --debug**: Enable debug output for troubleshooting
 - **-p, --parameter PARAM**: Pass parameters directly to AWS API (key=value format, propagates to list operations)
-- **-i, --input HINT**: Multi-step control with function/field/limit hints (e.g., "desc-clus", ":arn", "::5", "desc-clus:arn:10")
+- **-i, --input HINT**: Multi-step control with cross-service support and function/field/limit hints (e.g., "ec2:desc-inst:instanceid", "desc-clus", ":arn", "::5")
 - **--region REGION**: AWS region to use for requests (e.g., us-west-2)
 - **--profile PROFILE**: AWS profile to use from ~/.aws/credentials
 
@@ -254,6 +254,30 @@ awsquery elbv2 describe-tags -i :arn:3  # Extract ARN field, limit to 3 resource
 
 # Full syntax: function, field, and limit
 awsquery elbv2 describe-tags -i desc-clus:clusterarn:5  # Use desc-clus, extract ClusterArn, limit to 5
+
+### Cross-Service Parameter Resolution
+
+# Use service prefixes to resolve parameters from different AWS services
+# Resolve EC2 instance IDs to use with SSM patch state queries
+awsquery ssm describe-instance-patch-states -i ec2:describe-instances:instanceid prod
+
+# Service-only hint: Let EC2 service auto-infer the operation
+awsquery ssm describe-instance-patch-states -i ec2 prod
+
+# Use S3 bucket names for CloudTrail event lookup
+awsquery cloudtrail lookup-events -i s3:list-buckets:name backup
+
+# Get IAM user names for access key queries
+awsquery iam list-access-keys -i iam:list-users:username:5
+
+# Cross-service with EKS clusters for ECS task definitions
+awsquery ecs describe-task-definition -i eks:describe-clusters:name prod-cluster
+
+# Combine cross-service with field extraction and limits
+awsquery autoscaling describe-auto-scaling-instances -i ec2:desc-inst:instanceid:10 prod
+
+# Service-only with field hint (operation auto-inferred)
+awsquery ssm describe-instance-patch-states -i ec2::instanceid prod
 ```
 
 ## Configuration
