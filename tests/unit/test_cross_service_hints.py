@@ -96,9 +96,7 @@ class TestServicePrefixParsing:
 
     def test_service_only_hint(self):
         """Test that just a service name (e.g., 'ec2') is recognized."""
-        hint_service, function, field, limit, alternatives = find_hint_function(
-            "ec2", "ssm"
-        )
+        hint_service, function, field, limit, alternatives = find_hint_function("ec2", "ssm")
 
         assert hint_service == "ec2"
         assert function is None
@@ -510,9 +508,7 @@ class TestCrossServiceIntegration:
 
     def test_service_only_cross_service(self):
         """Test service-only hint for cross-service resolution."""
-        hint_service, function, field, limit, alternatives = find_hint_function(
-            "ec2", "ssm"
-        )
+        hint_service, function, field, limit, alternatives = find_hint_function("ec2", "ssm")
 
         assert hint_service == "ec2"
         assert function is None

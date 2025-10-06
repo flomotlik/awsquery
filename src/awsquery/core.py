@@ -329,6 +329,7 @@ def _execute_multi_level_call_internal(
 
             if hint_function:
                 from .case_utils import to_kebab_case
+
                 hint_function_cli = to_kebab_case(hint_function)
                 print(
                     f"Using cross-service hint: {hint_service}:{hint_function_cli}",
@@ -336,7 +337,8 @@ def _execute_multi_level_call_internal(
                 )
             else:
                 print(
-                    f"Using service '{hint_service}' for parameter resolution (operation will be inferred)",
+                    f"Using service '{hint_service}' for parameter resolution "
+                    "(operation will be inferred)",
                     file=sys.stderr,
                 )
 
@@ -355,7 +357,9 @@ def _execute_multi_level_call_internal(
                 )
         else:
             # Infer operations from the hint_service (if provided) or current service
-            possible_operations = infer_list_operation(list_service, parameter_name, action, session)
+            possible_operations = infer_list_operation(
+                list_service, parameter_name, action, session
+            )
 
         list_response = None
         successful_operation = None
@@ -407,9 +411,19 @@ def _execute_multi_level_call_internal(
                 f"Suggestion: Use the -i/--input flag to specify a hint:",
                 file=sys.stderr,
             )
-            print(f"  Specify function: awsquery {service} {action} -i describe-param", file=sys.stderr)
-            print(f"  Use another service: awsquery {service} {action} -i ec2", file=sys.stderr)
-            print(f"  Cross-service with function: awsquery {service} {action} -i ec2:describe-instances", file=sys.stderr)
+            print(
+                f"  Specify function: awsquery {service} {action} -i describe-param",
+                file=sys.stderr,
+            )
+            print(
+                f"  Use another service: awsquery {service} {action} -i ec2",
+                file=sys.stderr,
+            )
+            print(
+                f"  Cross-service with function: "
+                f"awsquery {service} {action} -i ec2:describe-instances",
+                file=sys.stderr,
+            )
             print("", file=sys.stderr)
             print(f"Available operations for '{service}' can be viewed with:", file=sys.stderr)
             print(f"  aws {service} help", file=sys.stderr)

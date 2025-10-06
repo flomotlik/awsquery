@@ -133,6 +133,10 @@ def simplify_key(full_key):
 class _BotocoreSessionContext:
     """Context manager for botocore session with AWS_PROFILE cleanup."""
 
+    def __init__(self):
+        self.old_profile = None
+        self.session = None
+
     def __enter__(self):
         import botocore.session
 
