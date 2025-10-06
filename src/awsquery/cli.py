@@ -370,6 +370,58 @@ def _has_prefix_matches(current_input, available_operations):
     return any(op.lower().startswith(current_input_lower) for op in available_operations)
 
 
+def _parse_function_field_limit(parts):
+    """Parse parts array as function:field:limit format.
+
+    Args:
+        parts: List of string parts from split
+
+    Returns:
+        tuple: (function_hint, field_hint, limit)
+    """
+    function_hint = parts[0].strip() if parts[0].strip() else None
+    field_hint = None
+    limit = None
+
+    if len(parts) >= 2:
+        field_hint = parts[1].strip() if parts[1].strip() else None
+    if len(parts) >= 3:
+        limit_str = parts[2].strip()
+        if limit_str and limit_str.isdigit():
+            limit = int(limit_str)
+
+    return function_hint, field_hint, limit
+
+
+def _parse_with_service_prefix(parts, potential_service, available_services):
+    """Parse hint when first part might be a service name.
+
+    Args:
+        parts: List of string parts from split
+        potential_service: First part that might be service name
+        available_services: List of valid AWS service names
+
+    Returns:
+        tuple: (resolved_service, function_hint, field_hint, limit)
+    """
+    if potential_service not in available_services:
+        debug_print(f"'{potential_service}' is not a valid AWS service")  # pragma: no mutate
+        return None, *_parse_function_field_limit(parts)
+
+    # This is a service prefix
+    resolved_service = potential_service
+    debug_print(f"Detected service prefix: {resolved_service}")  # pragma: no mutate
+
+    # Re-parse remaining parts as function:field:limit
+    remaining = ":".join(parts[1:])
+    if not remaining:
+        return resolved_service, None, None, None
+
+    remaining_parts = remaining.split(":", 2)
+    function_hint, field_hint, limit = _parse_function_field_limit(remaining_parts)
+    return resolved_service, function_hint, field_hint, limit
+
+
 def find_hint_function(hint, service, session=None):
     """Find the best matching AWS function based on hint string.
 
@@ -397,66 +449,26 @@ def find_hint_function(hint, service, session=None):
         return None, None, None, None, []
 
     # Parse hint format: [service:]function:field:N with support for empty parts
-    # First, try to detect if there's a service prefix
-    parts = hint.split(":", 3)  # Split into at most 4 parts to handle service:func:field:limit
+    parts = hint.split(":", 3)
+    debug_print(f"Parsing hint '{hint}' into parts: {parts}")  # pragma: no mutate
 
     resolved_service = None
     function_hint = None
     field_hint = None
     limit = None
 
-    debug_print(f"Parsing hint '{hint}' into parts: {parts}")  # pragma: no mutate
-
-    # Step 1: Check if first part is a valid AWS service
+    # Check if first part is a valid AWS service
     if len(parts) >= 1 and parts[0].strip():
         potential_service = parts[0].strip().lower()
 
-        # Check if this looks like an AWS service name
         try:
             available_services = get_aws_services()
-
-            if potential_service in available_services:
-                # This is a service prefix!
-                resolved_service = potential_service
-                debug_print(f"Detected service prefix: {resolved_service}")  # pragma: no mutate
-
-                # Re-parse remaining parts as function:field:limit
-                remaining = ":".join(parts[1:])
-                if remaining:
-                    remaining_parts = remaining.split(":", 2)
-                    if len(remaining_parts) >= 1:
-                        function_hint = (
-                            remaining_parts[0].strip() if remaining_parts[0].strip() else None
-                        )
-                    if len(remaining_parts) >= 2:
-                        field_hint = (
-                            remaining_parts[1].strip() if remaining_parts[1].strip() else None
-                        )
-                    if len(remaining_parts) >= 3:
-                        limit_str = remaining_parts[2].strip()
-                        if limit_str and limit_str.isdigit():
-                            limit = int(limit_str)
-            else:
-                # Not a service, treat entire hint as function:field:limit
-                debug_print(
-                    f"'{potential_service}' is not a valid AWS service"
-                )  # pragma: no mutate
-                function_hint = parts[0].strip() if parts[0].strip() else None
-                if len(parts) >= 2:
-                    field_hint = parts[1].strip() if parts[1].strip() else None
-                if len(parts) >= 3:
-                    limit_str = parts[2].strip()
-                    if limit_str and limit_str.isdigit():
-                        limit = int(limit_str)
+            resolved_service, function_hint, field_hint, limit = _parse_with_service_prefix(
+                parts, potential_service, available_services
+            )
         except Exception:
             # If we can't check services, treat as function:field:limit format
-            function_hint = parts[0].strip() if parts[0].strip() else None
-            if len(parts) >= 2:
-                field_hint = parts[1].strip() if parts[1].strip() else None
-            if len(parts) >= 3:
-                limit_str = parts[2].strip()
-                if limit_str and limit_str.isdigit():
-                    limit = int(limit_str)
+            function_hint, field_hint, limit = _parse_function_field_limit(parts)
     else:
         # First part is empty (starts with :), parse as :field:limit
         if len(parts) >= 2:
