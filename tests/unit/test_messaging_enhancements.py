@@ -164,7 +164,7 @@ class TestMultiLevelUserMessages:
         execute_multi_level_call("eks", "describe-cluster", [], [], [])
 
         captured = capsys.readouterr()
-        assert "Calling list_clusters to find available resources..." in captured.err
+        assert "Calling eks.list_clusters to find available resources..." in captured.err
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.infer_list_operation")
@@ -359,7 +359,7 @@ class TestMultiLevelUserMessages:
         captured = capsys.readouterr()
         # These user messages should appear even with debug disabled
         assert "Resolving required parameter 'clusterName'" in captured.err
-        assert "Calling list_clusters to find available resources..." in captured.err
+        assert "Calling eks.list_clusters to find available resources..." in captured.err
         assert "Found 1 resources matching filters" in captured.err
         assert "Using: test-cluster" in captured.err
 
@@ -425,7 +425,7 @@ class TestUserMessageIntegration:
             (i for i, line in enumerate(lines) if "Resolving required parameter" in line), -1
         )
         calling_line = next(
-            (i for i, line in enumerate(lines) if "Calling describe_instances" in line), -1
+            (i for i, line in enumerate(lines) if "Calling ec2.describe_instances" in line), -1
         )
         found_line = next((i for i, line in enumerate(lines) if "Found 3 resources" in line), -1)
         multiple_line = next(

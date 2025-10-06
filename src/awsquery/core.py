@@ -241,6 +241,7 @@ def _execute_multi_level_call_internal(
     limit: Optional[int] = None,
     with_tracking: bool = False,
     user_parameters: Optional[dict] = None,
+    hint_service: Optional[str] = None,
 ) -> Union[Tuple[Optional[CallResult], List[Any]], List[Any]]:
     """Unified implementation for multi-level calls with optional tracking"""
     debug_print(f"Starting multi-level call for {service}.{action}")  # pragma: no mutate
@@ -316,6 +317,31 @@ def _execute_multi_level_call_internal(
 
         print(f"Resolving required parameter '{parameter_name}'", file=sys.stderr)
 
+        # Determine which service to use for list operation
+        list_service = hint_service if hint_service else service
+
+        # Show cross-service message if using different service
+        if hint_service and hint_service != service:
+            debug_print(
+                f"Cross-service resolution: using {hint_service} service for list operation "
+                f"(target service is {service})"
+            )  # pragma: no mutate
+
+            if hint_function:
+                from .case_utils import to_kebab_case
+
+                hint_function_cli = to_kebab_case(hint_function)
+                print(
+                    f"Using cross-service hint: {hint_service}:{hint_function_cli}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"Using service '{hint_service}' for parameter resolution "
+                    "(operation will be inferred)",
+                    file=sys.stderr,
+                )
+
         # Use hint function if provided
         if hint_function:
             hint_normalized = normalize_action_name(hint_function)
@@ -324,24 +350,33 @@ def _execute_multi_level_call_internal(
             from .case_utils import to_kebab_case
 
             hint_function_cli = to_kebab_case(hint_function)
-            print(
-                f"Using hint function '{hint_function_cli}' for parameter resolution",
-                file=sys.stderr,
-            )
+            if not hint_service or hint_service == service:
+                print(
+                    f"Using hint function '{hint_function_cli}' for parameter resolution",
+                    file=sys.stderr,
+                )
         else:
-            possible_operations = infer_list_operation(service, parameter_name, action, session)
+            # Infer operations from the hint_service (if provided) or current service
+            possible_operations = infer_list_operation(
+                list_service, parameter_name, action, session
+            )
 
         list_response = None
         successful_operation = None
 
         for operation in possible_operations:
             try:
-                debug_print(f"Trying list operation: {operation}")  # pragma: no mutate
-                print(f"Calling {operation} to find available resources...", file=sys.stderr)
+                debug_print(
+                    f"Trying list operation: {list_service}.{operation}"
+                )  # pragma: no mutate
+                print(
+                    f"Calling {list_service}.{operation} to find available resources...",
+                    file=sys.stderr,
+                )
 
                 # Filter user parameters for this list operation
                 list_params = filter_valid_parameters(
-                    service, operation, user_parameters or {}, session
+                    list_service, operation, user_parameters or {}, session
                 )
                 if list_params:
                     debug_print(
@@ -349,7 +384,7 @@ def _execute_multi_level_call_internal(
                     )  # pragma: no mutate
 
                 list_response = execute_aws_call(
-                    service,
+                    list_service,
                     operation,
                     parameters=list_params if list_params else None,
                     session=session,
@@ -373,10 +408,22 @@ def _execute_multi_level_call_internal(
             print(f"Tried operations: {possible_operations}", file=sys.stderr)
             print("", file=sys.stderr)
             print(
-                f"Suggestion: Use the -i/--input flag to specify the correct function:",
+                f"Suggestion: Use the -i/--input flag to specify a hint:",
                 file=sys.stderr,
             )
-            print(f"  Example: awsquery {service} {action} -i describe-param", file=sys.stderr)
+            print(
+                f"  Specify function: awsquery {service} {action} -i describe-param",
+                file=sys.stderr,
+            )
+            print(
+                f"  Use another service: awsquery {service} {action} -i ec2",
+                file=sys.stderr,
+            )
+            print(
+                f"  Cross-service with function: "
+                f"awsquery {service} {action} -i ec2:describe-instances",
+                file=sys.stderr,
+            )
             print("", file=sys.stderr)
             print(f"Available operations for '{service}' can be viewed with:", file=sys.stderr)
             print(f"  aws {service} help", file=sys.stderr)
@@ -389,7 +436,7 @@ def _execute_multi_level_call_internal(
 
         from .formatters import flatten_response
 
-        list_resources = flatten_response(list_response, service, successful_operation)
+        list_resources = flatten_response(list_response, list_service, successful_operation)
         debug_print(
             f"Got {len(list_resources)} resources from {successful_operation}"
         )  # pragma: no mutate
@@ -571,6 +618,7 @@ def execute_multi_level_call_with_tracking(
     hint_field=None,
     limit=None,
     user_parameters=None,
+    hint_service=None,
 ):
     """Handle multi-level API calls with automatic parameter resolution and tracking"""
     return _execute_multi_level_call_internal(
@@ -585,6 +633,7 @@ def execute_multi_level_call_with_tracking(
         limit,
         with_tracking=True,
         user_parameters=user_parameters,
+        hint_service=hint_service,
     )
 
 
@@ -599,6 +648,7 @@ def execute_multi_level_call(
     hint_field=None,
     limit=None,
     user_parameters=None,
+    hint_service=None,
 ):
     """Handle multi-level API calls with automatic parameter resolution"""
     return _execute_multi_level_call_internal(
@@ -613,6 +663,7 @@ def execute_multi_level_call(
         limit,
         with_tracking=False,
         user_parameters=user_parameters,
+        hint_service=hint_service,
     )
 
 

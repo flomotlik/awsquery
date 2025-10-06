@@ -32,7 +32,14 @@ from .security import (
     get_service_valid_operations,
     validate_readonly,
 )
-from .utils import create_session, debug_print, get_aws_services, sanitize_input
+from .utils import (
+    _BotocoreSessionContext,
+    create_session,
+    debug_print,
+    get_aws_services,
+    get_service_operations,
+    sanitize_input,
+)
 
 # Global variable to store current completion context for smart prefix matching
 _current_completion_context = {"operations": [], "current_input": ""}
@@ -197,18 +204,12 @@ def get_parameter_type(service, action, parameter_name, session=None):
                      or None if parameter not found or error occurs
     """
     try:
-        import botocore.session
-
         from .case_utils import to_pascal_case
 
-        # Use botocore directly to avoid credential requirements
-        old_profile = os.environ.pop("AWS_PROFILE", None)
-        try:
-            botocore_session = botocore.session.Session()
+        with _BotocoreSessionContext() as botocore_session:
             service_model = botocore_session.get_service_model(service)
 
             # Convert action to PascalCase for operation model lookup
-            # Handle kebab-case first (describe-snapshots -> DescribeSnapshots)
             if "-" in action:
                 pascal_action = to_pascal_case(action.replace("-", "_"))
             else:
@@ -225,9 +226,6 @@ def get_parameter_type(service, action, parameter_name, session=None):
                 return param_shape.type_name
 
             return None
-        finally:
-            if old_profile is not None:
-                os.environ["AWS_PROFILE"] = old_profile
 
     except Exception as e:
         debug_print(f"Could not determine parameter type for {parameter_name}: {e}")
@@ -241,26 +239,7 @@ VALUE_FLAGS = ["--region", "--profile", "-p", "--parameter", "-i", "--input"]
 
 def service_completer(prefix, parsed_args, **kwargs):
     """Autocomplete AWS service names"""
-    try:
-        # Create a session without requiring valid credentials
-        # This works locally to get service names from botocore's data files
-        import botocore.session
-
-        # Temporarily clear AWS_PROFILE to avoid validation errors
-        old_profile = os.environ.pop("AWS_PROFILE", None)
-        try:
-            session = botocore.session.Session()
-            # Get available services from botocore's local data
-            services = session.get_available_services()
-        finally:
-            # Restore AWS_PROFILE if it existed
-            if old_profile is not None:
-                os.environ["AWS_PROFILE"] = old_profile
-
-    except Exception:
-        # If even local session fails, return empty
-        return []
-
+    services = get_aws_services()
     return [s for s in services if s.startswith(prefix)]
 
 
@@ -391,22 +370,75 @@ def _has_prefix_matches(current_input, available_operations):
     return any(op.lower().startswith(current_input_lower) for op in available_operations)
 
 
+def _parse_function_field_limit(parts):
+    """Parse parts array as function:field:limit format.
+
+    Args:
+        parts: List of string parts from split
+
+    Returns:
+        tuple: (function_hint, field_hint, limit)
+    """
+    function_hint = parts[0].strip() if parts[0].strip() else None
+    field_hint = None
+    limit = None
+
+    if len(parts) >= 2:
+        field_hint = parts[1].strip() if parts[1].strip() else None
+    if len(parts) >= 3:
+        limit_str = parts[2].strip()
+        if limit_str and limit_str.isdigit():
+            limit = int(limit_str)
+
+    return function_hint, field_hint, limit
+
+
+def _parse_with_service_prefix(parts, potential_service, available_services):
+    """Parse hint when first part might be a service name.
+
+    Args:
+        parts: List of string parts from split
+        potential_service: First part that might be service name
+        available_services: List of valid AWS service names
+
+    Returns:
+        tuple: (resolved_service, function_hint, field_hint, limit)
+    """
+    if potential_service not in available_services:
+        debug_print(f"'{potential_service}' is not a valid AWS service")  # pragma: no mutate
+        return None, *_parse_function_field_limit(parts)
+
+    # This is a service prefix
+    resolved_service = potential_service
+    debug_print(f"Detected service prefix: {resolved_service}")  # pragma: no mutate
+
+    # Re-parse remaining parts as function:field:limit
+    remaining = ":".join(parts[1:])
+    if not remaining:
+        return resolved_service, None, None, None
+
+    remaining_parts = remaining.split(":", 2)
+    function_hint, field_hint, limit = _parse_function_field_limit(remaining_parts)
+    return resolved_service, function_hint, field_hint, limit
+
+
 def find_hint_function(hint, service, session=None):
     """Find the best matching AWS function based on hint string.
 
     Args:
-        hint: The hint string with new formats:
-              - "function" - just function hint
-              - "function:field" - function + field hint
-              - "function:field:N" - function + field + limit
+        hint: The hint string with formats:
+              - "[service:]function" - optional service prefix + function hint
+              - "[service:]function:field" - with field hint
+              - "[service:]function:field:N" - with field and limit
               - ":field" - just field hint (use inferred function)
               - ":field:N" - field + limit (use inferred function)
               - "::N" - just limit (use inferred function, default field)
-        service: AWS service name
+        service: AWS service name (fallback if no service prefix in hint)
         session: Optional boto3 session
 
     Returns:
-        tuple: (selected_function, field_hint, limit, alternatives)
+        tuple: (resolved_service, selected_function, field_hint, limit, alternatives)
+               - resolved_service: Service from hint prefix or None if using fallback
                - selected_function: None if no function specified
                - field_hint: None for default heuristic, string for specific field
                - limit: Integer limit or None for unlimited
@@ -414,63 +446,61 @@ def find_hint_function(hint, service, session=None):
     """
 
     if not hint or not service:
-        return None, None, None, []
+        return None, None, None, None, []
 
-    # Parse hint format: function:field:N with support for empty parts
-    parts = hint.split(":", 2)  # Split into at most 3 parts
+    # Parse hint format: [service:]function:field:N with support for empty parts
+    parts = hint.split(":", 3)
+    debug_print(f"Parsing hint '{hint}' into parts: {parts}")  # pragma: no mutate
+
+    resolved_service = None
     function_hint = None
     field_hint = None
     limit = None
 
-    debug_print(f"Parsing hint '{hint}' into parts: {parts}")  # pragma: no mutate
+    # Check if first part is a valid AWS service
+    if len(parts) >= 1 and parts[0].strip():
+        potential_service = parts[0].strip().lower()
 
-    # Position-based parsing: part[0]=function, part[1]=field, part[2]=limit
-    if len(parts) >= 1:
-        function_hint = parts[0].strip() if parts[0].strip() else None
-        if function_hint:
-            debug_print(f"Part 0 is function hint: {function_hint}")  # pragma: no mutate
+        try:
+            available_services = get_aws_services()
+            resolved_service, function_hint, field_hint, limit = _parse_with_service_prefix(
+                parts, potential_service, available_services
+            )
+        except Exception:
+            # If we can't check services, treat as function:field:limit format
+            function_hint, field_hint, limit = _parse_function_field_limit(parts)
+    else:
+        # First part is empty (starts with :), parse as :field:limit
+        if len(parts) >= 2:
+            field_hint = parts[1].strip() if parts[1].strip() else None
+        if len(parts) >= 3:
+            limit_str = parts[2].strip()
+            if limit_str and limit_str.isdigit():
+                limit = int(limit_str)
 
-    if len(parts) >= 2:
-        field_hint = parts[1].strip() if parts[1].strip() else None
-        if field_hint:
-            debug_print(f"Part 1 is field hint: {field_hint}")  # pragma: no mutate
-
-    if len(parts) >= 3:
-        limit_str = parts[2].strip()
-        if limit_str and limit_str.isdigit():
-            limit = int(limit_str)
-            debug_print(f"Part 2 is limit: {limit}")  # pragma: no mutate
-        elif limit_str:
-            debug_print(
-                f"Part 2 '{limit_str}' is not a valid limit (must be numeric)"
-            )  # pragma: no mutate
+    debug_print(
+        f"Parsed - service: {resolved_service}, function: {function_hint}, "
+        f"field: {field_hint}, limit: {limit}"
+    )  # pragma: no mutate
 
     if not function_hint:
         debug_print("No function hint provided, will use inferred function")  # pragma: no mutate
-        return None, field_hint, limit, []
+        return resolved_service, None, field_hint, limit, []
+
+    # Use resolved service if found, otherwise use the provided fallback service
+    target_service = resolved_service if resolved_service else service
 
     try:
-        # Get all operations for the service first
-        import botocore.session
-
-        # Temporarily clear AWS_PROFILE to avoid validation errors
-        old_profile = os.environ.pop("AWS_PROFILE", None)
-        try:
-            session_temp = botocore.session.Session()
-            if service not in session_temp.get_available_services():
-                return None, []
-
-            service_model = session_temp.get_service_model(service)
-            all_operations = list(service_model.operation_names)
-        finally:
-            if old_profile is not None:
-                os.environ["AWS_PROFILE"] = old_profile
+        # Get all operations for the target service
+        all_operations = get_service_operations(target_service)
+        if not all_operations:
+            return resolved_service, None, field_hint, limit, []
 
         # Filter to only valid (readonly) operations
-        available_operations = get_service_valid_operations(service, all_operations)
+        available_operations = get_service_valid_operations(target_service, all_operations)
 
         if not available_operations:
-            return None, None, None, []
+            return resolved_service, None, field_hint, limit, []
 
         # Create mapping of CLI format to original operation names
         operation_mapping = {}
@@ -485,7 +515,7 @@ def find_hint_function(hint, service, session=None):
                 matched_cli_names.append(cli_op)
 
         if not matched_cli_names:
-            return None, None, None, []
+            return resolved_service, None, field_hint, limit, []
 
         # Sort by preference: shortest first, then alphabetical
         matched_cli_names.sort(key=lambda x: (len(x), x))
@@ -498,10 +528,10 @@ def find_hint_function(hint, service, session=None):
         for cli_name in matched_cli_names[1:]:
             alternative_operations.append(operation_mapping[cli_name])
 
-        return selected_operation, field_hint, limit, alternative_operations
+        return resolved_service, selected_operation, field_hint, limit, alternative_operations
 
     except Exception:
-        return None, None, None, []
+        return resolved_service, None, field_hint, limit, []
 
 
 def _enhanced_completion_validator(completion_candidate, current_input):
@@ -543,26 +573,10 @@ def action_completer(prefix, parsed_args, **kwargs):
     service = parsed_args.service
 
     try:
-        # Create a client with minimal configuration to get operation names
-        # This doesn't require valid AWS credentials, just the service model
-        import botocore.session
-
-        # Temporarily clear AWS_PROFILE to avoid validation errors
-        old_profile = os.environ.pop("AWS_PROFILE", None)
-        try:
-            session = botocore.session.Session()
-
-            # Check if service exists in botocore's data
-            if service not in session.get_available_services():
-                return []
-
-            # Load the service model to get operations
-            service_model = session.get_service_model(service)
-            operations = list(service_model.operation_names)
-        finally:
-            # Restore AWS_PROFILE if it existed
-            if old_profile is not None:
-                os.environ["AWS_PROFILE"] = old_profile
+        # Get all operations for the service
+        operations = get_service_operations(service)
+        if not operations:
+            return []
 
         # Filter operations to only show read-only ones in autocomplete
         valid_operations = get_service_valid_operations(service, operations)
@@ -600,6 +614,7 @@ Examples:
   awsquery cloudformation describe-stack-events prod -- Created StackName
   awsquery ssm get-parameters -i ::5  (limit to 5 parameters)
   awsquery elbv2 describe-tags -i desc-clus:arn prod  (function + field hint)
+  awsquery ssm describe-instance-patch-states -i ec2:desc-inst:instanceid prod  (cross-service)
   awsquery ec2 describe-instances -p MaxResults=10 prod  (parameter propagation)
   awsquery ec2 describe-instances --keys  (show all keys)
   awsquery ec2 describe-instances --debug  (enable debug output)
@@ -647,8 +662,8 @@ Autocomplete Setup:
         "-i",
         "--input",
         help=(
-            "Multi-step hints: function/field/limit "
-            "(e.g., 'desc-clus', ':arn', '::5', 'desc-clus:arn:5')"
+            "Multi-step hints: [service:]function:field:limit "
+            "(e.g., 'ec2:desc-inst:instanceid', 'desc-clus', ':arn', '::5')"
         ),
     )  # pragma: no mutate
     parser.add_argument(
@@ -801,6 +816,7 @@ Autocomplete Setup:
         action,
         filter_argv,
         session,
+        hint_service,
         hint_function,
         hint_field,
         hint_limit,
@@ -820,23 +836,27 @@ Autocomplete Setup:
             session,
             hint_function,
             hint_field,
-            limit=hint_limit,
+            hint_limit,
             user_parameters=parsed_parameters,
+            hint_service=hint_service,
         )
 
     # Process -i hint if provided
+    hint_service = None
     hint_function = None
     hint_field = None
     hint_limit = None
     hint_alternatives = []
     if args.input:
-        hint_function, hint_field, hint_limit, hint_alternatives = find_hint_function(
+        hint_service, hint_function, hint_field, hint_limit, hint_alternatives = find_hint_function(
             args.input, service, session=None
         )
         if hint_function:
             # Convert hint function to CLI format for display
             hint_function_cli = to_kebab_case(hint_function)
             hint_parts = []
+            if hint_service:
+                hint_parts.append(f"service '{hint_service}'")
             hint_parts.append(f"function '{hint_function_cli}'")
             if hint_field:
                 hint_parts.append(f"field '{hint_field}'")
@@ -852,8 +872,8 @@ Autocomplete Setup:
                 cli_alternatives = [to_kebab_case(alt) for alt in hint_alternatives]
                 print(f"Alternative options: {', '.join(cli_alternatives)}", file=sys.stderr)
             debug_print(
-                f"DEBUG: Hint '{args.input}' matched function: {hint_function}, "
-                f"field: {hint_field}, limit: {hint_limit}"
+                f"DEBUG: Hint '{args.input}' matched service: {hint_service}, "
+                f"function: {hint_function}, field: {hint_field}, limit: {hint_limit}"
             )  # pragma: no mutate
             if hint_alternatives:
                 cli_alternatives_debug = [to_kebab_case(alt) for alt in hint_alternatives]
@@ -928,6 +948,7 @@ Autocomplete Setup:
                     multi_value_filters,
                     multi_column_filters,
                     session=session,
+                    hint_service=hint_service,
                     hint_function=hint_function,
                     hint_field=hint_field,
                     limit=hint_limit,
@@ -958,6 +979,7 @@ Autocomplete Setup:
                 action,
                 filter_argv,
                 session,
+                hint_service,
                 hint_function,
                 hint_field,
                 hint_limit,
@@ -997,6 +1019,7 @@ Autocomplete Setup:
                     action,
                     filter_argv,
                     session,
+                    hint_service,
                     hint_function,
                     hint_field,
                     hint_limit,

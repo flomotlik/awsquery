@@ -1,5 +1,6 @@
 """Utility functions for AWS Query Tool."""
 
+import os
 import sys
 
 import boto3
@@ -129,13 +130,51 @@ def simplify_key(full_key):
     return ".".join(non_numeric_parts) if non_numeric_parts else full_key
 
 
+class _BotocoreSessionContext:
+    """Context manager for botocore session with AWS_PROFILE cleanup."""
+
+    def __init__(self):
+        self.old_profile = None
+        self.session = None
+
+    def __enter__(self):
+        import botocore.session
+
+        self.old_profile = os.environ.pop("AWS_PROFILE", None)
+        self.session = botocore.session.Session()
+        return self.session
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.old_profile is not None:
+            os.environ["AWS_PROFILE"] = self.old_profile
+
+
 def get_aws_services():
     """Get list of available AWS services"""
     try:
-        session = boto3.Session()
-        return sorted(session.get_available_services())
+        with _BotocoreSessionContext() as session:
+            return sorted(session.get_available_services())
     except Exception as e:
         print(f"ERROR: Failed to get AWS services: {e}", file=sys.stderr)
+        return []
+
+
+def get_service_operations(service):
+    """Get list of operations for a service.
+
+    Args:
+        service: AWS service name (e.g., 'ec2', 's3')
+
+    Returns:
+        list: Operation names, or empty list if service not found
+    """
+    try:
+        with _BotocoreSessionContext() as session:
+            if service not in session.get_available_services():
+                return []
+            service_model = session.get_service_model(service)
+            return list(service_model.operation_names)
+    except Exception:
         return []
 
 
