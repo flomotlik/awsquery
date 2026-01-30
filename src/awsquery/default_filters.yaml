@@ -2142,6 +2142,84 @@ rds:
     columns:
     - Key$
     - Value$
+  describe_db_clusters:
+    columns:
+    - DBClusterIdentifier$
+    - Status$
+    - Engine$
+    - EngineVersion$
+    - EngineMode$
+    - Endpoint$
+    - ReaderEndpoint$
+    - Port$
+    - MultiAZ$
+    - StorageEncrypted$
+  describe_db_cluster_snapshots:
+    columns:
+    - DBClusterSnapshotIdentifier$
+    - DBClusterIdentifier$
+    - Status$
+    - SnapshotCreateTime$
+    - Engine$
+    - SnapshotType$
+    - StorageEncrypted$
+  describe_db_cluster_endpoints:
+    columns:
+    - DBClusterEndpointIdentifier$
+    - DBClusterIdentifier$
+    - EndpointType$
+    - Endpoint$
+    - Status$
+    - CustomEndpointType$
+  describe_db_cluster_parameter_groups:
+    columns:
+    - DBClusterParameterGroupName$
+    - DBParameterGroupFamily$
+    - Description$
+    - DBClusterParameterGroupArn$
+  describe_db_proxies:
+    columns:
+    - DBProxyName$
+    - Status$
+    - EngineFamily$
+    - Endpoint$
+    - VpcId$
+    - RequireTLS$
+  describe_global_clusters:
+    columns:
+    - GlobalClusterIdentifier$
+    - Status$
+    - Engine$
+    - EngineVersion$
+    - StorageEncrypted$
+    - DeletionProtection$
+  describe_event_subscriptions:
+    columns:
+    - CustSubscriptionId$
+    - Status$
+    - SnsTopicArn$
+    - SourceType$
+    - Enabled$
+  describe_option_groups:
+    columns:
+    - OptionGroupName$
+    - EngineName$
+    - MajorEngineVersion$
+    - OptionGroupDescription$
+    - VpcId$
+  describe_db_security_groups:
+    columns:
+    - DBSecurityGroupName$
+    - DBSecurityGroupDescription$
+    - VpcId$
+    - OwnerId$
+  describe_certificates:
+    columns:
+    - CertificateIdentifier$
+    - CertificateType$
+    - ValidFrom$
+    - ValidTill$
+    - CustomerOverride$
 redshift:
   describe_cluster_parameter_groups:
     columns:

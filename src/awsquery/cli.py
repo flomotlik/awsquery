@@ -11,6 +11,7 @@ from typing import Any
 import argcomplete
 import boto3
 
+from .auto_filters import smart_select_columns
 from .case_utils import to_kebab_case
 from .config import apply_default_filters
 from .core import (
@@ -336,10 +337,29 @@ def determine_column_filters(column_filters, service, action):
             )  # pragma: no mutate
             column_filters_to_use = default_columns
         else:
-            debug_print(
-                f"No column filters (user or default) for {service}.{normalized_action}"
-            )  # pragma: no mutate
-            column_filters_to_use = None
+            # Try auto-selection using shape introspection
+            from .shapes import ShapeCache
+
+            shape_cache = ShapeCache()
+            auto_fields = shape_cache.get_fields_for_auto_select(service, action)
+            if auto_fields:
+                auto_columns = smart_select_columns(auto_fields)
+                if auto_columns:
+                    debug_print(
+                        f"Auto-selected columns for {service}.{normalized_action}: {auto_columns}"
+                    )  # pragma: no mutate
+                    column_filters_to_use = auto_columns
+                else:
+                    debug_print(
+                        f"No eligible columns for auto-selection, "
+                        f"showing all for {service}.{normalized_action}"
+                    )  # pragma: no mutate
+                    column_filters_to_use = None
+            else:
+                debug_print(
+                    f"No column filters (user or default) for {service}.{normalized_action}"
+                )  # pragma: no mutate
+                column_filters_to_use = None
 
     # Validate column filters against response shapes (MANDATORY)
     if column_filters_to_use and service and action:

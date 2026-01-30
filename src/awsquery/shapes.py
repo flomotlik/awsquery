@@ -248,3 +248,12 @@ class ShapeCache:
                     fields[field_path] = "map"
 
         return fields
+
+    def get_fields_for_auto_select(self, service: str, operation: str) -> Dict[str, str]:
+        """Get fields in format suitable for auto_filters.smart_select_columns().
+
+        Returns dict mapping field names to their types, needed for type-based
+        deduplication of nested scalars.
+        """
+        _, simplified_fields, _ = self.get_response_fields(service, operation)
+        return simplified_fields
