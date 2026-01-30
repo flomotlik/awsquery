@@ -90,7 +90,7 @@ class TestAutocompleteWithoutCredentials:
 
     def test_action_completer_without_credentials(self):
         """Test action completer works without AWS credentials."""
-        with patch("awsquery.security.get_service_valid_operations") as mock_get_valid_ops, patch(
+        with patch("awsquery.cli.get_service_valid_operations") as mock_get_valid_ops, patch(
             "botocore.session.Session"
         ) as mock_session_class:
             # Mock security validation to return read-only operations
@@ -123,7 +123,7 @@ class TestAutocompleteWithoutCredentials:
 
     def test_action_completer_different_services(self):
         """Test action completer for various AWS services."""
-        with patch("awsquery.security.get_service_valid_operations") as mock_get_valid_ops, patch(
+        with patch("awsquery.cli.get_service_valid_operations") as mock_get_valid_ops, patch(
             "botocore.session.Session"
         ) as mock_session_class:
 
@@ -197,7 +197,7 @@ class TestAutocompleteWithoutCredentials:
         """Test autocomplete still works with invalid AWS_PROFILE."""
         os.environ["AWS_PROFILE"] = "nonexistent-profile-99999"
 
-        with patch("awsquery.security.get_service_valid_operations") as mock_get_valid_ops, patch(
+        with patch("awsquery.cli.get_service_valid_operations") as mock_get_valid_ops, patch(
             "botocore.session.Session"
         ) as mock_session_class:
 
@@ -225,7 +225,7 @@ class TestAutocompleteWithoutCredentials:
     def test_autocomplete_filters_by_security_policy(self):
         """Test that autocomplete respects security policy filtering."""
 
-        with patch("awsquery.security.get_service_valid_operations") as mock_get_valid_ops, patch(
+        with patch("awsquery.cli.get_service_valid_operations") as mock_get_valid_ops, patch(
             "botocore.session.Session"
         ) as mock_session_class:
 
@@ -371,3 +371,123 @@ class TestRealBotocoreIntegration:
         # but our completer should return them in kebab-case
         assert all("-" in op for op in all_ops)
         assert all(op.islower() for op in all_ops)
+
+
+class TestAcronymHandlingInCompletions:
+    """Test that AWS operations with acronyms are correctly converted to kebab-case."""
+
+    def test_action_completer_handles_db_acronym(self):
+        with patch("awsquery.security.get_service_valid_operations") as mock_get_valid_ops, patch(
+            "botocore.session.Session"
+        ) as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+            mock_session.get_available_services.return_value = ["rds"]
+
+            rds_ops = [
+                "DescribeDBClusters",
+                "DescribeDBInstances",
+                "DescribeDBSnapshots",
+                "DescribeDBSubnetGroups",
+                "DescribeDBClusterSnapshots",
+            ]
+            mock_service_model = Mock()
+            mock_service_model.operation_names = rds_ops
+            mock_session.get_service_model.return_value = mock_service_model
+            mock_get_valid_ops.return_value = set(rds_ops)
+
+            parsed_args = Namespace(service="rds")
+            result = action_completer("describe-db", parsed_args)
+
+            assert "describe-db-clusters" in result
+            assert "describe-db-instances" in result
+            assert "describe-db-snapshots" in result
+            assert "describe-db-subnet-groups" in result
+            assert "describe-db-cluster-snapshots" in result
+            # Verify incorrect conversions are NOT present
+            assert "describe-dbclusters" not in result
+            assert "describedbclusters" not in result
+
+    def test_action_completer_handles_vpc_acronym(self):
+        with patch("awsquery.security.get_service_valid_operations") as mock_get_valid_ops, patch(
+            "botocore.session.Session"
+        ) as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+            mock_session.get_available_services.return_value = ["ec2"]
+
+            ec2_ops = [
+                "DescribeVpcs",
+                "DescribeVpcEndpoints",
+                "DescribeVpcPeeringConnections",
+                "CreateVpc",
+            ]
+            mock_service_model = Mock()
+            mock_service_model.operation_names = ec2_ops
+            mock_session.get_service_model.return_value = mock_service_model
+            mock_get_valid_ops.return_value = {
+                "DescribeVpcs",
+                "DescribeVpcEndpoints",
+                "DescribeVpcPeeringConnections",
+            }
+
+            parsed_args = Namespace(service="ec2")
+            result = action_completer("describe-vpc", parsed_args)
+
+            assert "describe-vpcs" in result
+            assert "describe-vpc-endpoints" in result
+            assert "describe-vpc-peering-connections" in result
+            # CreateVpc should not be in result (filtered by security)
+            assert "create-vpc" not in result
+
+    def test_action_completer_handles_multiple_acronyms(self):
+        with patch("awsquery.security.get_service_valid_operations") as mock_get_valid_ops, patch(
+            "botocore.session.Session"
+        ) as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+            mock_session.get_available_services.return_value = ["ec2"]
+
+            ec2_ops = [
+                "DescribeVpcEndpointServices",
+                "DescribeDBProxyTargetGroups",
+                "GetVPNConnectionDeviceTypes",
+            ]
+            mock_service_model = Mock()
+            mock_service_model.operation_names = ec2_ops
+            mock_session.get_service_model.return_value = mock_service_model
+            mock_get_valid_ops.return_value = set(ec2_ops)
+
+            parsed_args = Namespace(service="ec2")
+            result = action_completer("", parsed_args)
+
+            assert "describe-vpc-endpoint-services" in result
+            assert "describe-db-proxy-target-groups" in result
+            assert "get-vpn-connection-device-types" in result
+
+    def test_action_completer_handles_v2_suffix(self):
+        with patch("awsquery.security.get_service_valid_operations") as mock_get_valid_ops, patch(
+            "botocore.session.Session"
+        ) as mock_session_class:
+            mock_session = Mock()
+            mock_session_class.return_value = mock_session
+            mock_session.get_available_services.return_value = ["s3"]
+
+            s3_ops = [
+                "ListObjectsV2",
+                "ListBuckets",
+                "GetBucketPolicyV2",
+            ]
+            mock_service_model = Mock()
+            mock_service_model.operation_names = s3_ops
+            mock_session.get_service_model.return_value = mock_service_model
+            mock_get_valid_ops.return_value = set(s3_ops)
+
+            parsed_args = Namespace(service="s3")
+            result = action_completer("list", parsed_args)
+
+            assert "list-objects-v2" in result
+            assert "list-buckets" in result
+            # Verify V2 suffix is correctly handled
+            assert "list-objectsv2" not in result
+            assert "listobjectsv2" not in result
