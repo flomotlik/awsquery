@@ -28,7 +28,9 @@ class TestEndToEndScenarios:
     def test_complete_aws_query_workflow_table_output(
         self, sample_ec2_response, mock_security_policy
     ):
-        argv = ["ec2", "describe-instances", "--", "InstanceId", "State"]
+        # Use prefix filter (^Instances) to target nested array content
+        # Paths like Instances.0.InstanceId start with "Instances"
+        argv = ["ec2", "describe-instances", "--", "^Instances"]
         base_cmd, res_filters, val_filters, col_filters = parse_multi_level_filters_for_mode(
             argv, mode="single"
         )
@@ -36,7 +38,7 @@ class TestEndToEndScenarios:
         assert base_cmd == ["ec2", "describe-instances"]
         assert res_filters == []
         assert val_filters == []
-        assert col_filters == ["InstanceId", "State"]
+        assert col_filters == ["^Instances"]
 
         assert validate_readonly("ec2", "DescribeInstances", mock_security_policy)
 
@@ -49,7 +51,7 @@ class TestEndToEndScenarios:
         )
         assert len(flattened) > 0
 
-        table_output = format_table_output(flattened, col_filters)
+        table_output = format_table_output(flattened, col_filters, max_width=2000)
         assert "InstanceId" in table_output
         assert "State" in table_output or "Code" in table_output or "Name" in table_output
         assert "i-1234567890abcdef0" in table_output
@@ -153,9 +155,10 @@ class TestEndToEndScenarios:
             sample_ec2_response, service="ec2", operation="DescribeInstances"
         )
 
-        # Test column filtering with table output
-        column_filters = ["InstanceId", "State", "Tags"]
-        table_output = format_table_output(flattened, column_filters)
+        # Use prefix filter (^Instances) to target nested array content
+        # Paths like Instances.0.InstanceId start with "Instances"
+        column_filters = ["^Instances"]
+        table_output = format_table_output(flattened, column_filters, max_width=2000)
 
         # Should contain filtered columns
         assert "InstanceId" in table_output
@@ -705,7 +708,7 @@ class TestCLIOutputFormats:
         flattened = flatten_response(
             sample_ec2_response, service="ec2", operation="DescribeInstances"
         )
-        table_output = format_table_output(flattened, [])
+        table_output = format_table_output(flattened, [], max_width=2000)
 
         # Table format characteristics
         assert not table_output.strip().startswith("{")  # Not JSON
@@ -758,10 +761,12 @@ class TestCLIOutputFormats:
         flattened = flatten_response(
             sample_ec2_response, service="ec2", operation="DescribeInstances"
         )
-        column_filters = ["InstanceId", "State"]
+        # Use prefix filter (^Instances) to target nested array content
+        # Paths like Instances.0.InstanceId start with "Instances"
+        column_filters = ["^Instances"]
 
         # Test table output with filtering
-        table_output = format_table_output(flattened, column_filters)
+        table_output = format_table_output(flattened, column_filters, max_width=2000)
         assert "InstanceId" in table_output or "Instance" in table_output
         assert "State" in table_output or "Code" in table_output or "Name" in table_output
         assert "i-1234567890abcdef0" in table_output

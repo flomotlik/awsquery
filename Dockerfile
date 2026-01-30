@@ -3,7 +3,7 @@ FROM python:3.11-slim
 # Development Dockerfile optimized for volume mounts
 # Only copies essential files needed for package installation
 # Development files (scripts/, docs/, test analysis files) are excluded
-# and will be available via volume mounts in docker-compose
+# and will be available via volume mounts in docker compose
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
