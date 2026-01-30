@@ -5,44 +5,71 @@ from typing import Dict, List, Optional
 from .utils import debug_print
 
 # Include float/double for numeric fields (Codex fix)
-SIMPLE_TYPES = ('string', 'boolean', 'integer', 'timestamp', 'long', 'float', 'double')
+SIMPLE_TYPES = ("string", "boolean", "integer", "timestamp", "long", "float", "double")
 
 WELL_KNOWN_NESTED_SCALARS = {
-    'Endpoint': {'Address': 'string', 'Port': 'integer'},
-    'State': {'Name': 'string', 'Code': 'string'},
-    'Status': {'Code': 'string', 'Message': 'string'},
+    "Endpoint": {"Address": "string", "Port": "integer"},
+    "State": {"Name": "string", "Code": "string"},
+    "Status": {"Code": "string", "Message": "string"},
 }
 
-TIER8_ALLOWLIST = frozenset({
-    'AllocatedStorage',
-    'BackupRetentionPeriod',
-    'DatabaseName',
-    'Description',
-    'MasterUsername',
-    'OwnerAccount',
-    'PreferredBackupWindow',
-    'StorageType',
-})
+TIER8_ALLOWLIST = frozenset(
+    {
+        "AllocatedStorage",
+        "BackupRetentionPeriod",
+        "DatabaseName",
+        "Description",
+        "MasterUsername",
+        "OwnerAccount",
+        "PreferredBackupWindow",
+        "StorageType",
+    }
+)
 
 # Tier exact-name lists per spec
 TIER3_EXACT_NAMES = [
-    'DBInstanceClass', 'Engine', 'EngineVersion', 'InstanceType',
-    'NodeType', 'Runtime', 'Type', 'Version'
+    "DBInstanceClass",
+    "Engine",
+    "EngineVersion",
+    "InstanceType",
+    "NodeType",
+    "Runtime",
+    "Type",
+    "Version",
 ]
 
 TIER4_EXACT_NAMES = [
-    'Address', 'AvailabilityZone', 'DNSName', 'Endpoint', 'Port',
-    'ReaderEndpoint', 'SubnetId', 'VpcId'
+    "Address",
+    "AvailabilityZone",
+    "DNSName",
+    "Endpoint",
+    "Port",
+    "ReaderEndpoint",
+    "SubnetId",
+    "VpcId",
 ]
 
 TIER5_EXACT_NAMES = [
-    'CreationTime', 'CreateTime', 'CreatedTime', 'CreateDate', 'CreatedAt',
-    'createdAt', 'LaunchTime', 'StartTime', 'ClusterCreateTime', 'SnapshotCreateTime'
+    "CreationTime",
+    "CreateTime",
+    "CreatedTime",
+    "CreateDate",
+    "CreatedAt",
+    "createdAt",
+    "LaunchTime",
+    "StartTime",
+    "ClusterCreateTime",
+    "SnapshotCreateTime",
 ]
 
 TIER7_EXACT_NAMES = [
-    'DeletionProtection', 'Enabled', 'Encrypted', 'IsDefault',
-    'MultiAZ', 'PubliclyAccessible', 'StorageEncrypted'
+    "DeletionProtection",
+    "Enabled",
+    "Encrypted",
+    "IsDefault",
+    "MultiAZ",
+    "PubliclyAccessible",
+    "StorageEncrypted",
 ]
 
 
@@ -73,25 +100,28 @@ def flatten_well_known_scalars(fields: Dict[str, str]) -> Dict[str, str]:
 
 def _is_list_element_path(field: str) -> bool:
     """Check if field is a list element path like 'Items.0' or 'Tags.0.Key'."""
-    parts = field.split('.')
+    parts = field.split(".")
     return any(part.isdigit() for part in parts)
 
 
 def _get_base_name(field: str) -> str:
     """Extract base field name from dotted path."""
-    return field.split('.')[-1]
+    return field.split(".")[-1]
+
+
+def _get_path_depth(field: str) -> int:
+    """Return the nesting depth of a field (number of dots)."""
+    return field.count(".")
 
 
 def _select_by_suffix_no_limit(
-    candidates: List[str],
-    suffixes: List[str],
-    already_selected: set
+    candidates: List[str], suffixes: List[str], already_selected: set
 ) -> List[str]:
     """Select all fields matching suffixes with priority ordering (no limit)."""
     selected = []
 
     for suffix in suffixes:
-        for field in sorted(candidates):
+        for field in sorted(candidates, key=lambda f: (_get_path_depth(f), f)):
             if field in already_selected or field in selected:
                 continue
             base = _get_base_name(field)
@@ -102,16 +132,13 @@ def _select_by_suffix_no_limit(
 
 
 def _select_by_suffix(
-    candidates: List[str],
-    suffixes: List[str],
-    limit: int,
-    already_selected: set
+    candidates: List[str], suffixes: List[str], limit: int, already_selected: set
 ) -> List[str]:
     """Select fields matching suffixes with priority ordering up to limit."""
     selected = []
 
     for suffix in suffixes:
-        for field in sorted(candidates):
+        for field in sorted(candidates, key=lambda f: (_get_path_depth(f), f)):
             if field in already_selected or field in selected:
                 continue
             base = _get_base_name(field)
@@ -124,16 +151,13 @@ def _select_by_suffix(
 
 
 def _select_exact_names(
-    candidates: List[str],
-    exact_names: List[str],
-    limit: int,
-    already_selected: set
+    candidates: List[str], exact_names: List[str], limit: int, already_selected: set
 ) -> List[str]:
     """Select fields matching exact names up to limit."""
     selected = []
 
     for name in exact_names:
-        for field in sorted(candidates):
+        for field in sorted(candidates, key=lambda f: (_get_path_depth(f), f)):
             if field in already_selected or field in selected:
                 continue
             base = _get_base_name(field)
@@ -146,131 +170,129 @@ def _select_exact_names(
     return selected
 
 
-def smart_select_columns(fields: Dict[str, str], max_columns: int = 10) -> Optional[List[str]]:
-    """Select columns using 8-tier heuristic algorithm.
+def smart_select_columns(
+    fields: Dict[str, str], max_columns: int = 6, operation: Optional[str] = None
+) -> Optional[List[str]]:
+    """Shape-aware column selection based on API operation and field analysis.
 
-    Returns columns in tier order (not alphabetically sorted) to preserve
-    tier priority. Returns None if no eligible fields found.
+    Args:
+        fields: Dict mapping field names to their types
+        max_columns: Maximum columns to select (default 6)
+        operation: Operation name (e.g., 'describe_db_instances') for context
+
+    Returns columns selected by importance heuristic. Returns None if no eligible fields.
     """
     expanded = flatten_well_known_scalars(fields)
 
     # Filter to simple types and exclude list element paths (*.0)
     simple_fields = [
-        f for f, t in expanded.items()
-        if t in SIMPLE_TYPES and not _is_list_element_path(f)
+        f for f, t in expanded.items() if t in SIMPLE_TYPES and not _is_list_element_path(f)
     ]
 
     if not simple_fields:
         debug_print("No simple-type fields found, returning None for fallback")
         return None
 
+    # Sort by depth first (prefer top-level), then alphabetically
+    simple_fields.sort(key=lambda f: (_get_path_depth(f), f))
+
     selected: List[str] = []
+    selected_set: set = set()
 
-    def _add_to_selected(tier_fields: List[str]) -> bool:
-        """Add fields to selected, return True if max reached."""
-        for f in tier_fields:
-            if f not in selected:
-                selected.append(f)
-                if len(selected) >= max_columns:
-                    return True
-        return False
-
-    # TIER 1: Primary identifiers (*Identifier > *Id > *Name) - NO LIMIT within tier
-    tier1 = _select_by_suffix_no_limit(
-        simple_fields,
-        ['Identifier', 'Id', 'Name'],
-        already_selected=set(selected)
-    )
-    if _add_to_selected(tier1):
-        return selected[:max_columns]
-
-    # TIER 2: Status/State - exact matches first, then suffix, TOTAL LIMIT 2
-    tier2_exact = _select_exact_names(
-        simple_fields,
-        ['Status', 'State'],
-        limit=2,
-        already_selected=set(selected)
-    )
-    tier2_suffix = []
-    remaining_tier2 = 2 - len(tier2_exact)
-    if remaining_tier2 > 0:
-        tier2_suffix = _select_by_suffix(
-            simple_fields,
-            ['Status', 'State'],
-            limit=remaining_tier2,
-            already_selected=set(selected) | set(tier2_exact)
-        )
-    if _add_to_selected(tier2_exact + tier2_suffix):
-        return selected[:max_columns]
-
-    # TIER 3: Type/Classification - exact names, then suffix, limit 2 suffix
-    tier3_exact = _select_exact_names(
-        simple_fields,
-        TIER3_EXACT_NAMES,
-        limit=max_columns - len(selected),
-        already_selected=set(selected)
-    )
-    if _add_to_selected(tier3_exact):
-        return selected[:max_columns]
-
-    tier3_suffix = _select_by_suffix(
-        simple_fields,
-        ['Class', 'Mode', 'Type', 'Version'],
-        limit=2,
-        already_selected=set(selected)
-    )
-    if _add_to_selected(tier3_suffix):
-        return selected[:max_columns]
-
-    # TIER 4: Network/Location - exact names, limit 3
-    tier4 = _select_exact_names(
-        simple_fields,
-        TIER4_EXACT_NAMES,
-        limit=3,
-        already_selected=set(selected)
-    )
-    if _add_to_selected(tier4):
-        return selected[:max_columns]
-
-    # TIER 5: Timestamps - exact names, limit 1
-    tier5 = _select_exact_names(
-        simple_fields,
-        TIER5_EXACT_NAMES,
-        limit=1,
-        already_selected=set(selected)
-    )
-    if _add_to_selected(tier5):
-        return selected[:max_columns]
-
-    # TIER 6: ARN - suffix match, limit 1
-    tier6 = _select_by_suffix(
-        simple_fields,
-        ['Arn', 'ARN'],
-        limit=1,
-        already_selected=set(selected)
-    )
-    if _add_to_selected(tier6):
-        return selected[:max_columns]
-
-    # TIER 7: Boolean flags - exact names, limit 2
-    tier7 = _select_exact_names(
-        simple_fields,
-        TIER7_EXACT_NAMES,
-        limit=2,
-        already_selected=set(selected)
-    )
-    if _add_to_selected(tier7):
-        return selected[:max_columns]
-
-    # TIER 8: Allowlist only - fill to max
-    for field in sorted(simple_fields):
-        if field in selected:
-            continue
-        base = _get_base_name(field)
-        if base in TIER8_ALLOWLIST:
+    def _add(field: str) -> bool:
+        """Add field if not already selected. Returns True if max reached."""
+        if field not in selected_set:
             selected.append(field)
-            if len(selected) >= max_columns:
-                break
+            selected_set.add(field)
+        return len(selected) >= max_columns
 
-    # Return in tier order (not sorted) - this preserves tier priority
-    return selected[:max_columns] if selected else None
+    # Extract resource type from operation name for primary identifier detection
+    resource_type = None
+    if operation:
+        # describe_db_instances -> DBInstance, list_functions -> Function
+        parts = operation.replace("-", "_").split("_")
+        if len(parts) >= 2:
+            # Skip verb (describe, list, get), join rest, singularize
+            resource_parts = parts[1:]
+            resource_type = "".join(p.capitalize() for p in resource_parts)
+            if resource_type.endswith("s") and not resource_type.endswith("ss"):
+                resource_type = resource_type[:-1]  # Simple singularize
+
+    def _score_field(field: str) -> int:
+        """Score field by importance (lower is better)."""
+        base = _get_base_name(field)
+        depth = _get_path_depth(field)
+        score = depth * 100  # Penalize nested fields
+
+        # Primary identifier - must match resource type (case-insensitive)
+        if base.endswith("Identifier"):
+            if resource_type and resource_type.lower() in base.lower():
+                return score + 1  # Primary identifier for this resource
+            return score + 50  # Reference to another resource
+
+        # Status/State - very important
+        if base in ("Status", "State"):
+            return score + 5
+        if base.endswith("Status") or base.endswith("State"):
+            if resource_type and resource_type.lower() in base.lower():
+                return score + 5  # Primary status for this resource
+            return score + 15
+
+        # Core type fields
+        if base in ("Engine", "EngineVersion", "Type", "Version", "Runtime"):
+            return score + 10
+        if base in TIER3_EXACT_NAMES:
+            return score + 11
+        # Family/Group fields (e.g., DBParameterGroupFamily)
+        if base.endswith("Family") or base.endswith("Group"):
+            return score + 12
+        # Major version fields
+        if base.startswith("Major") and "Version" in base:
+            return score + 13
+
+        # Network/location
+        if base in TIER4_EXACT_NAMES:
+            return score + 20
+
+        # Generic Id/Name (less specific, could be references)
+        if base.endswith("Id") and not base.endswith("Identifier"):
+            return score + 40
+        if base.endswith("Name"):
+            return score + 41
+
+        # ARN
+        if base.endswith("Arn") or base.endswith("ARN"):
+            return score + 50
+
+        # Booleans - exact matches
+        if base in TIER7_EXACT_NAMES:
+            return score + 60
+        # Supports* booleans (e.g., SupportsReadReplica)
+        if base.startswith("Supports"):
+            return score + 62
+
+        # Allowlist
+        if base in TIER8_ALLOWLIST:
+            return score + 70
+
+        # Timestamps - often optional/empty, lower priority
+        if base in TIER5_EXACT_NAMES:
+            return score + 75
+
+        # Description fields
+        if "Description" in base:
+            return score + 80
+
+        # Everything else - low priority
+        return score + 1000
+
+    # Score and sort all fields
+    scored = [(f, _score_field(f)) for f in simple_fields]
+    scored.sort(key=lambda x: x[1])
+
+    # Select top fields by score
+    for field, score in scored:
+        if _add(field):
+            break
+
+    return selected if selected else None

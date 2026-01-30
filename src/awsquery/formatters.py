@@ -3,12 +3,72 @@
 from __future__ import annotations
 
 import json
+import shutil
+import sys
 from collections import OrderedDict
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from tabulate import tabulate
 
 from .utils import debug_print, simplify_key
+
+MAX_AGGREGATED_VALUES = 3
+MIN_COLUMN_WIDTH = 10
+TABLE_PADDING_PER_COLUMN = 5  # tabulate grid: | + space + content + space + internal padding
+DEFAULT_TERMINAL_WIDTH = 200
+
+
+def _calculate_column_widths(table_data: List[List[str]], headers: List[str]) -> List[int]:
+    """Calculate the current width of each column (max of header and all cell values)."""
+    widths = [len(h) for h in headers]
+    for row in table_data:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(str(cell)))
+    return widths
+
+
+def _truncate_value(value: str, max_len: int) -> str:
+    """Truncate a value to max_len, adding ellipsis if needed."""
+    if len(value) <= max_len:
+        return value
+    if max_len <= 3:
+        return value[:max_len]
+    return value[: max_len - 3] + "..."
+
+
+def _fit_table_to_width(
+    table_data: List[List[str]], headers: List[str], max_width: int
+) -> Tuple[List[List[str]], List[str], bool]:
+    """Fit table to terminal width by truncating the widest columns.
+
+    Returns:
+        Tuple of (table_data, headers, was_truncated)
+    """
+    if not table_data or not headers:
+        return table_data, headers, False
+
+    col_widths = _calculate_column_widths(table_data, headers)
+    overhead = TABLE_PADDING_PER_COLUMN * len(headers) + 1
+    total_width = sum(col_widths) + overhead
+
+    if total_width <= max_width:
+        return table_data, headers, False
+
+    available_width = max(max_width - overhead, len(headers) * MIN_COLUMN_WIDTH)
+
+    while sum(col_widths) > available_width:
+        max_idx = col_widths.index(max(col_widths))
+        if col_widths[max_idx] <= MIN_COLUMN_WIDTH:
+            break
+        col_widths[max_idx] -= 1
+
+    new_headers = [_truncate_value(h, col_widths[i]) for i, h in enumerate(headers)]
+    new_table_data = []
+    for row in table_data:
+        new_row = [_truncate_value(str(cell), col_widths[i]) for i, cell in enumerate(row)]
+        new_table_data.append(new_row)
+
+    return new_table_data, new_headers, True
 
 
 def make_unique_headers(normalized_keys):
@@ -310,8 +370,8 @@ def flatten_dict_keys(d, parent_key="", sep="."):
     return dict(items)
 
 
-def format_table_output(resources, column_filters=None):
-    """Format resources as table using tabulate"""
+def format_table_output(resources, column_filters=None, max_width=None):
+    """Format resources as table using tabulate."""
     if not resources:
         return "No results found."
 
@@ -382,13 +442,31 @@ def format_table_output(resources, column_filters=None):
                     values.add(str(value))
 
             if values:
-                cell_value = ", ".join(sorted(values)) if len(values) > 1 else list(values)[0]
+                sorted_values = sorted(values)
+                if len(sorted_values) > MAX_AGGREGATED_VALUES:
+                    shown = ", ".join(sorted_values[:MAX_AGGREGATED_VALUES])
+                    extra = len(sorted_values) - MAX_AGGREGATED_VALUES
+                    cell_value = f"{shown} (+{extra} more)"
+                else:
+                    cell_value = ", ".join(sorted_values)
             else:
                 cell_value = ""
             row.append(cell_value)
 
         if any(cell.strip() for cell in row):
             table_data.append(row)
+
+    if max_width is None:
+        max_width = shutil.get_terminal_size((DEFAULT_TERMINAL_WIDTH, 24)).columns
+    table_data, unique_headers, was_truncated = _fit_table_to_width(
+        table_data, unique_headers, max_width
+    )
+
+    if was_truncated:
+        print(
+            f"Table truncated to fit terminal ({max_width} chars). Use -j for full JSON output.",
+            file=sys.stderr,
+        )
 
     return tabulate(table_data, headers=unique_headers, tablefmt="grid")
 
@@ -438,7 +516,14 @@ def _process_json_resource_with_filters(resource, column_filters):
             if v not in seen:
                 unique_values.append(v)
                 seen.add(v)
-        filtered[header] = ", ".join(unique_values) if len(unique_values) > 1 else unique_values[0]
+        if len(unique_values) > MAX_AGGREGATED_VALUES:
+            shown = ", ".join(unique_values[:MAX_AGGREGATED_VALUES])
+            extra = len(unique_values) - MAX_AGGREGATED_VALUES
+            filtered[header] = f"{shown} (+{extra} more)"
+        elif len(unique_values) > 1:
+            filtered[header] = ", ".join(unique_values)
+        else:
+            filtered[header] = unique_values[0]
 
     return dict(filtered) if filtered else None
 

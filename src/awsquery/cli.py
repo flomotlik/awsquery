@@ -319,7 +319,14 @@ def _build_filter_argv(args, remaining):
     return filter_argv
 
 
-def determine_column_filters(column_filters, service, action):
+def _format_columns_copyable(columns):
+    """Format column list as copy-pasteable command snippet."""
+    if not columns:
+        return ""
+    return "-- " + " ".join(columns)
+
+
+def determine_column_filters(column_filters, service, action, json_output=False):
     """Determine which column filters to apply - user specified or defaults"""
     if column_filters:
         debug_print(f"Using user-specified column filters: {column_filters}")  # pragma: no mutate
@@ -336,6 +343,9 @@ def determine_column_filters(column_filters, service, action):
                 f"{service}.{normalized_action}: {default_columns}"
             )  # pragma: no mutate
             column_filters_to_use = default_columns
+            if not json_output:
+                cols = _format_columns_copyable(default_columns)
+                print(f"Using default columns: {cols}", file=sys.stderr)
         else:
             # Try auto-selection using shape introspection
             from .shapes import ShapeCache
@@ -343,12 +353,17 @@ def determine_column_filters(column_filters, service, action):
             shape_cache = ShapeCache()
             auto_fields = shape_cache.get_fields_for_auto_select(service, action)
             if auto_fields:
-                auto_columns = smart_select_columns(auto_fields)
+                auto_columns = smart_select_columns(auto_fields, operation=action)
                 if auto_columns:
+                    # Wrap with exact match syntax to avoid partial matches
+                    exact_columns = [f"^{col}$" for col in auto_columns]
                     debug_print(
-                        f"Auto-selected columns for {service}.{normalized_action}: {auto_columns}"
+                        f"Auto-selected columns for {service}.{normalized_action}: {exact_columns}"
                     )  # pragma: no mutate
-                    column_filters_to_use = auto_columns
+                    column_filters_to_use = exact_columns
+                    if not json_output:
+                        cols = _format_columns_copyable(exact_columns)
+                        print(f"Auto-selected columns: {cols}", file=sys.stderr)
                 else:
                     debug_print(
                         f"No eligible columns for auto-selection, "
@@ -372,7 +387,7 @@ def determine_column_filters(column_filters, service, action):
         errors = [(filter_pattern, error) for filter_pattern, error in validation_results if error]
         if errors:
             print(
-                "⚠️  WARNING: Some column filters may not match response fields:",
+                "WARNING: Some column filters may not match response fields:",
                 file=sys.stderr,
             )
             for filter_pattern, error in errors:
@@ -846,7 +861,9 @@ Autocomplete Setup:
         _, multi_resource_filters, multi_value_filters, multi_column_filters = (
             parse_multi_level_filters_for_mode(filter_argv, mode="multi")
         )
-        final_multi_column_filters = determine_column_filters(multi_column_filters, service, action)
+        final_multi_column_filters = determine_column_filters(
+            multi_column_filters, service, action, json_output=args.json
+        )
         return execute_multi_level_call(
             service,
             action,
@@ -942,7 +959,9 @@ Autocomplete Setup:
     )  # pragma: no mutate
 
     # Determine final column filters (user-specified or defaults)
-    final_column_filters = determine_column_filters(column_filters, service, action)
+    final_column_filters = determine_column_filters(
+        column_filters, service, action, json_output=args.json
+    )
 
     if args.keys:
         print(f"Showing all available keys for {service}.{action}:", file=sys.stderr)

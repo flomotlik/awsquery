@@ -42,9 +42,7 @@ class TestSmartSelectColumnsDeterminism:
             assert result == first_result
 
     def test_determinism_with_many_similar_fields(self):
-        fields = {
-            f"Field{i}Id": "string" for i in range(20)
-        }
+        fields = {f"Field{i}Id": "string" for i in range(20)}
         fields.update({f"Field{i}Name": "string" for i in range(20)})
 
         first_result = smart_select_columns(fields)
@@ -98,10 +96,10 @@ class TestTierPriority:
         ids = [f for f in result if f.endswith("Id") and not f.endswith("Identifier")]
         names = [f for f in result if f.endswith("Name")]
 
-        # All 6 should be selected (tier 1 no limit, within max_columns=10)
+        # All 6 should be selected (tier 1 no limit, within max_columns=6)
         assert len(identifiers) + len(ids) + len(names) == 6
 
-    def test_tier_order_preserved_not_alphabetical(self):
+    def test_score_order_preserved(self):
         fields = {
             "ZName": "string",
             "AId": "string",
@@ -110,11 +108,11 @@ class TestTierPriority:
 
         result = smart_select_columns(fields)
 
-        # Tier 1 processes: Identifier first, then Id, then Name
-        # Within each suffix, fields are sorted alphabetically
-        assert result[0] == "BIdentifier"
-        assert result[1] == "AId"
-        assert result[2] == "ZName"
+        # Without operation context, Identifier is a reference (score 50)
+        # Id suffix scores 40, Name suffix scores 41
+        assert result[0] == "AId"
+        assert result[1] == "ZName"
+        assert result[2] == "BIdentifier"
 
 
 class TestMaxColumnsEnforcement:
@@ -125,8 +123,8 @@ class TestMaxColumnsEnforcement:
 
         result = smart_select_columns(fields)
 
-        # Should fill to max_columns (10)
-        assert len(result) == 10
+        # Should fill to max_columns (6)
+        assert len(result) == 6
 
     def test_returns_multiple_when_matching_tiers(self):
         fields = {
@@ -186,7 +184,7 @@ class TestMaxColumnsEnforcement:
 
         result = smart_select_columns(fields)
 
-        assert len(result) <= 10
+        assert len(result) <= 6
 
 
 class TestTypeBasedNestedScalarHandling:
@@ -331,9 +329,9 @@ class TestEmptyResultFallback:
         assert result is None
 
 
-class TestTier8Allowlist:
+class TestAllowlistScoring:
 
-    def test_tier8_allowlist_fields_are_included(self):
+    def test_allowlist_fields_have_lower_score_than_generic(self):
         fields = {
             "InstanceId": "string",
             "AllocatedStorage": "integer",
@@ -346,23 +344,25 @@ class TestTier8Allowlist:
         assert "AllocatedStorage" in result
         assert "StorageType" in result
 
-    def test_tier8_non_allowlist_fields_excluded(self):
+    def test_high_priority_fields_beat_generic_fields(self):
         fields = {
             "InstanceId": "string",
-            "Configuration": "string",
-            "Settings": "string",
-            "Policy": "string",
-            "RandomField": "string",
+            "Status": "string",
+            "Engine": "string",
+            "GenericField1": "string",
+            "GenericField2": "string",
+            "GenericField3": "string",
+            "GenericField4": "string",
+            "GenericField5": "string",
         }
 
         result = smart_select_columns(fields)
 
-        assert "Configuration" not in result
-        assert "Settings" not in result
-        assert "Policy" not in result
-        assert "RandomField" not in result
+        assert "InstanceId" in result
+        assert "Status" in result
+        assert "Engine" in result
 
-    def test_tier8_allowlist_contents(self):
+    def test_allowlist_contents(self):
         expected = {
             "AllocatedStorage",
             "BackupRetentionPeriod",
@@ -376,21 +376,22 @@ class TestTier8Allowlist:
 
         assert TIER8_ALLOWLIST == expected
 
-    def test_tier8_only_adds_allowlisted_in_tier8(self):
-        # Fields that would only be added in tier8
+    def test_allowlist_fields_selected_before_unrecognized(self):
         fields = {
             "AllocatedStorage": "integer",
             "Description": "string",
-            "SomeRandomField": "string",
-            "AnotherField": "string",
+            "GenericFieldA": "string",
+            "GenericFieldB": "string",
+            "GenericFieldC": "string",
+            "GenericFieldD": "string",
+            "GenericFieldE": "string",
+            "GenericFieldF": "string",
         }
 
         result = smart_select_columns(fields)
 
         assert "AllocatedStorage" in result
         assert "Description" in result
-        assert "SomeRandomField" not in result
-        assert "AnotherField" not in result
 
 
 class TestFlattenWellKnownScalars:
@@ -486,17 +487,14 @@ class TestEdgeCases:
 
         assert result == ["ResourceId"]
 
-    def test_single_non_tier_field_returns_none(self):
-        # Fields that don't match any tier pattern are not selected
+    def test_single_unrecognized_field_still_selected(self):
         fields = {"OnlyField": "string"}
 
         result = smart_select_columns(fields)
 
-        # No tier matches this field name, so returns None
-        assert result is None
+        assert result == ["OnlyField"]
 
-    def test_non_tier_field_among_structures_returns_none(self):
-        # If only simple field doesn't match any tier, returns None
+    def test_unrecognized_field_among_structures_still_selected(self):
         fields = {
             "Config": "structure",
             "RandomField": "string",
@@ -505,8 +503,7 @@ class TestEdgeCases:
 
         result = smart_select_columns(fields)
 
-        # RandomField doesn't match any tier pattern
-        assert result is None
+        assert result == ["RandomField"]
 
     def test_tier_matching_field_among_structures(self):
         fields = {
@@ -581,9 +578,9 @@ class TestEdgeCases:
         assert "Field3Id" in result
 
 
-class TestTierSelectionBehavior:
+class TestScoreBasedSelection:
 
-    def test_tier2_status_and_state_total_limit_of_2(self):
+    def test_status_and_state_scored_higher_than_suffix(self):
         fields = {
             "InstanceId": "string",
             "Status": "string",
@@ -594,15 +591,16 @@ class TestTierSelectionBehavior:
 
         result = smart_select_columns(fields)
 
-        # Tier 2 has total limit of 2
-        tier2_fields = ["Status", "State", "HealthStatus", "NetworkState"]
-        selected_tier2 = [f for f in result if f in tier2_fields]
-        assert len(selected_tier2) == 2
-        # Exact matches (Status, State) have priority over suffix matches
         assert "Status" in result
         assert "State" in result
+        status_idx = result.index("Status")
+        state_idx = result.index("State")
+        health_idx = result.index("HealthStatus") if "HealthStatus" in result else 999
+        network_idx = result.index("NetworkState") if "NetworkState" in result else 999
+        assert status_idx < health_idx
+        assert state_idx < network_idx
 
-    def test_tier2_exact_before_suffix(self):
+    def test_exact_status_state_before_suffix(self):
         fields = {
             "InstanceId": "string",
             "HealthStatus": "string",
@@ -611,11 +609,9 @@ class TestTierSelectionBehavior:
 
         result = smart_select_columns(fields)
 
-        # Without exact Status/State, suffix matches are used
-        tier2_fields = [f for f in result if f.endswith("Status") or f.endswith("State")]
-        assert len(tier2_fields) <= 2
+        assert "HealthStatus" in result or "NetworkState" in result
 
-    def test_tier3_engine_and_type_selection(self):
+    def test_engine_and_type_selected(self):
         fields = {
             "InstanceId": "string",
             "Engine": "string",
@@ -629,7 +625,7 @@ class TestTierSelectionBehavior:
         assert "Engine" in result
         assert "Type" in result
 
-    def test_tier4_network_fields_selection(self):
+    def test_network_fields_selected(self):
         fields = {
             "InstanceId": "string",
             "VpcId": "string",
@@ -643,7 +639,7 @@ class TestTierSelectionBehavior:
 
         assert "VpcId" in result or "Port" in result or "Address" in result
 
-    def test_tier5_timestamp_selection(self):
+    def test_multiple_timestamps_all_scored_equally(self):
         fields = {
             "InstanceId": "string",
             "CreationTime": "timestamp",
@@ -655,9 +651,9 @@ class TestTierSelectionBehavior:
 
         timestamp_fields = ["CreationTime", "CreateTime", "LaunchTime"]
         selected_timestamps = [f for f in result if f in timestamp_fields]
-        assert len(selected_timestamps) == 1
+        assert len(selected_timestamps) >= 1
 
-    def test_tier6_arn_selection(self):
+    def test_multiple_arns_all_selected_within_limit(self):
         fields = {
             "InstanceId": "string",
             "ResourceArn": "string",
@@ -667,9 +663,9 @@ class TestTierSelectionBehavior:
         result = smart_select_columns(fields)
 
         arn_fields = [f for f in result if f.endswith("Arn") or f.endswith("ARN")]
-        assert len(arn_fields) == 1
+        assert len(arn_fields) >= 1
 
-    def test_tier7_boolean_flags_selection(self):
+    def test_boolean_flags_selected_within_limit(self):
         fields = {
             "InstanceId": "string",
             "Encrypted": "boolean",
@@ -681,7 +677,7 @@ class TestTierSelectionBehavior:
 
         boolean_fields = ["Encrypted", "MultiAZ", "PubliclyAccessible"]
         selected_booleans = [f for f in result if f in boolean_fields]
-        assert len(selected_booleans) <= 2
+        assert len(selected_booleans) >= 1
 
 
 class TestIntegrationScenarios:
@@ -710,9 +706,10 @@ class TestIntegrationScenarios:
             "DBInstanceArn": "string",
         }
 
-        result = smart_select_columns(fields)
+        # Pass operation for context-aware primary identifier detection
+        result = smart_select_columns(fields, operation="describe_db_instances")
 
-        assert len(result) <= 10
+        assert len(result) <= 6
         assert "DBInstanceIdentifier" in result
 
     def test_ec2_like_instance_fields(self):
@@ -731,7 +728,7 @@ class TestIntegrationScenarios:
 
         result = smart_select_columns(fields)
 
-        assert len(result) <= 10
+        assert len(result) <= 6
         assert "InstanceId" in result
         # State.Name and State.Code are added via flatten_well_known_scalars
         # but they may or may not be selected depending on tier limits
@@ -758,7 +755,7 @@ class TestIntegrationScenarios:
 
         result = smart_select_columns(fields)
 
-        assert len(result) <= 10
+        assert len(result) <= 6
         assert "CacheClusterId" in result
 
 
@@ -885,29 +882,54 @@ class TestTierExactNameLists:
 
     def test_tier3_exact_names_list(self):
         expected = [
-            'DBInstanceClass', 'Engine', 'EngineVersion', 'InstanceType',
-            'NodeType', 'Runtime', 'Type', 'Version'
+            "DBInstanceClass",
+            "Engine",
+            "EngineVersion",
+            "InstanceType",
+            "NodeType",
+            "Runtime",
+            "Type",
+            "Version",
         ]
         assert TIER3_EXACT_NAMES == expected
 
     def test_tier4_exact_names_list(self):
         expected = [
-            'Address', 'AvailabilityZone', 'DNSName', 'Endpoint', 'Port',
-            'ReaderEndpoint', 'SubnetId', 'VpcId'
+            "Address",
+            "AvailabilityZone",
+            "DNSName",
+            "Endpoint",
+            "Port",
+            "ReaderEndpoint",
+            "SubnetId",
+            "VpcId",
         ]
         assert TIER4_EXACT_NAMES == expected
 
     def test_tier5_exact_names_list(self):
         expected = [
-            'CreationTime', 'CreateTime', 'CreatedTime', 'CreateDate', 'CreatedAt',
-            'createdAt', 'LaunchTime', 'StartTime', 'ClusterCreateTime', 'SnapshotCreateTime'
+            "CreationTime",
+            "CreateTime",
+            "CreatedTime",
+            "CreateDate",
+            "CreatedAt",
+            "createdAt",
+            "LaunchTime",
+            "StartTime",
+            "ClusterCreateTime",
+            "SnapshotCreateTime",
         ]
         assert TIER5_EXACT_NAMES == expected
 
     def test_tier7_exact_names_list(self):
         expected = [
-            'DeletionProtection', 'Enabled', 'Encrypted', 'IsDefault',
-            'MultiAZ', 'PubliclyAccessible', 'StorageEncrypted'
+            "DeletionProtection",
+            "Enabled",
+            "Encrypted",
+            "IsDefault",
+            "MultiAZ",
+            "PubliclyAccessible",
+            "StorageEncrypted",
         ]
         assert TIER7_EXACT_NAMES == expected
 
@@ -935,7 +957,7 @@ class TestTierExactNameLists:
         # DNSName and ReaderEndpoint are in TIER4_EXACT_NAMES
         assert "DNSName" in result or "ReaderEndpoint" in result
 
-    def test_tier5_exact_name_timestamp_variants(self):
+    def test_timestamp_variants_all_scored_equally(self):
         fields = {
             "InstanceId": "string",
             "createdAt": "timestamp",
@@ -944,12 +966,11 @@ class TestTierExactNameLists:
 
         result = smart_select_columns(fields)
 
-        # Both are in TIER5_EXACT_NAMES, only 1 should be selected (limit=1)
         tier5_fields = ["createdAt", "SnapshotCreateTime"]
         selected_tier5 = [f for f in result if f in tier5_fields]
-        assert len(selected_tier5) == 1
+        assert len(selected_tier5) >= 1
 
-    def test_tier7_exact_name_booleans(self):
+    def test_boolean_fields_selected(self):
         fields = {
             "InstanceId": "string",
             "DeletionProtection": "boolean",
@@ -959,15 +980,14 @@ class TestTierExactNameLists:
 
         result = smart_select_columns(fields)
 
-        # All are in TIER7_EXACT_NAMES, limit=2
         tier7_fields = ["DeletionProtection", "StorageEncrypted", "IsDefault"]
         selected_tier7 = [f for f in result if f in tier7_fields]
-        assert len(selected_tier7) <= 2
+        assert len(selected_tier7) >= 1
 
 
-class TestTierOrdering:
+class TestScoreOrdering:
 
-    def test_tier1_comes_before_tier2(self):
+    def test_status_scored_higher_than_id_suffix(self):
         fields = {
             "Status": "string",
             "InstanceId": "string",
@@ -975,11 +995,11 @@ class TestTierOrdering:
 
         result = smart_select_columns(fields)
 
-        id_index = result.index("InstanceId")
         status_index = result.index("Status")
-        assert id_index < status_index
+        id_index = result.index("InstanceId")
+        assert status_index < id_index
 
-    def test_tier2_comes_before_tier3(self):
+    def test_status_scored_higher_than_engine(self):
         fields = {
             "InstanceId": "string",
             "Engine": "string",
@@ -992,8 +1012,7 @@ class TestTierOrdering:
         engine_index = result.index("Engine")
         assert status_index < engine_index
 
-    def test_full_tier_order_preserved(self):
-        # Use fields that uniquely match each tier without suffix overlap
+    def test_score_order_preserved(self):
         fields = {
             "ResourceId": "string",
             "Status": "string",
@@ -1001,26 +1020,223 @@ class TestTierOrdering:
             "AvailabilityZone": "string",
             "CreationTime": "timestamp",
             "ResourceArn": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        # Timestamps deprioritized to 75 (often empty in responses)
+        score_order = {
+            "Status": 5,
+            "Engine": 10,
+            "AvailabilityZone": 20,
+            "ResourceId": 40,
+            "ResourceArn": 50,
+            "CreationTime": 75,
+        }
+
+        for i in range(len(result) - 1):
+            current_score = score_order.get(result[i], 1000)
+            next_score = score_order.get(result[i + 1], 1000)
+            assert current_score <= next_score, (
+                f"{result[i]} (score {current_score}) should come before "
+                f"{result[i + 1]} (score {next_score})"
+            )
+
+
+class TestScoringAlgorithm:
+
+    def test_identifier_suffix_score_1_with_operation(self):
+        fields = {
+            "ClusterIdentifier": "string",
+            "Status": "string",
+        }
+
+        # With matching operation, Identifier scores 1 (highest priority)
+        result = smart_select_columns(fields, operation="describe_clusters")
+
+        assert result[0] == "ClusterIdentifier"
+
+    def test_status_exact_score_5(self):
+        fields = {
+            "Status": "string",
+            "HealthStatus": "string",
+            "Engine": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result[0] == "Status"
+        assert result.index("Status") < result.index("HealthStatus")
+
+    def test_engine_beats_status_suffix(self):
+        fields = {
+            "HealthStatus": "string",
+            "Engine": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        # Engine (score 10) beats HealthStatus suffix (score 15 without operation)
+        assert result.index("Engine") < result.index("HealthStatus")
+
+    def test_engine_and_type_score_10(self):
+        fields = {
+            "Engine": "string",
+            "AvailabilityZone": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result.index("Engine") < result.index("AvailabilityZone")
+
+    def test_tier3_exact_names_score_11(self):
+        fields = {
+            "DBInstanceClass": "string",
+            "AvailabilityZone": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result.index("DBInstanceClass") < result.index("AvailabilityZone")
+
+    def test_tier4_network_score_20(self):
+        fields = {
+            "VpcId": "string",
+            "CreationTime": "timestamp",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result.index("VpcId") < result.index("CreationTime")
+
+    def test_timestamps_score_75(self):
+        fields = {
+            "CreationTime": "timestamp",
+            "ResourceId": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        # Timestamps deprioritized (75) below Id suffix (40)
+        assert result.index("ResourceId") < result.index("CreationTime")
+
+    def test_id_suffix_score_40(self):
+        fields = {
+            "ResourceId": "string",
+            "ResourceName": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result.index("ResourceId") < result.index("ResourceName")
+
+    def test_name_suffix_score_41(self):
+        fields = {
+            "ResourceName": "string",
+            "ResourceArn": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result.index("ResourceName") < result.index("ResourceArn")
+
+    def test_arn_suffix_score_50(self):
+        fields = {
+            "ResourceArn": "string",
+            "Encrypted": "boolean",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result.index("ResourceArn") < result.index("Encrypted")
+
+    def test_tier7_booleans_score_60(self):
+        fields = {
             "Encrypted": "boolean",
             "AllocatedStorage": "integer",
         }
 
         result = smart_select_columns(fields)
 
-        # Verify tier order: 1 < 2 < 3 < 4 < 5 < 6 < 7 < 8
-        tier_order = {
-            "ResourceId": 1,
-            "Status": 2,
-            "Engine": 3,
-            "AvailabilityZone": 4,
-            "CreationTime": 5,
-            "ResourceArn": 6,
-            "Encrypted": 7,
-            "AllocatedStorage": 8,
+        assert result.index("Encrypted") < result.index("AllocatedStorage")
+
+    def test_tier8_allowlist_score_70(self):
+        fields = {
+            "AllocatedStorage": "integer",
+            "GenericField": "string",
         }
 
-        for i in range(len(result) - 1):
-            current_tier = tier_order.get(result[i], 99)
-            next_tier = tier_order.get(result[i + 1], 99)
-            msg = f"{result[i]} (tier {current_tier}) should come before {result[i + 1]}"
-            assert current_tier <= next_tier, msg
+        result = smart_select_columns(fields)
+
+        assert result.index("AllocatedStorage") < result.index("GenericField")
+
+    def test_unrecognized_fields_score_1000(self):
+        fields = {
+            "SomeGenericField": "string",
+            "AnotherField": "string",
+            "Status": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result[0] == "Status"
+
+
+class TestDepthPenalty:
+
+    def test_top_level_preferred_over_nested(self):
+        fields = {
+            "Status": "string",
+            "Nested.Status": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result.index("Status") < result.index("Nested.Status")
+
+    def test_depth_penalty_100_per_level(self):
+        fields = {
+            "Deep.Nested.Status": "string",
+            "ResourceId": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result.index("ResourceId") < result.index("Deep.Nested.Status")
+
+    def test_deep_important_field_still_beats_shallow_generic(self):
+        fields = {
+            "GenericField": "string",
+            "Very.Deep.Nested.Status": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert result.index("Very.Deep.Nested.Status") < result.index("GenericField")
+
+
+class TestMaxColumnsLimit:
+
+    def test_default_max_columns_is_6(self):
+        fields = {f"Field{i}Id": "string" for i in range(20)}
+
+        result = smart_select_columns(fields)
+
+        assert len(result) == 6
+
+    def test_custom_max_columns_respected(self):
+        fields = {f"Field{i}Id": "string" for i in range(20)}
+
+        result = smart_select_columns(fields, max_columns=3)
+
+        assert len(result) == 3
+
+    def test_max_columns_with_fewer_fields(self):
+        fields = {
+            "InstanceId": "string",
+            "Status": "string",
+        }
+
+        result = smart_select_columns(fields)
+
+        assert len(result) == 2

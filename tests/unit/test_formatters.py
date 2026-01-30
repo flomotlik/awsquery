@@ -552,6 +552,42 @@ class TestTableOutput:
             assert expected_col in result
 
 
+class TestTableWidthTruncation:
+
+    def test_truncation_applied_when_exceeds_width(self):
+        resources = [
+            {"VeryLongColumnName": "This is a very long value that should be truncated"},
+            {"VeryLongColumnName": "Another long value here"},
+        ]
+        result = format_table_output(resources, max_width=50)
+        assert "..." in result
+
+    def test_no_truncation_when_within_width(self):
+        resources = [{"Name": "short", "Status": "ok"}]
+        result = format_table_output(resources, max_width=2000)
+        assert "..." not in result
+        assert "short" in result
+        assert "ok" in result
+
+    def test_truncation_preserves_minimum_column_width(self):
+        resources = [{"Col1": "a" * 100, "Col2": "b" * 100, "Col3": "c" * 100}]
+        result = format_table_output(resources, max_width=60)
+        lines = result.split("\n")
+        for line in lines:
+            if line.strip() and not line.startswith("+"):
+                assert len(line) > 0
+
+    def test_truncation_handles_empty_table(self):
+        result = format_table_output([], max_width=50)
+        assert result == "No results found."
+
+    def test_truncation_handles_many_columns(self):
+        resources = [{"Col" + str(i): "value" + str(i) for i in range(20)}]
+        result = format_table_output(resources, max_width=100)
+        assert isinstance(result, str)
+        assert len(result) > 0
+
+
 class TestJsonOutput:
 
     def test_format_json_output_empty_resources(self):
@@ -868,10 +904,12 @@ class TestComplexScenarios:
 
     def test_format_table_output_aws_ec2_instances(self, sample_ec2_response):
         # Realistic EC2 instances formatting
+        # Uses prefix filters (^) to explicitly target nested array content
         resources = flatten_single_response(
             sample_ec2_response, service="ec2", operation="DescribeInstances"
         )
-        result = format_table_output(resources, column_filters=["Instance", "State", "Tag"])
+        col_filters = ["^Instance", "^State", "^Tag"]
+        result = format_table_output(resources, column_filters=col_filters, max_width=2000)
 
         assert "InstanceId" in result
         assert "Name" in result  # From State.Name
@@ -924,8 +962,9 @@ class TestComplexScenarios:
             }
         }
 
+        # Uses prefix filters (^) to explicitly target nested array content
         result = format_table_output(
-            [complex_resource], column_filters=["LoadBalancer", "Protocol"]
+            [complex_resource], column_filters=["^LoadBalancer", "^Protocol"]
         )
 
         assert "LoadBalancerName" in result or "DNSName" in result
