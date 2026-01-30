@@ -505,7 +505,7 @@ def find_hint_function(hint, service, session=None):
         # Create mapping of CLI format to original operation names
         operation_mapping = {}
         for op in available_operations:
-            cli_format = op.replace("_", "-").lower()
+            cli_format = to_kebab_case(op)
             operation_mapping[cli_format] = op
 
         # Find all matches using the enhanced validator with function_hint
@@ -585,7 +585,7 @@ def action_completer(prefix, parsed_args, **kwargs):
         cli_operations = []
         for op in operations:
             if op in valid_operations:
-                kebab_case = re.sub("([a-z0-9])([A-Z])", r"\1-\2", op).lower()
+                kebab_case = to_kebab_case(op)
                 cli_operations.append(kebab_case)
 
         # Return all valid operations - let argcomplete validator handle filtering

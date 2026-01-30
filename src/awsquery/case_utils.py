@@ -35,9 +35,9 @@ def to_snake_case(text: str) -> str:
         return text.replace("-", "_").lower()
 
     # Handle PascalCase/camelCase with acronym preservation
-    # Pattern 1: Insert underscore before uppercase followed by lowercase
-    # Handles: "HTTPSListener" -> "HTTPS_Listener"
-    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", text)
+    # Pattern 1: Split before the last capital when followed by lowercase
+    # Handles: "HTTPSListener" -> "HTTPS_Listener", "DBClusters" -> "DB_Clusters"
+    s1 = re.sub("([A-Z]+)([A-Z][a-z])", r"\1_\2", text)
 
     # Pattern 2: Insert underscore before uppercase after lowercase/digit
     # Handles: "VPCId" -> "VPC_Id", "load2Balancer" -> "load2_Balancer"

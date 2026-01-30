@@ -1086,3 +1086,83 @@ class TestCrossServiceHints:
             assert field is None
             assert limit is None
             assert alternatives == []
+
+
+class TestFindHintFunctionAcronymHandling:
+    def test_find_hint_function_matches_db_operations(self):
+        from awsquery.cli import find_hint_function
+
+        with patch("awsquery.cli.get_service_valid_operations") as mock_valid_ops:
+            with patch("awsquery.cli.get_service_operations") as mock_all_ops:
+                mock_all_ops.return_value = [
+                    "DescribeDBClusters",
+                    "DescribeDBInstances",
+                    "DescribeDBSnapshots",
+                    "CreateDBCluster",
+                ]
+                mock_valid_ops.return_value = [
+                    "DescribeDBClusters",
+                    "DescribeDBInstances",
+                    "DescribeDBSnapshots",
+                ]
+
+                service, function, field, limit, alternatives = find_hint_function(
+                    "desc-db-clus", "rds"
+                )
+
+                assert function == "DescribeDBClusters"
+                assert "DescribeDBInstances" not in alternatives
+                assert "DescribeDBSnapshots" not in alternatives
+
+    def test_find_hint_function_matches_vpc_operations(self):
+        from awsquery.cli import find_hint_function
+
+        with patch("awsquery.cli.get_service_valid_operations") as mock_valid_ops:
+            with patch("awsquery.cli.get_service_operations") as mock_all_ops:
+                mock_all_ops.return_value = [
+                    "DescribeVpcs",
+                    "DescribeVpcEndpoints",
+                    "DescribeVpcAttribute",
+                    "CreateVpc",
+                ]
+                mock_valid_ops.return_value = [
+                    "DescribeVpcs",
+                    "DescribeVpcEndpoints",
+                    "DescribeVpcAttribute",
+                ]
+
+                service, function, field, limit, alternatives = find_hint_function(
+                    "desc-vpc", "ec2"
+                )
+
+                assert function == "DescribeVpcs"
+                assert "DescribeVpcAttribute" in alternatives
+                assert "DescribeVpcEndpoints" in alternatives
+
+    def test_find_hint_function_returns_correct_alternatives(self):
+        from awsquery.cli import find_hint_function
+
+        with patch("awsquery.cli.get_service_valid_operations") as mock_valid_ops:
+            with patch("awsquery.cli.get_service_operations") as mock_all_ops:
+                mock_all_ops.return_value = [
+                    "DescribeDBClusters",
+                    "DescribeDBClusterSnapshots",
+                    "DescribeDBClusterEndpoints",
+                    "DescribeDBClusterParameters",
+                ]
+                mock_valid_ops.return_value = [
+                    "DescribeDBClusters",
+                    "DescribeDBClusterSnapshots",
+                    "DescribeDBClusterEndpoints",
+                    "DescribeDBClusterParameters",
+                ]
+
+                service, function, field, limit, alternatives = find_hint_function(
+                    "desc-db-clus", "rds"
+                )
+
+                assert function == "DescribeDBClusters"
+                assert len(alternatives) == 3
+                assert "DescribeDBClusterSnapshots" in alternatives
+                assert "DescribeDBClusterEndpoints" in alternatives
+                assert "DescribeDBClusterParameters" in alternatives
