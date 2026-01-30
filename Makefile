@@ -235,39 +235,39 @@ route53-zones: $(OUTPUT_DIR) ## Sample Route53 hosted zones API response (AWS)
 
 # Docker commands
 shell: docker-build ## Open shell in Docker container (AWS)
-	docker-compose run --rm awsquery-dev
+	docker compose run --rm awsquery-dev
 
 docker-build: ## Build Docker container (AWS)
-	docker-compose build awsquery-dev
+	docker compose build awsquery-dev
 
 docker-build-prod: ## Build production Docker container (AWS)
-	docker-compose build awsquery-prod
+	docker compose build awsquery-prod
 
 docker-clean: ## Clean up Docker resources (AWS)
-	docker-compose down --rmi all --volumes --remove-orphans
+	docker compose down --rmi all --volumes --remove-orphans
 
 test-in-docker: docker-build ## Test awsquery in Docker container (AWS)
 	@echo "Testing awsquery in Docker container..."
-	docker-compose run --rm awsquery-dev python awsquery.py --help
+	docker compose run --rm awsquery-dev python awsquery.py --help
 	@echo ""
 	@echo "Testing modular CLI..."
-	docker-compose run --rm awsquery-dev awsquery --help
+	docker compose run --rm awsquery-dev awsquery --help
 	@echo ""
 	@echo "Testing AWS CLI access..."
-	-docker-compose run --rm awsquery-dev aws sts get-caller-identity
+	-docker compose run --rm awsquery-dev aws sts get-caller-identity
 	@echo ""
 	@echo "Testing awsquery command..."
-	-docker-compose run --rm awsquery-dev python awsquery.py ec2 describe_instances
+	-docker compose run --rm awsquery-dev python awsquery.py ec2 describe_instances
 	@echo ""
 	@echo "Running tests in Docker..."
-	-docker-compose run --rm awsquery-dev make test
+	-docker compose run --rm awsquery-dev make test
 
 test-in-docker-prod: docker-build-prod ## Test production Docker container (AWS)
 	@echo "Testing production awsquery in Docker container..."
-	docker-compose run --rm awsquery-prod --help
+	docker compose run --rm awsquery-prod --help
 	@echo ""
 	@echo "Testing production command..."
-	-docker-compose run --rm awsquery-prod ec2 describe-instances
+	-docker compose run --rm awsquery-prod ec2 describe-instances
 
 # Comprehensive awsquery testing target
 test-awsquery: ## Run comprehensive awsquery functional tests (AWS)

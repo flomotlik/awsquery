@@ -31,7 +31,7 @@ make test-in-docker
 make docker-build-prod
 
 # Run awsquery command
-docker-compose run --rm awsquery-prod ec2 describe-instances
+docker compose run --rm awsquery-prod ec2 describe-instances
 
 # Test production container
 make test-in-docker-prod
@@ -91,7 +91,7 @@ This installs only the dependencies listed in `pyproject.toml` `dependencies` se
 
 ```bash
 # Start development environment
-docker-compose run --rm awsquery-dev
+docker compose run --rm awsquery-dev
 
 # Inside container - run tests
 make test
@@ -119,13 +119,13 @@ awsquery ec2 describe-instances --dry-run
 
 ```bash
 # Run specific AWS queries
-docker-compose run --rm awsquery-prod ec2 describe-instances
-docker-compose run --rm awsquery-prod s3 list-buckets
-docker-compose run --rm awsquery-prod cloudformation describe-stacks
+docker compose run --rm awsquery-prod ec2 describe-instances
+docker compose run --rm awsquery-prod s3 list-buckets
+docker compose run --rm awsquery-prod cloudformation describe-stacks
 
 # With filters and JSON output
-docker-compose run --rm awsquery-prod ec2 describe-instances prod -- InstanceId State.Name
-docker-compose run --rm awsquery-prod -j s3 list-buckets backup -- Name CreationDate
+docker compose run --rm awsquery-prod ec2 describe-instances prod -- InstanceId State.Name
+docker compose run --rm awsquery-prod -j s3 list-buckets backup -- Name CreationDate
 ```
 
 ### AWS Credentials
@@ -202,42 +202,42 @@ Environment variables are also supported:
    ls -la ~/.aws/
    
    # Test AWS CLI access
-   docker-compose run --rm awsquery-dev aws sts get-caller-identity
+   docker compose run --rm awsquery-dev aws sts get-caller-identity
    ```
 
 2. **Permission Issues**
    ```bash
    # Check file permissions
-   docker-compose run --rm awsquery-dev ls -la
+   docker compose run --rm awsquery-dev ls -la
    
    # For production container, ensure non-root user can access files
-   docker-compose run --rm awsquery-prod whoami
+   docker compose run --rm awsquery-prod whoami
    ```
 
 3. **Module Import Errors**
    ```bash
    # Verify package installation
-   docker-compose run --rm awsquery-dev pip show awsquery
+   docker compose run --rm awsquery-dev pip show awsquery
    
    # Test both access methods
-   docker-compose run --rm awsquery-dev python awsquery.py --help
-   docker-compose run --rm awsquery-dev awsquery --help
+   docker compose run --rm awsquery-dev python awsquery.py --help
+   docker compose run --rm awsquery-dev awsquery --help
    ```
 
 ### Debug Commands
 
 ```bash
 # Check container contents
-docker-compose run --rm awsquery-dev ls -la /app
+docker compose run --rm awsquery-dev ls -la /app
 
 # Verify Python environment
-docker-compose run --rm awsquery-dev python -c "import awsquery; print('OK')"
+docker compose run --rm awsquery-dev python -c "import awsquery; print('OK')"
 
 # Check installed packages
-docker-compose run --rm awsquery-dev pip list
+docker compose run --rm awsquery-dev pip list
 
 # Test AWS CLI
-docker-compose run --rm awsquery-dev aws --version
+docker compose run --rm awsquery-dev aws --version
 ```
 
 ## CI/CD Integration
@@ -248,8 +248,8 @@ The production Docker image is ideal for CI/CD pipelines:
 # Example GitHub Actions usage
 - name: Build and test awsquery
   run: |
-    docker-compose build awsquery-prod
-    docker-compose run --rm awsquery-prod --help
+    docker compose build awsquery-prod
+    docker compose run --rm awsquery-prod --help
 ```
 
 ## Building Without Docker Compose

@@ -45,7 +45,7 @@ FixPlan.md
 # Ignore Docker files themselves
 Dockerfile
 Dockerfile.prod
-docker-compose.yml
+compose.yaml
 .dockerignore
 
 # Ignore setup scripts that aren't needed in container
