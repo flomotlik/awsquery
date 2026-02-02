@@ -506,9 +506,9 @@ class TestTableOutput:
         assert "active" in result
 
     def test_format_table_output_long_value_truncation(self):
-        # Long values get truncated with ellipsis
+        # Long values get truncated with ellipsis (early truncation at 80 chars)
         resources = [{"ShortValue": "short", "LongValue": "a" * 90}]  # Over 80 character limit
-        result = format_table_output(resources)
+        result = format_table_output(resources, max_width=2000)
 
         assert "short" in result
         assert ("a" * 77 + "...") in result
@@ -830,7 +830,7 @@ class TestColumnNamingIntegration:
             }
         ]
 
-        table_result = format_table_output(resources)
+        table_result = format_table_output(resources, max_width=2000)
         assert "Tags.Name" in table_result
         assert "State.Name" in table_result
         assert "web-server-01" in table_result
@@ -964,7 +964,7 @@ class TestComplexScenarios:
 
         # Uses prefix filters (^) to explicitly target nested array content
         result = format_table_output(
-            [complex_resource], column_filters=["^LoadBalancer", "^Protocol"]
+            [complex_resource], column_filters=["^LoadBalancer", "^Protocol"], max_width=2000
         )
 
         assert "LoadBalancerName" in result or "DNSName" in result

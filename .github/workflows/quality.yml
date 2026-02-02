@@ -2,10 +2,7 @@
 name: Code Quality
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
-    branches: [main]
 
 jobs:
   code-quality:
@@ -17,16 +14,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
 
       - name: Cache pip packages
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: >-
-            ${{ runner.os }}-pip-quality-${{ hashFiles('pyproject.toml') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
-            ${{ runner.os }}-pip-quality-
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
@@ -45,3 +40,7 @@ jobs:
       - name: Run type checking
         run: |
           make type-check
+
+      - name: Run security checks
+        run: |
+          make security-check

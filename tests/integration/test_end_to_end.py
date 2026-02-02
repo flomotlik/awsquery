@@ -841,7 +841,7 @@ class TestCLIOutputFormats:
         flattened = flatten_response(large_response, service="ec2", operation="DescribeInstances")
 
         # Test table format with large dataset
-        table_output = format_table_output(flattened, [])
+        table_output = format_table_output(flattened, [], max_width=2000)
         assert len(table_output) > 100  # Should have substantial output
         assert "i-00000000000000000" in table_output  # First instance
         assert "instance-" in table_output  # Instance names
