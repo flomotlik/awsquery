@@ -419,7 +419,7 @@ class TestAllFeaturesIntegration:
             "Tags.Project",  # Uses transformed structure
         ]
 
-        output = format_table_output(resources, column_filters)
+        output = format_table_output(resources, column_filters, max_width=2000)
 
         # Verify that tag values are correctly extracted
         assert "web-infrastructure" in output

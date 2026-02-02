@@ -42,7 +42,7 @@ class TestColumnOrderingConsistency:
         # Run multiple times to check consistency
         outputs = []
         for _ in range(5):
-            output = format_table_output(resources, column_filters)
+            output = format_table_output(resources, column_filters, max_width=2000)
             outputs.append(output)
 
         # All outputs should be identical
@@ -81,7 +81,7 @@ class TestColumnOrderingConsistency:
         # Run multiple times
         outputs = []
         for _ in range(5):
-            output = format_table_output(resources, column_filters)
+            output = format_table_output(resources, column_filters, max_width=2000)
             outputs.append(output)
 
         # All outputs should be identical
@@ -103,7 +103,7 @@ class TestColumnOrderingConsistency:
         # No column filters
         outputs = []
         for _ in range(5):
-            output = format_table_output(resources, None)
+            output = format_table_output(resources, None, max_width=2000)
             outputs.append(output)
 
         # All outputs should be identical
