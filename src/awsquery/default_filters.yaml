@@ -383,7 +383,7 @@ batch:
     - desiredvCpus$
     - imageId$
     - type$
-    - instanceTypes$
+    - instanceTypes
     - maxvCpus$
     - minvCpus$
     - state$
@@ -441,7 +441,7 @@ ce:
     - Value$
     - Groups$
     - Key$
-    - Keys$
+    - Keys
     - Metrics$
     - End$
     - NextPageToken$
@@ -683,7 +683,7 @@ cloudwatch:
     - Value$
     - Namespace$
     - NextToken$
-    - OwningAccounts$
+    - OwningAccounts
 codebuild:
   batch_get_builds:
     columns:
@@ -1046,7 +1046,7 @@ ec2:
     columns:
     - ServiceName$
     - State$
-    - SubnetIds$
+    - SubnetIds
     - VpcEndpointId$
     - VpcEndpointType$
     - VpcId$
@@ -1365,12 +1365,12 @@ elasticbeanstalk:
     columns:
     - ApplicationArn$
     - ApplicationName$
-    - ConfigurationTemplates$
+    - ConfigurationTemplates
     - DateCreated$
     - DateUpdated$
     - Description$
     - ResourceLifecycleConfig$
-    - Versions$
+    - Versions
   describe_environment_health:
     columns:
     - EnvironmentName$
@@ -1829,7 +1829,7 @@ kafka:
     - state$
     - creationTime$
     - description$
-    - kafkaVersions$
+    - kafkaVersions
     - latestRevision$
   list_nodes:
     columns:
@@ -2285,7 +2285,7 @@ route53:
     - ResourceRecordSetCount$
     - DelegationSet$
     - CallerReference$
-    - NameServers$
+    - NameServers
     - HostedZone$
   list_health_checks:
     columns:
@@ -2330,10 +2330,10 @@ s3:
     - Permission$
   get_bucket_cors:
     columns:
-    - AllowedOrigins$
-    - AllowedMethods$
-    - AllowedHeaders$
-    - ExposeHeaders$
+    - AllowedOrigins
+    - AllowedMethods
+    - AllowedHeaders
+    - ExposeHeaders
     - MaxAgeSeconds$
   get_bucket_encryption:
     columns:
@@ -2358,7 +2358,7 @@ s3:
   get_bucket_notification_configuration:
     columns:
     - Id$
-    - Events$
+    - Events
     - LambdaFunctionArn$
     - QueueArn$
     - TopicArn$
@@ -2642,8 +2642,7 @@ ssm:
     - Name$
     - DataType$
     - Type$
-    - InvalidParameters$
-    - Parameters$
+    - InvalidParameters
     - LastModifiedDate$
     - Selector$
   list_associations:
