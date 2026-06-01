@@ -181,26 +181,31 @@ def detect_aws_tags(obj):
 
 
 def _transform_aws_tags_list(tags_list):
-    """Transform AWS Tags list to map format."""
+    """Transform AWS Tags list to map format (case-insensitive Key/Value)."""
     tag_map = {}
     for tag in tags_list:
-        if isinstance(tag, dict) and "Key" in tag and "Value" in tag:
-            # Only add tags with non-empty keys
-            tag_key = tag["Key"]
-            if tag_key and tag_key.strip():
-                tag_map[tag_key] = tag["Value"]
+        if not isinstance(tag, dict):
+            continue
+        key_name = next(
+            (k for k in tag if isinstance(k, str) and k.lower() == "key"), None
+        )
+        value_name = next(
+            (k for k in tag if isinstance(k, str) and k.lower() == "value"), None
+        )
+        if key_name is None or value_name is None:
+            continue
+        tag_key = tag[key_name]
+        if isinstance(tag_key, str) and tag_key.strip():
+            tag_map[tag_key] = tag[value_name]
     return tag_map
 
 
 def _is_aws_tags_structure(value):
-    """Check if value looks like AWS Tags structure."""
-    return (
-        isinstance(value, list)
-        and value
-        and isinstance(value[0], dict)
-        and "Key" in value[0]
-        and "Value" in value[0]
-    )
+    """Check if value looks like AWS Tags structure (case-insensitive Key/Value)."""
+    if not (isinstance(value, list) and value and isinstance(value[0], dict)):
+        return False
+    lower_keys = {k.lower() for k in value[0] if isinstance(k, str)}
+    return "key" in lower_keys and "value" in lower_keys
 
 
 def transform_tags_structure(data, max_depth=10, current_depth=0):
