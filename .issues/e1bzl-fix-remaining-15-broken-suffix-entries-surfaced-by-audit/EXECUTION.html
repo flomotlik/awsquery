@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="artifact-source-sha256" content="1ccbd49d12073903df5666b09484324349a3aea62d48a6d0e732588ade93685e">
+<meta name="artifact-source-file" content="EXECUTION.md">
+<meta name="artifact-generated-at" content="2026-06-01 09:57 UTC">
+<meta name="design-system-version" content="ds-1">
+<title>Execution — Fix remaining 15 broken $-suffix entries surfaced by audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://flomotlik.github.io/claude-code/design-system.css">
+</head>
+<body>
+<div class="page">
+
+<header class="row">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">00</span>Execution</p>
+  </div>
+  <div class="body">
+    <h1 class="masthead-title">Fix remaining 15 broken $-suffix entries surfaced by audit</h1>
+    <p class="masthead-sub">Issue: e1bzl-fix-remaining-15-broken-suffix-entries-surfaced-by-audit &middot; Generated 2026-06-01 09:57 UTC</p>
+  </div>
+</header>
+
+<hr class="rule">
+
+<section class="row" id="strategy">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">01</span>Strategy</p>
+  </div>
+  <div class="body">
+    <h2>Strategy summary</h2>
+      <div class="callout callout-ok">
+        <p><strong>Status:</strong> complete. 15 broken <code>$</code>-suffix entries fixed in <code>default_filters.yaml</code> via a single atomic commit. Audit confirms all 15 in-scope entries gone from the BROKEN list; the 6 residual entries are sue5t-scope (will resolve on rebase post-merge).</p>
+      </div>
+      <p>Uniform mechanical fix: 14 entries lose their trailing <code>$</code> so the pattern becomes a contains-match against flattened <code>Foo.0..N</code> keys. The 15th (<code>ssm.get_parameters Parameters$</code>) is deleted because <code>Parameters</code> as contains-match would degenerate to "all columns".</p>
+      <ul>
+        <li><strong>Branch dependency:</strong> e1bzl was cut from main before sue5t merged. The audit script (added in sue5t) ran via a sibling-worktree fallback for verification.</li>
+        <li><strong>One commit:</strong> tasks 1 and 2 logically share scope; CLAUDE.md prescribes combining related changes.</li>
+        <li><strong>No code changes:</strong> only YAML; no test, README, or Python source touched.</li>
+      </ul>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="flow">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">02</span>Flow</p>
+  </div>
+  <div class="body">
+    <h2>Task flow &amp; dependencies</h2>
+      <div class="flow">
+      <div class="flow-node">
+        <p class="flow-num">01</p>
+        <p class="flow-title">Tasks 1+2</p>
+        <p class="flow-meta"><code>9d7573e</code></p>
+        <p>Fix 15 broken $-suffix entries surfaced by audit</p>
+      </div>
+      </div>
+      <p class="margin-note">One atomic commit. Verification follows in the same run.</p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="decisions">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">03</span>Decisions</p>
+  </div>
+  <div class="body">
+    <h2>Key decisions &amp; options</h2>
+      <div class="decision">
+        <h3>Tasks 1+2 combined into one commit</h3>
+        <p>PLAN.md split tasks 1 and 2 into two commits; both edit the same logical scope (broken <code>$</code>-suffix entries in <code>default_filters.yaml</code>). Per CLAUDE.md “Combine related changes — one commit for logically grouped changes”, combined into <code>9d7573e</code>. The intermediate state (Task 1 alone) leaves 1 broken entry — not a clean stopping point.</p>
+      </div>
+      <div class="decision">
+        <h3>Audit run from sibling sue5t worktree</h3>
+        <p>Audit script lives on the sue5t branch (introduced there, not yet merged to main). e1bzl branched off main, so the script is absent here. Verification used the sue5t copy with <code>PYTHONPATH=&lt;e1bzl-src&gt;</code> so it loaded the e1bzl YAML. Once sue5t merges and e1bzl rebases, the in-repo audit test gates this fix permanently.</p>
+      </div>
+      <div class="decision">
+        <h3>Direct execution — no specialist agent</h3>
+        <p>Agent-tool executor with <code>isolation: worktree</code> created a doubly-nested sub-worktree; the agent’s CF-034 containment rule correctly refused. For a 3-task mechanical YAML edit, direct orchestrator execution is appropriate. CLAUDE.md’s <code>@agent-python-infra-automator</code> mandate applies to Python code; this task only touched YAML.</p>
+      </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="detail">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">04</span>Detail</p>
+  </div>
+  <div class="body">
+    <h2>Full detail</h2>
+    <details class="detail">
+      <summary>Show full artifact source
+        <span class="summary-hint">click to expand</span></summary>
+      <div class="detail-body">
+        <pre><code id="artifact-source-target"></code></pre>
+      </div>
+    </details>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="provenance">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">05</span>Provenance</p>
+  </div>
+  <div class="body">
+    <h2>Provenance</h2>
+    <p>Generated from the canonical <code>.md</code>. Regenerate with
+       <code>/issue:view</code> if the <code>.md</code> changes.</p>
+    <footer class="footer">
+      <span>Source: <code>EXECUTION.md</code> &middot;
+        SHA-256 <code>1ccbd49d12073903df5666b09484324349a3aea62d48a6d0e732588ade93685e</code></span>
+      <span>Generated 2026-06-01 09:57 UTC &middot; design system ds-1</span>
+    </footer>
+  </div>
+</section>
+
+</div>
+
+<script type="application/json" id="artifact-source">
+{"source": "# Execution: Fix remaining 15 broken $-suffix entries surfaced by audit\n\n**Started:** 2026-06-01T09:55:00Z\n**Completed:** 2026-06-01T10:02:00Z\n**Duration:** ~7 minutes\n**Status:** complete\n**Branch:** e1bzl-fix-remaining-15-broken-suffix-entries-surfaced-by-audit\n\n## Execution Log\n\n- [x] Task 1: Strip `$` from 14 list-of-primitive entries — commit 9d7573e\n- [x] Task 2: Delete `ssm.get_parameters Parameters$` (degenerate filter) — commit 9d7573e\n  (combined with Task 1 per CLAUDE.md \"Combine related changes\" — both tasks scope to one logical YAML cleanup)\n- [x] Task 3: Verify audit + tests — no edits, verification only\n\n## Commits\n\n| Hash      | Subject                                        |\n| :-------- | :--------------------------------------------- |\n| 9d7573e   | Fix 15 broken $-suffix entries surfaced by audit |\n\n## Verification Results\n\n| Gate | Result |\n| :--- | :----- |\n| Audit script (run from sue5t worktree against e1bzl YAML) | **all 15 e1bzl-scope entries gone from BROKEN list** |\n| `make test` | 1307 passed (no test changes in this issue) |\n| `make lint` | flake8 clean, pylint 10.00/10 |\n| `make format-check` | clean (62 files) |\n| `make type-check` | clean (12 source files) |\n\nAudit residual broken list contains only the 6 sue5t-scope entries (`directconnect tags$`, `ec2.describe_vpcs Tags$`, `ecr.describe_images imageTags$`, two `redshift Tags$`, `redshift Key$`). These are fixed on the sue5t branch and will disappear once sue5t merges and e1bzl rebases. **None of the 15 in-scope entries for this issue remain broken.**\n\n## Deviations from Plan\n\n### Tasks 1 + 2 combined into one commit\n\nPLAN.md prescribed 2 commits for the YAML edits. Combined into one commit `9d7573e` because:\n- Both tasks scope to the same logical change (\"fix broken `$`-suffix entries in `default_filters.yaml`\")\n- CLAUDE.md commit guidelines explicitly say \"Combine related changes — One commit for logically grouped changes\"\n- Splitting requires editing the same `ssm.get_parameters` block twice (Task 1's `InvalidParameters$` → `InvalidParameters` strip on the same line range where Task 2 deletes `Parameters$`)\n- The intermediate state (Task 1 alone) leaves 1 broken entry — not a clean stopping point\n\n### Audit run from sibling sue5t worktree\n\nThe audit script `scripts/audit_default_filters.py` was introduced on the sue5t branch and is not yet merged to main. e1bzl branched off main, so the script is not present in this worktree. Verification was performed by:\n\n1. Copying the script from `/workspace/.worktrees/sue5t-…/scripts/audit_default_filters.py` to `/tmp/audit.py`\n2. Running it with `PYTHONPATH=<e1bzl-src>` so it loads the e1bzl YAML via `awsquery.config.load_default_filters`\n3. Confirming the 15 in-scope entries are absent from the BROKEN list\n\nWhen sue5t merges to main and e1bzl rebases, the audit script will be naturally present, and the in-repo test (also added in sue5t) will gate this fix permanently.\n\n### Direct execution (no specialist agent)\n\nThe Agent-tool executor was attempted with `isolation: worktree`, but the harness spawned the agent in a doubly-nested sub-worktree (`.claude/worktrees/agent-<id>/` inside the issue worktree). The agent's hardcoded CF-034 containment rule correctly refused to proceed. For a 3-task mechanical YAML edit, direct execution by the orchestrator is appropriate; the executor-agent abstraction is overhead. CLAUDE.md's `@agent-python-infra-automator` mandate applies to Python code; this task only touched YAML.\n\n## Out-of-scope: no new broken entries surfaced\n\nThe audit's residual 6 BROKEN entries are all sue5t-scope (already fixed on that branch). No new broken entries were discovered while making these edits.\n\n## Self-Check\n\n- [x] 14 list-of-primitive entries: trailing `$` stripped\n- [x] `ssm.get_parameters Parameters$` line deleted (only that one; athena's `Parameters$` correctly preserved)\n- [x] Audit residual broken list contains zero of the 15 in-scope entries\n- [x] `make test`, `make lint`, `make format-check`, `make type-check` all green\n- [x] No other files touched (only `src/awsquery/default_filters.yaml`)\n- [x] No Claude attribution in commits\n- **Result:** PASSED\n"}
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var dataEl = document.getElementById("artifact-source");
+  var target = document.getElementById("artifact-source-target");
+  if (dataEl && target) {
+    try { target.textContent = JSON.parse(dataEl.textContent).source || ""; }
+    catch (e) { target.textContent = dataEl.textContent; }
+  }
+  document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+    a.addEventListener("click", function (ev) {
+      var el = document.getElementById(a.getAttribute("href").slice(1));
+      if (el) { ev.preventDefault(); el.scrollIntoView({ behavior: "smooth" }); }
+    });
+  });
+})();
+</script>
+</body>
+</html>
