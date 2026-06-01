@@ -294,7 +294,8 @@ Ensure AWS credentials are configured via:
 
 The tool uses `default_filters.yaml` to define default columns for common queries. This comprehensive configuration file (3000+ lines)
 provides extensive pre-configured filters for dozens of AWS services, loaded from the package directory to provide you with standard
-columns if you don't add any.
+columns if you don't add any. Prefix any column filter with `+` to merge with the defaults instead of replacing them — see
+[Additive Column Filters (`+Column`)](#additive-column-filters-column) below.
 
 Example configuration:
 ```yaml
@@ -448,6 +449,24 @@ awsquery ec2 describe-instances -- ^State.Name$
 # Multiple patterns
 awsquery ec2 describe-instances -- ^Instance Name$ State
 ```
+
+#### Additive Column Filters (`+Column`)
+
+By default, supplying any column filter REPLACES the curated defaults from `default_filters.yaml`.
+Prefix any column with `+` to merge with the defaults instead:
+
+| Command                                                  | Columns shown                                                                                          |
+| :------------------------------------------------------- | :----------------------------------------------------------------------------------------------------- |
+| `awsquery ec2 describe-instances`                        | `default_filters.yaml` defaults                                                                        |
+| `awsquery ec2 describe-instances -- InstanceId`          | only `InstanceId` (replaces defaults)                                                                  |
+| `awsquery ec2 describe-instances -- +InstanceId`         | defaults + `InstanceId` (merged, deduped, defaults first)                                              |
+| `awsquery ec2 describe-instances -- InstanceId +OwnerId` | defaults + `InstanceId` + `OwnerId` (any `+` triggers additive mode for the whole column-filter group) |
+
+Notes:
+- `+` is recognised anywhere in the column-filter group (after the `--` separator).
+- Order is defaults first, then your `+`-prefixed and bare columns in CLI order.
+- Dedup is case-sensitive on the exact pattern string: `+Foo` plus default `Foo` collapses to one column; `+foo` plus `Foo` keeps both.
+- `+` applies only to column filters — value/resource filter behaviour is unchanged.
 
 ### Multi-Level API Calls
 

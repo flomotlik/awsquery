@@ -542,3 +542,34 @@ class TestValidationWithDataFieldExtraction:
 
             assert len(results) == 1
             assert results[0][1] is None
+
+
+class TestFilterValidatorPlusStripContract:
+    # Validator must NEVER see '+'-prefixed tokens at runtime; cli.py strips
+    # them upstream. These tests document why the strip is load-bearing.
+
+    def test_raw_plus_token_does_not_match_shape_field(self):
+        validator = FilterValidator()
+        mock_simplified = {"instanceid": "string"}
+        mock_full = {"InstanceId": "string"}
+        with patch.object(
+            validator.shape_cache,
+            "get_response_fields",
+            return_value=("Reservations", mock_simplified, mock_full),
+        ):
+            results = validator.validate_columns("ec2", "describe-instances", ["+InstanceId"])
+            assert len(results) == 1
+            assert results[0][1] is not None
+
+    def test_stripped_token_matches_shape_field(self):
+        validator = FilterValidator()
+        mock_simplified = {"instanceid": "string"}
+        mock_full = {"InstanceId": "string"}
+        with patch.object(
+            validator.shape_cache,
+            "get_response_fields",
+            return_value=("Reservations", mock_simplified, mock_full),
+        ):
+            results = validator.validate_columns("ec2", "describe-instances", ["InstanceId"])
+            assert len(results) == 1
+            assert results[0][1] is None
