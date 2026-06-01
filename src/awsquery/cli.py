@@ -319,23 +319,61 @@ def _build_filter_argv(args, remaining):
     return filter_argv
 
 
-def _format_columns_copyable(columns):
-    """Format column list as copy-pasteable command snippet."""
+def _format_columns_copyable(columns, additive_marks=None):
+    """Format column list as copy-pasteable command snippet.
+
+    When additive_marks is a list of bools matching len(columns), entries at
+    True positions are rendered with a leading '+' so the echoed command stays
+    runnable in additive mode.
+    """
     if not columns:
         return ""
-    return "-- " + " ".join(columns)
+    if additive_marks is None or len(additive_marks) != len(columns):
+        return "-- " + " ".join(columns)
+    rendered = [
+        f"+{col}" if mark and not col.startswith("+") else col
+        for col, mark in zip(columns, additive_marks)
+    ]
+    return "-- " + " ".join(rendered)
 
 
 def determine_column_filters(column_filters, service, action, json_output=False):
     """Determine which column filters to apply - user specified or defaults"""
-    if column_filters:
+    from .utils import normalize_action_name
+
+    normalized_action = normalize_action_name(action)
+
+    additive_present = any(
+        isinstance(c, str) and c.startswith("+") for c in (column_filters or [])
+    )
+
+    if additive_present:
+        stripped = [
+            c[1:] if isinstance(c, str) and c.startswith("+") else c
+            for c in column_filters
+        ]
+        debug_print(
+            f"Additive mode detected; stripped columns: {stripped}"
+        )  # pragma: no mutate
+        merged = apply_default_filters(
+            service, normalized_action, user_columns=stripped, additive=True
+        )
+        column_filters_to_use = merged if merged else stripped
+        if not json_output:
+            defaults_only = apply_default_filters(service, normalized_action) or []
+            defaults_set = set(defaults_only)
+            additive_marks = [
+                c not in defaults_set for c in (column_filters_to_use or [])
+            ]
+            cols = _format_columns_copyable(
+                column_filters_to_use, additive_marks=additive_marks
+            )
+            print(f"Using default columns + additions: {cols}", file=sys.stderr)
+    elif column_filters:
         debug_print(f"Using user-specified column filters: {column_filters}")  # pragma: no mutate
         column_filters_to_use = column_filters
     else:
-        # Check for defaults - normalize action name for lookup
-        from .utils import normalize_action_name
-
-        normalized_action = normalize_action_name(action)
+        # Check for defaults - action already normalized at function top
         default_columns = apply_default_filters(service, normalized_action)
         if default_columns:
             debug_print(
