@@ -52,8 +52,21 @@ def get_default_columns(service, action):
     return columns
 
 
-def apply_default_filters(service, action, user_columns=None):
-    """Apply default filters if no user columns specified"""
+def apply_default_filters(service, action, user_columns=None, additive=False):
+    """Apply default filters; in additive mode merge defaults with user columns."""
+    if additive and user_columns:
+        defaults = get_default_columns(service, action) or []
+        if not defaults:
+            debug_print(
+                "Additive mode: no defaults configured, returning user columns"
+            )  # pragma: no mutate
+            return list(user_columns)
+        merged = list(dict.fromkeys(list(defaults) + list(user_columns)))
+        debug_print(
+            f"Additive mode: merged defaults + user columns: {merged}"
+        )  # pragma: no mutate
+        return merged or None
+
     if user_columns:
         debug_print("User specified columns, skipping defaults")  # pragma: no mutate
         return user_columns
