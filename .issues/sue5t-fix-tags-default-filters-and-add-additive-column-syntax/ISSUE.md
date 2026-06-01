@@ -1,7 +1,7 @@
 ---
 id: sue5t
 title: Fix Tags$ default filters and add additive +Column syntax
-status: open
+status: done
 priority: high
 labels:
 - bug
