@@ -826,7 +826,7 @@ directconnect:
     - ownerAccount$
     - amazonSideAsn$
     - stateChangeError$
-    - tags$
+    - tags.Name
   describe_virtual_interfaces:
     columns:
     - virtualInterfaceName$
@@ -1068,7 +1068,7 @@ ec2:
     - vpcPeeringConnectionId$
   describe_vpcs:
     columns:
-    - Tags$
+    - Tags.Name$
     - VpcId$
     - CidrBlock$
     - State$
@@ -1084,7 +1084,7 @@ ecr:
     - imagePushedAt$
     - imageScanStatus$
     - imageSizeInBytes$
-    - imageTags$
+    - imageTags
     - registryId$
     - status$
   describe_repositories:
@@ -2227,9 +2227,7 @@ redshift:
     - Marker$
     - Description$
     - ParameterGroupFamily$
-    - Tags$
-    - Key$
-    - Value$
+    - Tags.Name$
   describe_cluster_security_groups:
     columns:
     - EC2SecurityGroupOwnerId$
@@ -2238,7 +2236,7 @@ redshift:
     - Status$
     - Description$
     - EC2SecurityGroups$
-    - Tags$
+    - Tags.Name$
   describe_cluster_snapshots:
     columns:
     - AccountId$
