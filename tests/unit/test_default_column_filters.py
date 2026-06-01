@@ -202,6 +202,135 @@ class TestDetermineColumnFilters:
         assert result is None
 
 
+class TestApplyDefaultFiltersAdditive:
+
+    def test_additive_true_merges_defaults_and_user_columns(self):
+        result = apply_default_filters(
+            "ec2", "describe_instances", user_columns=["OwnerId"], additive=True
+        )
+        defaults = get_default_columns("ec2", "describe_instances")
+        assert result == list(defaults) + ["OwnerId"]
+
+    def test_additive_true_preserves_defaults_order_first(self):
+        result = apply_default_filters(
+            "ec2", "describe_instances", user_columns=["X", "Y", "Z"], additive=True
+        )
+        defaults = get_default_columns("ec2", "describe_instances")
+        assert result[: len(defaults)] == list(defaults)
+        assert result[len(defaults) :] == ["X", "Y", "Z"]
+
+    def test_additive_true_dedup_collapses_exact_string_duplicates(self):
+        defaults = get_default_columns("ec2", "describe_instances")
+        duplicate = defaults[0]
+        result = apply_default_filters(
+            "ec2", "describe_instances", user_columns=[duplicate, "NewCol"], additive=True
+        )
+        assert result.count(duplicate) == 1
+        assert result.index(duplicate) == 0
+        assert "NewCol" in result
+
+    def test_additive_true_dedup_is_case_sensitive(self):
+        defaults = get_default_columns("ec2", "describe_instances")
+        first_default = defaults[0]
+        lowered = first_default.lower()
+        if lowered == first_default:
+            pytest.skip("default already lowercase")
+        result = apply_default_filters(
+            "ec2", "describe_instances", user_columns=[lowered], additive=True
+        )
+        assert first_default in result
+        assert lowered in result
+
+    def test_additive_true_empty_user_returns_defaults(self):
+        result = apply_default_filters(
+            "ec2", "describe_instances", user_columns=[], additive=True
+        )
+        assert result == get_default_columns("ec2", "describe_instances")
+
+    def test_additive_true_none_user_returns_defaults(self):
+        result = apply_default_filters(
+            "ec2", "describe_instances", user_columns=None, additive=True
+        )
+        assert result == get_default_columns("ec2", "describe_instances")
+
+    def test_additive_true_no_defaults_returns_user_columns(self):
+        result = apply_default_filters(
+            "nonexistent", "action", user_columns=["A", "B"], additive=True
+        )
+        assert result == ["A", "B"]
+
+    def test_additive_false_byte_identical_to_today(self):
+        result_default = apply_default_filters("ec2", "describe_instances", ["X"])
+        result_explicit = apply_default_filters(
+            "ec2", "describe_instances", user_columns=["X"], additive=False
+        )
+        assert result_default == ["X"]
+        assert result_explicit == ["X"]
+
+
+class TestDetermineColumnFiltersAdditive:
+
+    def test_plus_prefix_triggers_additive_mode(self):
+        result = determine_column_filters(
+            ["+OwnerId"], "ec2", "describe_instances", json_output=True
+        )
+        defaults = get_default_columns("ec2", "describe_instances")
+        assert result == list(defaults) + ["OwnerId"]
+        assert not any(c.startswith("+") for c in result)
+
+    def test_mixed_plus_and_bare_triggers_additive(self):
+        result = determine_column_filters(
+            ["Bar", "+Foo"], "ec2", "describe_instances", json_output=True
+        )
+        defaults = get_default_columns("ec2", "describe_instances")
+        assert result == list(defaults) + ["Bar", "Foo"]
+
+    def test_multiple_plus_columns(self):
+        result = determine_column_filters(
+            ["+A", "+B"], "ec2", "describe_instances", json_output=True
+        )
+        defaults = get_default_columns("ec2", "describe_instances")
+        assert result == list(defaults) + ["A", "B"]
+
+    def test_bare_only_replaces_defaults(self):
+        result = determine_column_filters(
+            ["Foo"], "ec2", "describe_instances", json_output=True
+        )
+        assert result == ["Foo"]
+
+    def test_additive_stderr_echo_renders_plus(self, capsys):
+        determine_column_filters(
+            ["+OwnerId"], "ec2", "describe_instances", json_output=False
+        )
+        err = capsys.readouterr().err
+        assert "Using default columns + additions:" in err
+        assert "+OwnerId" in err
+
+    def test_additive_no_validator_warnings_for_tag_columns(self, capsys):
+        determine_column_filters(
+            ["+Tags.Name"], "ec2", "describe_instances", json_output=False
+        )
+        err = capsys.readouterr().err
+        assert "WARNING: Some column filters may not match" not in err
+
+    def test_additive_falls_back_to_user_when_no_defaults(self):
+        result = determine_column_filters(
+            ["+Foo"], "unknown_service", "unknown_action", json_output=True
+        )
+        assert result == ["Foo"]
+
+    def test_plus_strip_happens_before_validator(self):
+        # The validator short-circuits on 'tag' in filter.lower(); '+InstanceId'
+        # has no 'tag' substring so without the upstream strip the validator
+        # would receive a literal '+InstanceId' (which isn't a real field) and
+        # warn. With the strip in place no warning fires.
+        result = determine_column_filters(
+            ["+InstanceId"], "ec2", "describe_instances", json_output=True
+        )
+        assert "InstanceId" in result
+        assert "+InstanceId" not in result
+
+
 class TestYAMLConfigurationStructure:
     """Test the YAML configuration structure and content."""
 
@@ -249,3 +378,31 @@ class TestYAMLConfigurationStructure:
                 # Only check that columns exist if present
                 if "columns" in action_config:
                     assert isinstance(action_config["columns"], list)
+
+    def test_audit_clean_for_in_scope_fixes(self):
+        import sys as _sys
+        from pathlib import Path
+
+        scripts_dir = (
+            Path(__file__).resolve().parents[2] / "scripts"
+        )
+        _sys.path.insert(0, str(scripts_dir))
+        try:
+            from audit_default_filters import audit_default_filters
+        finally:
+            try:
+                _sys.path.remove(str(scripts_dir))
+            except ValueError:
+                pass
+
+        report = audit_default_filters()
+        broken_keys = {(svc, op) for svc, op, *_ in report["broken"]}
+        in_scope = {
+            ("directconnect", "describe_direct_connect_gateways"),
+            ("ec2", "describe_vpcs"),
+            ("ecr", "describe_images"),
+            ("redshift", "describe_cluster_parameter_groups"),
+            ("redshift", "describe_cluster_security_groups"),
+        }
+        leaked = in_scope & broken_keys
+        assert not leaked, f"audit regressed for in-scope fixes: {leaked}"

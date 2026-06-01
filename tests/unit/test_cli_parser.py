@@ -497,3 +497,39 @@ class TestMultiModeFilterParsing:
         assert resource_filters == []  # Empty before first --
         assert value_filters == []  # Empty between -- and --
         assert column_filters == ["Name"]  # After second --
+
+
+class TestPlusPrefixParsing:
+
+    def test_plus_prefixed_positional_parses_cleanly(self):
+        argv = ["ec2", "describe-instances", "--", "+Foo"]
+        base, resource, value, columns = parse_multi_level_filters_for_mode(
+            argv, mode="single"
+        )
+        assert base == ["ec2", "describe-instances"]
+        assert columns == ["+Foo"]
+
+    def test_plus_prefix_with_value_filter_separator(self):
+        argv = ["ec2", "describe-instances", "Bar", "--", "+Foo"]
+        base, resource, value, columns = parse_multi_level_filters_for_mode(
+            argv, mode="single"
+        )
+        assert base == ["ec2", "describe-instances"]
+        assert value == ["Bar"]
+        assert columns == ["+Foo"]
+
+    def test_plus_prefix_does_not_affect_value_filters(self):
+        # D3: '+' applies ONLY to the column-filter group. A '+Bar' appearing
+        # in the value-filter slot is preserved verbatim and is the caller's
+        # responsibility — it does NOT trigger additive mode.
+        argv = ["ec2", "describe-instances", "+Bar", "--", "Foo"]
+        base, resource, value, columns = parse_multi_level_filters_for_mode(
+            argv, mode="single"
+        )
+        assert value == ["+Bar"]
+        assert columns == ["Foo"]
+
+    def test_multiple_plus_columns_preserved(self):
+        argv = ["ec2", "describe-instances", "--", "+A", "+B", "C"]
+        _, _, _, columns = parse_multi_level_filters_for_mode(argv, mode="single")
+        assert columns == ["+A", "+B", "C"]

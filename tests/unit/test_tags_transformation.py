@@ -4,7 +4,13 @@ from unittest.mock import patch
 
 import pytest
 
-from awsquery.formatters import detect_aws_tags, flatten_response, transform_tags_structure
+from awsquery.formatters import (
+    _is_aws_tags_structure,
+    _transform_aws_tags_list,
+    detect_aws_tags,
+    flatten_response,
+    transform_tags_structure,
+)
 
 
 class TestDetectAwsTags:
@@ -519,3 +525,78 @@ class TestTagsErrorHandling:
             current_result = current_result["next"]
 
         assert current_result["Tags"]["DeepTag"] == "DeepValue"
+
+
+class TestTagsCaseInsensitiveKeyValue:
+
+    def test_is_aws_tags_structure_accepts_canonical_capitalized(self):
+        assert _is_aws_tags_structure([{"Key": "Name", "Value": "web"}])
+
+    def test_is_aws_tags_structure_accepts_lowercase_key_value(self):
+        assert _is_aws_tags_structure([{"key": "Name", "value": "web"}])
+
+    def test_is_aws_tags_structure_accepts_uppercase_key_value(self):
+        assert _is_aws_tags_structure([{"KEY": "Name", "VALUE": "web"}])
+
+    def test_is_aws_tags_structure_accepts_mixed_case(self):
+        assert _is_aws_tags_structure([{"Key": "X", "value": "y"}])
+        assert _is_aws_tags_structure([{"key": "X", "Value": "y"}])
+
+    def test_is_aws_tags_structure_rejects_missing_key(self):
+        assert not _is_aws_tags_structure([{"Value": "web"}])
+
+    def test_is_aws_tags_structure_rejects_missing_value(self):
+        assert not _is_aws_tags_structure([{"Key": "Name"}])
+
+    def test_is_aws_tags_structure_rejects_unrelated_dict(self):
+        assert not _is_aws_tags_structure([{"Name": "web", "Env": "prod"}])
+
+    def test_is_aws_tags_structure_rejects_empty_list(self):
+        assert not _is_aws_tags_structure([])
+
+    def test_is_aws_tags_structure_rejects_non_list(self):
+        assert not _is_aws_tags_structure(None)
+        assert not _is_aws_tags_structure({"Key": "x", "Value": "y"})
+        assert not _is_aws_tags_structure("Key=Value")
+
+    def test_transform_aws_tags_list_handles_lowercase(self):
+        result = _transform_aws_tags_list([{"key": "Name", "value": "web"}])
+        assert result == {"Name": "web"}
+
+    def test_transform_aws_tags_list_handles_canonical(self):
+        result = _transform_aws_tags_list(
+            [{"Key": "Name", "Value": "web"}, {"Key": "Env", "Value": "prod"}]
+        )
+        assert result == {"Name": "web", "Env": "prod"}
+
+    def test_transform_aws_tags_list_handles_mixed_case(self):
+        result = _transform_aws_tags_list(
+            [{"Key": "A", "value": "1"}, {"key": "B", "VALUE": "2"}]
+        )
+        assert result == {"A": "1", "B": "2"}
+
+    def test_transform_aws_tags_list_skips_empty_key(self):
+        result = _transform_aws_tags_list(
+            [{"Key": "", "Value": "x"}, {"Key": "  ", "Value": "y"}, {"Key": "A", "Value": "b"}]
+        )
+        assert result == {"A": "b"}
+
+    def test_transform_aws_tags_list_skips_non_dict_items(self):
+        result = _transform_aws_tags_list(
+            [{"Key": "A", "Value": "1"}, "not-a-dict", None, ["list"], {"Key": "B", "Value": "2"}]
+        )
+        assert result == {"A": "1", "B": "2"}
+
+    def test_transform_tags_structure_directconnect_simulated(self):
+        # directconnect uses lowercase key/value member names inside the
+        # tag dicts but the outer container key is still "Tags" in the
+        # transformed namespace; the case-insensitive structure check
+        # unlocks this without changing the outer-key matching.
+        data = {"Tags": [{"key": "Name", "value": "gw1"}]}
+        result = transform_tags_structure(data)
+        assert result["Tags"] == {"Name": "gw1"}
+
+    def test_transform_tags_structure_canonical_unchanged(self):
+        data = {"Tags": [{"Key": "Name", "Value": "web"}]}
+        result = transform_tags_structure(data)
+        assert result["Tags"] == {"Name": "web"}
