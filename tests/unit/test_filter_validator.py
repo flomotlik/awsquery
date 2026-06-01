@@ -557,9 +557,7 @@ class TestFilterValidatorPlusStripContract:
             "get_response_fields",
             return_value=("Reservations", mock_simplified, mock_full),
         ):
-            results = validator.validate_columns(
-                "ec2", "describe-instances", ["+InstanceId"]
-            )
+            results = validator.validate_columns("ec2", "describe-instances", ["+InstanceId"])
             assert len(results) == 1
             assert results[0][1] is not None
 
@@ -572,8 +570,6 @@ class TestFilterValidatorPlusStripContract:
             "get_response_fields",
             return_value=("Reservations", mock_simplified, mock_full),
         ):
-            results = validator.validate_columns(
-                "ec2", "describe-instances", ["InstanceId"]
-            )
+            results = validator.validate_columns("ec2", "describe-instances", ["InstanceId"])
             assert len(results) == 1
             assert results[0][1] is None

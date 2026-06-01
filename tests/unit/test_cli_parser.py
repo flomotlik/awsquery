@@ -503,17 +503,13 @@ class TestPlusPrefixParsing:
 
     def test_plus_prefixed_positional_parses_cleanly(self):
         argv = ["ec2", "describe-instances", "--", "+Foo"]
-        base, resource, value, columns = parse_multi_level_filters_for_mode(
-            argv, mode="single"
-        )
+        base, resource, value, columns = parse_multi_level_filters_for_mode(argv, mode="single")
         assert base == ["ec2", "describe-instances"]
         assert columns == ["+Foo"]
 
     def test_plus_prefix_with_value_filter_separator(self):
         argv = ["ec2", "describe-instances", "Bar", "--", "+Foo"]
-        base, resource, value, columns = parse_multi_level_filters_for_mode(
-            argv, mode="single"
-        )
+        base, resource, value, columns = parse_multi_level_filters_for_mode(argv, mode="single")
         assert base == ["ec2", "describe-instances"]
         assert value == ["Bar"]
         assert columns == ["+Foo"]
@@ -523,9 +519,7 @@ class TestPlusPrefixParsing:
         # in the value-filter slot is preserved verbatim and is the caller's
         # responsibility — it does NOT trigger additive mode.
         argv = ["ec2", "describe-instances", "+Bar", "--", "Foo"]
-        base, resource, value, columns = parse_multi_level_filters_for_mode(
-            argv, mode="single"
-        )
+        base, resource, value, columns = parse_multi_level_filters_for_mode(argv, mode="single")
         assert value == ["+Bar"]
         assert columns == ["Foo"]
 

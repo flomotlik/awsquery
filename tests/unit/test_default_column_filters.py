@@ -242,9 +242,7 @@ class TestApplyDefaultFiltersAdditive:
         assert lowered in result
 
     def test_additive_true_empty_user_returns_defaults(self):
-        result = apply_default_filters(
-            "ec2", "describe_instances", user_columns=[], additive=True
-        )
+        result = apply_default_filters("ec2", "describe_instances", user_columns=[], additive=True)
         assert result == get_default_columns("ec2", "describe_instances")
 
     def test_additive_true_none_user_returns_defaults(self):
@@ -293,23 +291,17 @@ class TestDetermineColumnFiltersAdditive:
         assert result == list(defaults) + ["A", "B"]
 
     def test_bare_only_replaces_defaults(self):
-        result = determine_column_filters(
-            ["Foo"], "ec2", "describe_instances", json_output=True
-        )
+        result = determine_column_filters(["Foo"], "ec2", "describe_instances", json_output=True)
         assert result == ["Foo"]
 
     def test_additive_stderr_echo_renders_plus(self, capsys):
-        determine_column_filters(
-            ["+OwnerId"], "ec2", "describe_instances", json_output=False
-        )
+        determine_column_filters(["+OwnerId"], "ec2", "describe_instances", json_output=False)
         err = capsys.readouterr().err
         assert "Using default columns + additions:" in err
         assert "+OwnerId" in err
 
     def test_additive_no_validator_warnings_for_tag_columns(self, capsys):
-        determine_column_filters(
-            ["+Tags.Name"], "ec2", "describe_instances", json_output=False
-        )
+        determine_column_filters(["+Tags.Name"], "ec2", "describe_instances", json_output=False)
         err = capsys.readouterr().err
         assert "WARNING: Some column filters may not match" not in err
 
@@ -383,9 +375,7 @@ class TestYAMLConfigurationStructure:
         import sys as _sys
         from pathlib import Path
 
-        scripts_dir = (
-            Path(__file__).resolve().parents[2] / "scripts"
-        )
+        scripts_dir = Path(__file__).resolve().parents[2] / "scripts"
         _sys.path.insert(0, str(scripts_dir))
         try:
             from audit_default_filters import audit_default_filters

@@ -570,9 +570,7 @@ class TestTagsCaseInsensitiveKeyValue:
         assert result == {"Name": "web", "Env": "prod"}
 
     def test_transform_aws_tags_list_handles_mixed_case(self):
-        result = _transform_aws_tags_list(
-            [{"Key": "A", "value": "1"}, {"key": "B", "VALUE": "2"}]
-        )
+        result = _transform_aws_tags_list([{"Key": "A", "value": "1"}, {"key": "B", "VALUE": "2"}])
         assert result == {"A": "1", "B": "2"}
 
     def test_transform_aws_tags_list_skips_empty_key(self):

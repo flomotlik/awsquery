@@ -343,18 +343,13 @@ def determine_column_filters(column_filters, service, action, json_output=False)
 
     normalized_action = normalize_action_name(action)
 
-    additive_present = any(
-        isinstance(c, str) and c.startswith("+") for c in (column_filters or [])
-    )
+    additive_present = any(isinstance(c, str) and c.startswith("+") for c in (column_filters or []))
 
     if additive_present:
         stripped = [
-            c[1:] if isinstance(c, str) and c.startswith("+") else c
-            for c in column_filters
+            c[1:] if isinstance(c, str) and c.startswith("+") else c for c in column_filters
         ]
-        debug_print(
-            f"Additive mode detected; stripped columns: {stripped}"
-        )  # pragma: no mutate
+        debug_print(f"Additive mode detected; stripped columns: {stripped}")  # pragma: no mutate
         merged = apply_default_filters(
             service, normalized_action, user_columns=stripped, additive=True
         )
@@ -362,12 +357,8 @@ def determine_column_filters(column_filters, service, action, json_output=False)
         if not json_output:
             defaults_only = apply_default_filters(service, normalized_action) or []
             defaults_set = set(defaults_only)
-            additive_marks = [
-                c not in defaults_set for c in (column_filters_to_use or [])
-            ]
-            cols = _format_columns_copyable(
-                column_filters_to_use, additive_marks=additive_marks
-            )
+            additive_marks = [c not in defaults_set for c in (column_filters_to_use or [])]
+            cols = _format_columns_copyable(column_filters_to_use, additive_marks=additive_marks)
             print(f"Using default columns + additions: {cols}", file=sys.stderr)
     elif column_filters:
         debug_print(f"Using user-specified column filters: {column_filters}")  # pragma: no mutate

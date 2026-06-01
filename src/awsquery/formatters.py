@@ -186,12 +186,8 @@ def _transform_aws_tags_list(tags_list):
     for tag in tags_list:
         if not isinstance(tag, dict):
             continue
-        key_name = next(
-            (k for k in tag if isinstance(k, str) and k.lower() == "key"), None
-        )
-        value_name = next(
-            (k for k in tag if isinstance(k, str) and k.lower() == "value"), None
-        )
+        key_name = next((k for k in tag if isinstance(k, str) and k.lower() == "key"), None)
+        value_name = next((k for k in tag if isinstance(k, str) and k.lower() == "value"), None)
         if key_name is None or value_name is None:
             continue
         tag_key = tag[key_name]

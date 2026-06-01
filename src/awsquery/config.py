@@ -62,9 +62,7 @@ def apply_default_filters(service, action, user_columns=None, additive=False):
             )  # pragma: no mutate
             return list(user_columns)
         merged = list(dict.fromkeys(list(defaults) + list(user_columns)))
-        debug_print(
-            f"Additive mode: merged defaults + user columns: {merged}"
-        )  # pragma: no mutate
+        debug_print(f"Additive mode: merged defaults + user columns: {merged}")  # pragma: no mutate
         return merged or None
 
     if user_columns:
