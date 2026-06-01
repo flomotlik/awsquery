@@ -1,7 +1,7 @@
 ---
 id: e1bzl
 title: Fix remaining 15 broken $-suffix entries surfaced by audit
-status: open
+status: done
 priority: medium
 labels:
 - bug
