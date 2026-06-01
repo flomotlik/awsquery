@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="artifact-source-sha256" content="82e7aa7b6e9160636c5d38043bb12176ce5221ee380b58dda75436fb50f18e09">
+<meta name="artifact-source-file" content="EXECUTION.md">
+<meta name="artifact-generated-at" content="2026-06-01 09:40 UTC">
+<meta name="design-system-version" content="ds-1">
+<title>Execution — Fix Tags$ default filters and add additive +Column syntax</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://flomotlik.github.io/claude-code/design-system.css">
+</head>
+<body>
+<div class="page">
+
+<header class="row">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">00</span>Execution</p>
+  </div>
+  <div class="body">
+    <h1 class="masthead-title">Fix Tags$ default filters and add additive +Column syntax</h1>
+    <p class="masthead-sub">Issue: sue5t-fix-tags-default-filters-and-add-additive-column-syntax &middot; Generated 2026-06-01 09:40 UTC</p>
+  </div>
+</header>
+
+<hr class="rule">
+
+<section class="row" id="strategy">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">01</span>Strategy</p>
+  </div>
+  <div class="body">
+    <h2>Strategy summary</h2>
+      <div class="callout callout-ok">
+        <p><strong>Status:</strong> complete. All 9 plan tasks landed. <code>make ci</code> green: 1346 tests pass (10.0s), pylint 10.00/10, mypy clean, black/isort clean, audit script exits 0 for the in-scope set.</p>
+      </div>
+      <p>Two real bugs fixed and one feature added without backward-compat shims:</p>
+      <ul>
+        <li><strong>Default-filter audit:</strong> 5 broken <code>Tags</code>-class entries (<code>directconnect tags$</code>, <code>ec2.describe_vpcs Tags$</code>, two <code>redshift Tags$</code>, <code>ecr.describe_images imageTags$</code>) replaced with per-service correct forms. 2 leftover <code>Key$</code>/<code>Value$</code> entries under redshift deleted.</li>
+        <li><strong>Tags transform case-insensitivity:</strong> <code>_is_aws_tags_structure</code> + <code>_transform_aws_tags_list</code> made case-insensitive on member names. Unblocks <code>directconnect</code>, which uses lowercase <code>key</code>/<code>value</code>.</li>
+        <li><strong>Additive <code>+Column</code> syntax:</strong> presence of any <code>+</code> in column args keeps defaults and merges all named columns. Strip happens at the top of <code>cli.py::determine_column_filters</code>; merge logic in <code>config.py::apply_default_filters</code> via <code>list(dict.fromkeys(defaults + stripped))</code>.</li>
+        <li><strong>Audit script:</strong> <code>scripts/audit_default_filters.py</code> walks every <code>$</code>-suffix entry, simulates flattening + tag-transform, reports anchors that never match. CI-gated via test; 15 additional broken entries surfaced but deferred to a follow-up issue per scope.</li>
+      </ul>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="flow">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">02</span>Flow</p>
+  </div>
+  <div class="body">
+    <h2>Task flow &amp; dependencies</h2>
+      <div class="flow">
+      <div class="flow-node">
+        <p class="flow-num">01</p>
+        <p class="flow-title">Task 1</p>
+        <p class="flow-meta"><code>c2614b3</code></p>
+        <p>Extend apply_default_filters with additive merge mode</p>
+      </div>
+      <div class="flow-node">
+        <p class="flow-num">02</p>
+        <p class="flow-title">Tasks 2+3</p>
+        <p class="flow-meta"><code>6b4bdb1</code></p>
+        <p>Add additive +Column CLI syntax for column filters</p>
+      </div>
+      <div class="flow-node">
+        <p class="flow-num">03</p>
+        <p class="flow-title">Task 4</p>
+        <p class="flow-meta"><code>a783567</code></p>
+        <p>Accept case-variant Key/Value in tags structure detection</p>
+      </div>
+      <div class="flow-node">
+        <p class="flow-num">04</p>
+        <p class="flow-title">Task 5</p>
+        <p class="flow-meta"><code>5798818</code></p>
+        <p>Fix 5 broken Tags suffix entries in default_filters.yaml</p>
+      </div>
+      <div class="flow-node">
+        <p class="flow-num">05</p>
+        <p class="flow-title">Task 6</p>
+        <p class="flow-meta"><code>dd7ff6c</code></p>
+        <p>Add shape-aware audit script for default_filters.yaml</p>
+      </div>
+      <div class="flow-node">
+        <p class="flow-num">06</p>
+        <p class="flow-title">Task 7</p>
+        <p class="flow-meta"><code>5a3f04e</code></p>
+        <p>Add tests for additive +Column, lowercase tags, and audit</p>
+      </div>
+      <div class="flow-node">
+        <p class="flow-num">07</p>
+        <p class="flow-title">Task 8</p>
+        <p class="flow-meta"><code>2c264c2</code></p>
+        <p>Document +Column additive filter syntax in README</p>
+      </div>
+      <div class="flow-node">
+        <p class="flow-num">08</p>
+        <p class="flow-title">Cleanup</p>
+        <p class="flow-meta"><code>3a7cefe</code></p>
+        <p>Apply black/isort formatting to touched files</p>
+      </div>
+      </div>
+      <p class="margin-note">Sequential. Each task verified independently before commit; final <code>make ci</code> ran clean across all 9 commits.</p>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="decisions">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">03</span>Decisions</p>
+  </div>
+  <div class="body">
+    <h2>Key decisions &amp; options</h2>
+      <div class="decision">
+        <h3>Commit message format — user-override of PLAN.md trailer</h3>
+        <p>PLAN.md prescribed the standard <code>Generated with Claude Code</code> trailer. The user's standing preference (memory <code>feedback_no_claude_attribution.md</code>) is that Claude attribution must never appear in commits, code, or files (consultant context). The orchestrator's prompt explicitly overrode the PLAN.md trailer with plain single-line messages and no attribution. All 8 behavioural commits and the EXECUTION.md commit follow this override.</p>
+      </div>
+      <div class="decision">
+        <h3>Tasks 2 + 3 combined into one commit — coupling</h3>
+        <p>Task 3 extends <code>_format_columns_copyable</code> with an <code>additive_marks</code> parameter. Task 2's new branch in <code>determine_column_filters</code> calls that extended signature directly. Splitting them produces an intermediate commit that does not type-check. Combined into one atomic feature commit <code>6b4bdb1</code>; EXECUTION.md tracks both tasks against this hash.</p>
+      </div>
+      <div class="decision">
+        <h3>Post-formatting commit — tooling artifact</h3>
+        <p><code>make format</code> reflowed seven touched files into black/isort canonical form after the per-task commits had landed. The reflow is purely cosmetic (line-wrap differences, no semantic changes) and was committed separately as <code>3a7cefe</code> so the per-task commits stay focused on their behavioural change.</p>
+      </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="detail">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">04</span>Detail</p>
+  </div>
+  <div class="body">
+    <h2>Full detail</h2>
+    <details class="detail">
+      <summary>Show full artifact source
+        <span class="summary-hint">click to expand</span></summary>
+      <div class="detail-body">
+        <pre><code id="artifact-source-target"></code></pre>
+      </div>
+    </details>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="provenance">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">05</span>Provenance</p>
+  </div>
+  <div class="body">
+    <h2>Provenance</h2>
+    <p>Generated from the canonical <code>.md</code>. This HTML is never
+       hand-edited &mdash; if the <code>.md</code> changes, regenerate with
+       <code>/issue:view</code>.</p>
+    <footer class="footer">
+      <span>Source: <code>EXECUTION.md</code> &middot;
+        SHA-256 <code>82e7aa7b6e9160636c5d38043bb12176ce5221ee380b58dda75436fb50f18e09</code></span>
+      <span>Generated 2026-06-01 09:40 UTC &middot; design system ds-1</span>
+    </footer>
+  </div>
+</section>
+
+</div>
+
+<script type="application/json" id="artifact-source">
+{"source": "# Execution: Fix Tags$ default filters and add additive +Column syntax\n\n**Started:** 2026-06-01T09:28:43Z\n**Completed:** 2026-06-01T09:37:32Z\n**Duration:** ~9 minutes\n**Status:** complete\n**Branch:** sue5t-fix-tags-default-filters-and-add-additive-column-syntax\n\n## Execution Log\n\n- [x] Task 1: Extend apply_default_filters for additive merge — commit c2614b3\n- [x] Task 2: Add `+`-prefix detection and additive routing in determine_column_filters — commit 6b4bdb1\n- [x] Task 3: Extend _format_columns_copyable to render `+` prefixes — commit 6b4bdb1\n  (combined with Task 2 because Task 2 calls Task 3's extended signature — a\n  single atomic feature commit is cleaner per CLAUDE.md \"Combine related changes\")\n- [x] Task 4: Fix _is_aws_tags_structure for case-insensitive Key/Value — commit a783567\n- [x] Task 5: Fix 5 broken Tags-class entries in default_filters.yaml — commit 5798818\n- [x] Task 6: Add scripts/audit_default_filters.py — commit dd7ff6c\n- [x] Task 7: Add tests for additive merge, `+` parsing, lowercase tags, audit cleanliness — commit 5a3f04e\n- [x] Task 8: Document `+Column` syntax in README — commit 2c264c2\n- [x] Task 9: Run code review and final quality gates — see verdict below\n  (post-format cleanup commit 3a7cefe — pure black/isort reflow of touched files)\n\n## Commits\n\n| Hash      | Subject                                                |\n| :-------- | :----------------------------------------------------- |\n| c2614b3   | Extend apply_default_filters with additive merge mode  |\n| 6b4bdb1   | Add additive +Column CLI syntax for column filters     |\n| a783567   | Accept case-variant Key/Value in tags structure detection |\n| 5798818   | Fix 5 broken Tags suffix entries in default_filters.yaml |\n| dd7ff6c   | Add shape-aware audit script for default_filters.yaml   |\n| 5a3f04e   | Add tests for additive +Column, lowercase tags, and audit |\n| 2c264c2   | Document +Column additive filter syntax in README      |\n| 3a7cefe   | Apply black/isort formatting to touched files          |\n\n## Verification Results\n\n| Gate | Result |\n| :--- | :----- |\n| `make test` (1346 tests, unit + integration) | passed (10.00s) |\n| `make lint` (flake8 + pylint) | passed (pylint 10.00/10) |\n| `make format-check` (black + isort) | passed (62 files unchanged) |\n| `make type-check` (mypy on src/awsquery) | passed (no issues in 12 source files) |\n| `python3 scripts/audit_default_filters.py` | exits 0; in-scope set absent from broken list |\n\nEnd-to-end smoke (executed inline, not via AWS):\n\n```\nbare-only:   ['Foo']                              (replaces defaults — today's path)\nadditive:    [Tags.Name$, InstanceId$, ..., OwnerId]\nstderr echo: \"Using default columns + additions: -- Tags.Name$ ... +OwnerId\"\nunknown svc: ['Foo']                              (additive falls back to user cols)\n```\n\nThe validator warnings about literal `'Foo'` not matching real EC2 fields are\nexpected and confirm the strip is working — the validator NEVER saw `+Foo`,\nwhich is exactly the P2 contract.\n\n## Code Review (substituting for @agent-code-reviewer)\n\nCLAUDE.md mandates a `@agent-code-reviewer` pass. The Task subagent is not\navailable in this CLI environment; the executor performed a self-review of\nthe cumulative diff (`git diff main...HEAD`) against CONTEXT.md D1-D7 and\nRESEARCH.md P1-P8. Verdict: **pass — no material issues**.\n\nFindings:\n\n| Check                                                                 | Result |\n| :-------------------------------------------------------------------- | :----- |\n| D1 (`+` anywhere flips whole invocation)                              | satisfied — `additive_present = any(...)` |\n| D2 (defaults first, case-sensitive dedup via `dict.fromkeys`)         | satisfied in config.py:67 |\n| D3 (`+` only in column-filter group; value/resource untouched)        | satisfied — strip only in `determine_column_filters` |\n| D4 (per-service Tags fix; no global rewrite)                          | satisfied — 5 entries + 2 deletions only |\n| D5 (audit shape-aware, simulates flatten+transform)                   | satisfied; `value$` exemption applied |\n| D7 (no grammar changes, no `--additive`, no `-Column`)                | satisfied |\n| P1 (directconnect lowercase Key/Value)                                | mitigated — `_is_aws_tags_structure` and `_transform_aws_tags_list` made case-insensitive |\n| P2 (`+` strip BEFORE FilterValidator.validate_columns)                | satisfied — strip is the first action inside `determine_column_filters` |\n| P3 (`dict.fromkeys` not `set()`)                                      | satisfied |\n| P4 (case-sensitive dedup may keep near-duplicates)                    | accepted per D2; documented in README |\n| P5 (`Tags.Name$` may match nested instances)                          | accepted; aggregation handles collision |\n| P6 (audit has false positives)                                        | mitigated — Task 7 asserts only the in-scope set is absent, not zero-broken |\n| P7 (`ssm.get_parameters Parameters$` deferred)                        | satisfied — surfaces in audit broken list but not fixed |\n| No backward-compat shims                                              | satisfied — `apply_default_filters` signature extended in place |\n| No `@pytest.mark.*` other than `parametrize`                          | satisfied — grep clean |\n| No verbose test docstrings on new tests                               | satisfied — new test classes have no class/method docstrings; existing classes preserved |\n| Commit messages single-line, no Claude attribution                    | satisfied per user override |\n| No stubs, TODOs, debug prints in shipped code                         | satisfied |\n\n## Specialist Agent Note\n\nCLAUDE.md mandates `@agent-python-infra-automator`, `@agent-test-writer`,\n`@agent-code-reviewer`, `@agent-makefile-optimizer` for all development work.\nThis execution environment does not expose those as Task/Agent subagents that\nthis executor can invoke programmatically. The executor therefore implemented\nthe changes directly while applying every rule those agents enforce verbatim:\n\n- Tests: directory-based discovery, no `@pytest.mark.*` except `parametrize`,\n  no verbose docstrings on new test classes, mock only external boundaries\n  (boto3 inside test_filter_validator.py only), test real implementation\n  (real `apply_default_filters`, `determine_column_filters`,\n  `_is_aws_tags_structure`, `_transform_aws_tags_list`).\n- Python: black/isort/flake8/pylint/mypy all green, focused functions, no\n  redundant comments, no backward-compat shims (`apply_default_filters`\n  signature extended in place per CLAUDE.md zero-backwards-compat philosophy).\n- Code review: replaced with the final `make ci` gate components plus a\n  self-audit of the cumulative diff against CONTEXT.md D1-D7 and RESEARCH.md\n  P1-P8 (results table above).\n- Makefile: not touched in this issue.\n\n## Deviations from Plan\n\n### Commit message format (Rule 4 — user-override)\n\nPLAN.md `<commit_format>` block prescribes the `Generated with Claude Code`\ntrailer. The user's standing memory (`feedback_no_claude_attribution.md`) and\nthis run's explicit prompt instructions override that with **plain single-line\nmessages, no trailer, no Claude attribution**. Followed the user instructions.\n\n### Tasks 2 + 3 in one commit (Rule 2 — coupling)\n\nTask 3 extends `_format_columns_copyable` with `additive_marks`. Task 2's\nnew branch in `determine_column_filters` calls the extended signature\ndirectly — splitting them produces a broken intermediate state. Combined\ninto a single atomic feature commit `6b4bdb1`. EXECUTION.md tracks both\ntasks against this hash.\n\n### Post-formatting commit (Rule 3 — tooling)\n\n`make format` reflowed seven touched files into black/isort canonical form\nafter the per-task commits had landed. The reflow is purely cosmetic\n(line-wrap differences, no semantic changes) and lives in its own commit\n`3a7cefe` so the per-task commits stay focused on their behavioural change.\n\n## Discovered Issues (out-of-scope, not fixed)\n\nThe shape-aware audit script (Task 6) surfaced 15 additional broken `$`-suffix\nentries across the YAML. Per RESEARCH.md P7 and the issue's stated scope (only\nthe 5 in-scope Tags-class entries + 2 leftover Key/Value deletions), these are\nNOT fixed in this issue. They are candidates for a follow-up issue:\n\n- batch.describe_compute_environments — `instanceTypes$`\n- ce.get_cost_and_usage — `Keys$`\n- cloudwatch.list_metrics — `OwningAccounts$`\n- ec2.describe_vpc_endpoints — `SubnetIds$`\n- elasticbeanstalk.describe_applications — `ConfigurationTemplates$`, `Versions$`\n- kafka.list_configurations — `kafkaVersions$`\n- route53.get_hosted_zone — `NameServers$`\n- s3.get_bucket_cors — `AllowedOrigins$`, `AllowedMethods$`, `AllowedHeaders$`, `ExposeHeaders$`\n- s3.get_bucket_notification_configuration — `Events$`\n- ssm.get_parameters — `InvalidParameters$`, `Parameters$` (P7)\n\nEach requires a per-service decision (list-of-primitive → drop `$`; missing\nfield → delete or rename). The audit catches them; the test suite does not\ngate on them; the next issue can drive the fixes.\n\n## Self-Check\n\n- [x] All files from plan exist\n- [x] All commits exist on branch (8 commits ahead of main)\n- [x] Full verification suite passes (`make format-check lint type-check test` all green)\n- [x] `python3 scripts/audit_default_filters.py` exits 0\n- [x] No stubs / TODOs / placeholders in shipped code (grep clean)\n- [x] No leftover debug code (no `console.log`, `breakpoint(`, `pdb`)\n- [x] No Claude attribution in code, commit messages, files, or comments (grep clean)\n- [x] No `@pytest.mark.*` markers other than `parametrize` in touched test files (grep clean)\n- **Result:** PASSED\n"}
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var dataEl = document.getElementById("artifact-source");
+  var target = document.getElementById("artifact-source-target");
+  if (dataEl && target) {
+    try {
+      target.textContent = JSON.parse(dataEl.textContent).source || "";
+    } catch (e) {
+      target.textContent = dataEl.textContent;
+    }
+  }
+  document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+    a.addEventListener("click", function (ev) {
+      var el = document.getElementById(a.getAttribute("href").slice(1));
+      if (el) { ev.preventDefault(); el.scrollIntoView({ behavior: "smooth" }); }
+    });
+  });
+})();
+</script>
+</body>
+</html>
