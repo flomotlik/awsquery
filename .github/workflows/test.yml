@@ -3,6 +3,8 @@ name: Test Suite
 
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_call:  # Allow this workflow to be called by other workflows
 
 jobs:
