@@ -794,6 +794,14 @@ Autocomplete Setup:
 
     argcomplete.autocomplete(parser, validator=_enhanced_completion_validator)
 
+    # Enable debug mode ahead of the pre-parse injection step below, so a
+    # debug_print inside _inject_default_action is not silently dropped.
+    # args.debug (parsed further down) is the authoritative value and is
+    # re-applied once available.
+    from . import utils
+
+    utils.set_debug_enabled(any(flag in sys.argv[1:] for flag in ("-d", "--debug")))
+
     # First pass: parse known args to get service and action
     args, remaining = parser.parse_known_args(_inject_default_action(sys.argv[1:]))
 
@@ -860,9 +868,7 @@ Autocomplete Setup:
         # Remaining should now only be non-flag arguments
         remaining = non_flags
 
-    # Set debug mode globally
-    from . import utils
-
+    # Set debug mode globally (authoritative value, supersedes the early guess above)
     utils.set_debug_enabled(args.debug)
 
     # Build the argv for filter parsing (service, action, and remaining arguments)

@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from awsquery.cli import main
+from awsquery.cli import _inject_default_action, main
 from awsquery.filters import parse_multi_level_filters_for_mode
 
 
@@ -527,3 +527,80 @@ class TestPlusPrefixParsing:
         argv = ["ec2", "describe-instances", "--", "+A", "+B", "C"]
         _, _, _, columns = parse_multi_level_filters_for_mode(argv, mode="single")
         assert columns == ["+A", "+B", "C"]
+
+
+class TestDefaultActionInjection:
+    """Tests for _inject_default_action, the pre-parse default-action splicer."""
+
+    @pytest.mark.parametrize(
+        "argv,expected",
+        [
+            (["ec2"], ["ec2", "describe-instances"]),
+            (["ec2", "--", "InstanceId"], ["ec2", "describe-instances", "--", "InstanceId"]),
+            (
+                ["ec2", "--", "InstanceId", "State"],
+                ["ec2", "describe-instances", "--", "InstanceId", "State"],
+            ),
+            (["-j", "ec2", "--", "X"], ["-j", "ec2", "describe-instances", "--", "X"]),
+            (
+                ["--region", "us-west-2", "ec2"],
+                ["--region", "us-west-2", "ec2", "describe-instances"],
+            ),
+            (
+                ["-p", "MaxResults=5", "ec2"],
+                ["-p", "MaxResults=5", "ec2", "describe-instances"],
+            ),
+            (
+                ["ec2", "describe-instances", "--", "X"],
+                ["ec2", "describe-instances", "--", "X"],
+            ),
+            (["ec2", "prod"], ["ec2", "prod"]),
+            (["budgets"], ["budgets"]),
+            ([""], [""]),
+            ([], []),
+            (["--help"], ["--help"]),
+            (["--", "ec2"], ["--", "ec2"]),
+        ],
+    )
+    def test_injects_or_preserves_argv(self, argv, expected):
+        assert _inject_default_action(argv) == expected
+
+    @patch("awsquery.cli.format_table_output")
+    @patch("awsquery.cli.filter_resources")
+    @patch("awsquery.cli.flatten_response")
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.validate_readonly")
+    def test_default_action_matches_explicit_form(
+        self,
+        mock_validate,
+        mock_execute,
+        mock_session,
+        mock_flatten,
+        mock_filter,
+        mock_format,
+    ):
+        """`ec2 -- InstanceId` must resolve identical column filters to the explicit form."""
+        mock_validate.return_value = True
+        mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
+        mock_session.return_value = Mock()
+        mock_flatten.return_value = [{"InstanceId": "i-123"}]
+        mock_filter.return_value = [{"InstanceId": "i-123"}]
+        mock_format.return_value = ""
+
+        sys.argv = ["awsquery", "ec2", "--", "InstanceId"]
+        try:
+            main()
+        except SystemExit:
+            pass
+        default_columns = mock_format.call_args[0][1]
+
+        mock_format.reset_mock()
+        sys.argv = ["awsquery", "ec2", "describe-instances", "--", "InstanceId"]
+        try:
+            main()
+        except SystemExit:
+            pass
+        explicit_columns = mock_format.call_args[0][1]
+
+        assert default_columns == explicit_columns
