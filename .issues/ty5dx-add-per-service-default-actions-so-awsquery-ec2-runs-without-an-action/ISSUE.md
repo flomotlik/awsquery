@@ -2,6 +2,7 @@
 id: ty5dx
 title: Add per-service default actions so awsquery ec2 runs without an action
 status: done
+ship_state: pr_open
 priority: medium
 labels:
 - enhancement
