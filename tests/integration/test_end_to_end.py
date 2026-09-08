@@ -886,19 +886,30 @@ class TestCLIMainFunctionBasics:
         assert service == "ec2"
         assert action == "describe_instances"
 
-    def test_main_function_service_listing(self):
-        """Test service listing when no action provided."""
-        with patch("sys.argv", ["awsquery", "ec2"]):  # Missing action
-            with patch("boto3.Session") as mock_session_class:
-                mock_session = Mock()
-                mock_session_class.return_value = mock_session
-                mock_session.get_available_services.return_value = ["ec2", "s3"]
+    def test_main_with_no_arguments_lists_services_on_stdout(self):
+        """Awsquery with no arguments lists services on stdout and exits 0."""
+        with patch("sys.argv", ["awsquery"]):
+            with redirect_stdout(io.StringIO()) as captured_stdout:
+                with pytest.raises(SystemExit) as exc_info:
+                    main()
 
-                with patch("sys.exit") as mock_exit:
-                    with redirect_stdout(io.StringIO()) as captured:
-                        main()
+        output = captured_stdout.getvalue()
+        assert "Available services:" in output
+        assert "ec2" in output
+        assert "s3" in output
+        assert exc_info.value.code == 0
 
-                    output = captured.getvalue()
-                    if "Available services:" in output:
-                        assert "ec2" in output
-                        assert "s3" in output
+    def test_main_with_service_lacking_default_lists_actions_on_stderr(self):
+        """A service with no curated default lists its actions on stderr, exit != 0."""
+        with patch("sys.argv", ["awsquery", "budgets"]):
+            with redirect_stderr(io.StringIO()) as captured_stderr:
+                with pytest.raises(SystemExit) as exc_info:
+                    main()
+
+        output = captured_stderr.getvalue()
+        assert "No default action configured for 'budgets'" in output
+        assert exc_info.value.code != 0
+
+        action_lines = [line for line in output.splitlines() if line.startswith("  ")]
+        assert action_lines
+        assert any("-" in line for line in action_lines)
