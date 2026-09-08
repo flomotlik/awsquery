@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Provenance: SHA-256 of the source .md this page was generated from. -->
+<meta name="artifact-source-sha256" content="87e20da782c9e4ea7a3ee5970bb126b2abbed6e0e8643fc87da7062286f8917a">
+<meta name="artifact-source-file" content="PLAN.md">
+<meta name="artifact-generated-at" content="2026-09-08">
+<!-- Which version of the design system this page was authored against. -->
+<meta name="design-system-version" content="ds-1">
+<title>Plan: Add per-service default actions so awsquery ec2 runs without an action</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://flomotlik.github.io/claude-code/design-system.css">
+</head>
+<body>
+<div class="page">
+
+<header class="row">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">00</span>Plan</p>
+  </div>
+  <div class="body">
+    <h1 class="masthead-title">Plan: Add per-service default actions so awsquery ec2 runs without an action</h1>
+    <p class="masthead-sub">Issue: ty5dx-add-per-service-default-actions-so-awsquery-ec2-runs-without-an-action &middot; Generated 2026-09-08</p>
+  </div>
+</header>
+
+<hr class="rule">
+
+<section class="row" id="strategy">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">01</span>Strategy</p>
+  </div>
+  <div class="body">
+    <h2>Strategy summary</h2>
+
+    <p>Resolve the default action <strong>before argparse sees the tokens</strong>, not after.
+       One pure <code>list &rarr; list</code> function spliced into the raw argv at
+       <code>cli.py:752</code>, so every downstream stage sees exactly the argv the user
+       <em>would have typed</em>.</p>
+
+    <div class="points">
+      <div class="point is-risk">
+        <span class="point-claim">The issue's own framing is wrong &mdash; and fails silently.</span>
+        <span class="point-detail">Both positionals are <code>nargs="?"</code>, so argparse eats the
+          <code>--</code> separator and promotes the first column filter into the action slot.
+          <code>ec2 -- InstanceId</code> parses <span class="mark mark-red">byte-identically</span> to
+          <code>ec2 InstanceId</code>. A post-parse patch keyed on <code>args.action is None</code>
+          therefore leaves <code>awsquery ec2 -- InstanceId</code> running a bogus operation named
+          <code>InstanceId</code>. The information exists only in the raw token list.</span>
+      </div>
+      <div class="point is-risk">
+        <span class="point-claim">Kebab-case in the YAML is a correctness rule, not a style choice.</span>
+        <span class="point-detail"><code>is_readonly_operation</code> only PascalCases input that
+          contains a hyphen. Given <code>describe_instances</code> it returns false, falls through to
+          the unsafe-operation prompt and <span class="mark mark-orange">blocks on <code>input()</code></span>
+          &mdash; <code>awsquery ec2</code> would hang in a pipe. The decision document's illustrative
+          snake_case example is overridden.</span>
+      </div>
+      <div class="point is-note">
+        <span class="point-claim">Equivalence by construction, not by parallel code paths.</span>
+        <span class="point-detail">Because injection happens pre-parse, the filter builder, the two-pass
+          reorder, the multi-level filter parser, readonly validation and default columns all need
+          <em>no change</em>. The research replayed the real pipeline over 11 bare/explicit command
+          pairs: all equivalent.</span>
+      </div>
+      <div class="point is-note">
+        <span class="point-claim">A separate config file leaves every existing walker untouched.</span>
+        <span class="point-detail">Two walkers assume the strict <code>service &rarr; action &rarr; {columns}</code>
+          shape; a sibling string key inside <code>default_filters.yaml</code> would raise
+          <code>AttributeError</code> in both. Hence a new
+          <code>src/awsquery/default_actions.yaml</code> &mdash; which must also be registered in the
+          package-data list, or the wheel ships with no defaults at all.</span>
+      </div>
+      <div class="point is-question">
+        <span class="point-claim">Six curated picks are editorially arguable and surfaced for veto.</span>
+        <span class="point-detail">All 50 entries pass four mechanical gates. The question &quot;which
+          operation is <em>the</em> default&quot; is a judgement call for
+          <code>iam</code>, <code>ssm</code>, <code>sagemaker</code>, <code>glue</code>,
+          <code>backup</code> and <code>athena</code>. Each is a one-line YAML change.</span>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><span class="stat-num is-green">50</span><span class="stat-label">curated services</span></div>
+      <div class="stat"><span class="stat-num is-orange">5</span><span class="stat-label">services deliberately skipped</span></div>
+      <div class="stat"><span class="stat-num is-red">6</span><span class="stat-label">picks needing sign-off</span></div>
+      <div class="stat"><span class="stat-num">6</span><span class="stat-label">implementation tasks</span></div>
+    </div>
+
+    <div class="callout is-risk">
+      <span class="callout-label">Unverified baseline</span>
+      <p>The research agent could not run the test suite &mdash; its interpreter lacked
+         <code>boto3</code>, <code>botocore</code>, <code>argcomplete</code> and <code>pytest</code>.
+         The executor must actually run <code>make test</code>, <code>make lint</code> and
+         <code>make format-check</code> rather than assume the suite is green.</p>
+    </div>
+
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="flow">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">02</span>Flow</p>
+  </div>
+  <div class="body">
+    <h2>Task flow &amp; dependencies</h2>
+
+    <div class="flow">
+      <div class="flow-node is-foundation">
+        <span class="n">Task 1</span>
+        <span class="t">Curated default_actions.yaml + packaging</span>
+        <span class="d">50 verified kebab-case entries; register in pyproject package data.</span>
+      </div>
+      <div class="flow-node is-foundation">
+        <span class="n">Task 2</span>
+        <span class="t">config.py loader and accessor</span>
+        <span class="d">load_default_actions() / get_default_action(), mirroring the filters pair.</span>
+      </div>
+      <div class="flow-node is-key">
+        <span class="n">Task 3</span>
+        <span class="t">Pre-parse argv injection + stderr fallback</span>
+        <span class="d">The load-bearing change: inject at cli.py:752, split the dead-end branch.</span>
+      </div>
+      <div class="flow-node">
+        <span class="n">Task 4</span>
+        <span class="t">Map validation, injector and flag tests</span>
+        <span class="d">Four existing unit files extended; no new test file.</span>
+      </div>
+      <div class="flow-node">
+        <span class="n">Task 5</span>
+        <span class="t">Rewrite the vacuously-green e2e test</span>
+        <span class="d">test_end_to_end.py:889 would pass while attempting real AWS work.</span>
+      </div>
+      <div class="flow-node">
+        <span class="n">Task 6</span>
+        <span class="t">README documentation</span>
+        <span class="d">Feature bullet, config subsection, additive-columns row.</span>
+      </div>
+    </div>
+    <p class="margin-note">Tasks run sequentially; task N may assume 1..N&minus;1 are complete.
+       Tasks 1 and 2 are the data/loader foundation, task 3 is the behavioural change,
+       tasks 4&ndash;6 verify and document it.</p>
+
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="decisions">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">03</span>Decisions</p>
+  </div>
+  <div class="body">
+    <h2>Key decisions &amp; options</h2>
+
+    <div class="decision">
+      <div class="decision-head">
+        <span class="decision-title">Where the default is resolved</span>
+        <span class="lozenge is-chosen">Chosen: pre-parse argv injection</span>
+      </div>
+      <div class="decision-body">
+        <p><strong>Chosen:</strong> a pure <code>_inject_default_action(argv)</code> called on
+           <code>sys.argv[1:]</code> at <code>cli.py:752</code>, after
+           <code>argcomplete.autocomplete()</code> and without ever mutating <code>sys.argv</code>.</p>
+        <p><strong>Rejected &mdash; post-parse substitution on <code>args.action is None</code></strong>
+           (what the issue text implies): provably insufficient, since argparse makes
+           <code>ec2 -- InstanceId</code> and <code>ec2 InstanceId</code> indistinguishable after
+           parsing. It fails an acceptance criterion silently.</p>
+        <p><strong>Rejected &mdash; look the second positional up in botocore and demote
+           non-operations to value filters</strong> (which would also make
+           <code>awsquery ec2 prod</code> default): a typo such as
+           <code>describe-instance</code> would then silently run <code>describe-instances</code>
+           with a spurious filter and print zero rows instead of erroring, and it adds a service-model
+           load to the hot path.</p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-head">
+        <span class="decision-title">Canonical spelling of the YAML values</span>
+        <span class="lozenge is-chosen">Chosen: kebab-case, mandatory</span>
+      </div>
+      <div class="decision-body">
+        <p>Snake_case values were executed against the real readonly validator and returned
+           <code>is_readonly=False</code> for every entry, routing the command into a blocking
+           interactive prompt. Kebab-case in the file, plus a defensive
+           <code>to_kebab_case(to_snake_case(v))</code> at the injection boundary, and a test that
+           pins the file as already canonical.</p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-head">
+        <span class="decision-title">Config lives in its own file</span>
+        <span class="lozenge is-chosen">Chosen: src/awsquery/default_actions.yaml</span>
+      </div>
+      <div class="decision-body">
+        <p>A <code>default_action:</code> key inside <code>default_filters.yaml</code> would break the
+           audit script and two existing structure tests, which walk every service value as a dict.
+           The separate file leaves them untouched &mdash; but it must be added to the package-data
+           list in the same commit, since there is no <code>MANIFEST.in</code> and the unit tests read
+           from the source tree and cannot catch a missing wheel entry.</p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-head">
+        <span class="decision-title">iam default: list-users vs list-roles</span>
+        <span class="lozenge is-open">Open &mdash; maintainer veto invited</span>
+      </div>
+      <div class="decision-body">
+        <p>The highest-disagreement curated pick. <code>list-users</code> chosen because Users is the
+           console landing page and IAM's primary noun; <code>list-roles</code> is the more
+           infra-centric answer and a defensible override. Five further judgement calls
+           (<code>ssm</code>, <code>sagemaker</code>, <code>glue</code>, <code>backup</code>,
+           <code>athena</code>) are tabulated in the plan. Every one is a one-line change.</p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-head">
+        <span class="decision-title">Services with no parameterless entry point</span>
+        <span class="lozenge is-note">Note: 5 deliberately skipped</span>
+      </div>
+      <div class="decision-body">
+        <p><code>application-autoscaling</code>, <code>budgets</code>, <code>ce</code>,
+           <code>cognito-identity</code> and <code>cognito-idp</code> have zero readonly operations
+           with no required parameters, so the locked &quot;single immediate call&quot; rule excludes
+           them. They intentionally exercise the stderr fallback, which is what the rewritten
+           end-to-end test asserts against.</p>
+      </div>
+    </div>
+
+    <div class="decision">
+      <div class="decision-head">
+        <span class="decision-title">The end-to-end test that would pass while broken</span>
+        <span class="lozenge is-risk">Risk: vacuous green</span>
+      </div>
+      <div class="decision-body">
+        <p><code>tests/integration/test_end_to_end.py:889</code> guards its assertions behind a string
+           this change removes. Left alone it stays green while <code>main()</code> proceeds to attempt
+           real AWS work under a partially-mocked session &mdash; a CI hang or credential error that
+           looks like a passing test. Task 5 rewrites it into two unconditional assertions.</p>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="detail">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">04</span>Detail</p>
+  </div>
+  <div class="body">
+    <h2>Full detail</h2>
+    <details class="detail">
+      <summary>Show full artifact source
+        <span class="summary-hint">click to expand</span></summary>
+      <div class="detail-body">
+        <pre><code id="artifact-source-target"></code></pre>
+      </div>
+    </details>
+  </div>
+</section>
+
+<hr class="rule">
+
+<section class="row" id="provenance">
+  <div class="margin">
+    <p class="kicker"><span class="kicker-num">05</span>Provenance</p>
+  </div>
+  <div class="body">
+    <h2>Provenance</h2>
+    <p>Generated from the canonical <code>.md</code>. This HTML is never
+       hand-edited &mdash; if the <code>.md</code> changes, regenerate with
+       <code>/issue:view</code>.</p>
+    <footer class="footer">
+      <span>Source: <code>PLAN.md</code> &middot;
+        SHA-256 <code>87e20da782c9e4ea7a3ee5970bb126b2abbed6e0e8643fc87da7062286f8917a</code></span>
+      <span>Generated 2026-09-08 &middot; design system ds-1</span>
+    </footer>
+  </div>
+</section>
+
+</div>
+
+<!-- Raw artifact source as DATA, never markup. -->
+<script type="application/json" id="artifact-source">
+{"source": "# Plan: Add per-service default actions so `awsquery ec2` runs without an action\n\n<objective>\nWhat this plan accomplishes: `awsquery <service>` with no action resolves a curated\nper-service default operation (`awsquery ec2` == `awsquery ec2 describe-instances`,\n`awsquery s3` == `awsquery s3 list-buckets`), while `awsquery <service> -- <filters>`\nbehaves identically to the explicit form. Services without a curated default print that\nservice's ReadOnly actions on stderr and exit non-zero. `awsquery` with no service at all\nis unchanged (services on stdout, exit 0).\n\nWhy it matters: today `awsquery ec2` falls into the `if not args.service or not args.action`\ndead end at `cli.py:830` and dumps the full AWS service list — ignoring the service the user\njust typed. `awsinfo` treats a bare service name as its most common read operation; this\nbrings the same affordance.\n\nScope IN: new `src/awsquery/default_actions.yaml` (50 curated entries) + packaging entry;\n`load_default_actions()` / `get_default_action()` in `config.py`; pre-parse argv injection in\n`cli.py`; the no-default stderr fallback; tests in five EXISTING test files; README + parser\nepilog docs.\n\nScope OUT (deferred in CONTEXT.md, do not implement): botocore heuristic inference for\nuncurated services; default *parameters* attached to a default action; user-level override\n(`~/.awsquery/`); refreshing `.issues/MAP.md`.\n</objective>\n\n<strategy>\n**Direction.** Resolve the default *before* argparse sees the tokens, not after.\n\n**Why.** ISSUE.md frames this as \"when `args.action` is empty, substitute the default.\" The\nresearch disproved that framing by executing the real parser: `service` and `action` are both\n`nargs=\"?\"`, so argparse eats the `--` separator and promotes the first column filter into the\n`action` slot. `['ec2','--','InstanceId']` parses to `service='ec2', action='InstanceId',\nremaining=[]` — byte-identical to `['ec2','InstanceId']`. Post-parse the two are\nindistinguishable, so a post-parse patch leaves `awsquery ec2 -- InstanceId` running a bogus\noperation named `InstanceId` and silently fails an acceptance criterion. The information only\nexists in the raw token list.\n\n**Options considered.**\n1. *Post-parse substitution on `args.action is None`* (what ISSUE.md implies) — REJECTED,\n   provably insufficient per above.\n2. *Pre-parse argv injection* — CHOSEN. One pure `list -> list` function called on\n   `sys.argv[1:]` at `cli.py:752`. Everything downstream (`_build_filter_argv`, the two-pass\n   reorder, `parse_multi_level_filters_for_mode`, `validate_readonly`,\n   `check_parameter_requirements`, `determine_column_filters`) then sees exactly the argv the\n   user \"would have typed\", so every acceptance criterion holds *by construction* rather than\n   via a parallel code path. Research replayed the real pipeline over 11 bare/explicit command\n   pairs: all equivalent.\n3. *Look the second positional up in `get_service_operations()` and demote non-operations to\n   value filters* (so `awsquery ec2 prod` would also default) — REJECTED: a typo like\n   `awsquery ec2 describe-instance` would then silently run `describe-instances` with a\n   spurious value filter and print zero rows instead of erroring, and it costs a botocore\n   model load on the hot path. Structural detection (next token absent / `--` / starts with\n   `-`) satisfies every criterion without that trap.\n\n**Second load-bearing decision: kebab-case in the YAML is mandatory, not stylistic.**\n`security.is_readonly_operation` only PascalCases its input when the string contains `-`.\nGiven `describe_instances` it returns `False`, falls through to `prompt_unsafe_operation()`\nand **blocks on `input()`** — `awsquery ec2` would hang in a pipe. CONTEXT.md's illustrative\n`ec2: describe_instances` is snake_case and is therefore overridden (casing was explicitly\nleft to research discretion). The file holds kebab-case; the injector additionally applies\n`to_kebab_case(to_snake_case(v))` defensively.\n\n**Third: a separate file, not a key in `default_filters.yaml`.** Locked in CONTEXT.md, and\nconfirmed empirically: `scripts/audit_default_filters.py:71` and\n`tests/unit/test_default_column_filters.py:350,362` both walk `service -> action -> {...}`\nand would raise `AttributeError: 'str' object has no attribute 'get'` on a sibling string key.\n\n**Key decision points for the reviewer:** the six editorially arguable curated picks below\n(`iam` is the flagged one) — each is a one-line YAML change.\n</strategy>\n\n## Maintainer review — editorially arguable curated picks (SURFACED FOR VETO)\n\nAll 50 entries pass four mechanical gates (real botocore operation, zero required shape\nmembers, ReadOnly by the project's prefix rule, already has curated columns in\n`default_filters.yaml`). These six are nonetheless **judgement calls** about which operation is\n*the* default. The tie-breaker applied was \"the operation whose noun is the service's root\nresource\". **Each is a one-line change in `src/awsquery/default_actions.yaml`; flag any\ndisagreement at review and the executor edits that single line.**\n\n| Service | Chosen | Runner-up | Why chosen / how contestable |\n|---------|--------|-----------|------------------------------|\n| **`iam`** | `list-users` | `list-roles` | **Highest-disagreement entry.** Users is the console landing page and IAM's primary noun; `list-roles` is the more infra-centric answer and a defensible override. |\n| `ssm` | `describe-parameters` | `describe-instance-information` | Parameter Store dominates `ssm` usage in this repo's own README examples. |\n| `sagemaker` | `list-endpoints` | `list-models`, `list-training-jobs` | SageMaker has no single root resource — genuinely arbitrary. Included rather than skipped to keep coverage at 50. |\n| `glue` | `get-databases` | `get-jobs` | Catalog is the root. |\n| `backup` | `list-backup-vaults` | `list-backup-plans` | Recovery points live in vaults. |\n| `athena` | `list-work-groups` | `list-query-executions` | Everything in Athena is scoped to a workgroup. |\n\nTwo non-obvious-but-deliberate entries (not up for debate, documented so they are not\n\"fixed\" as bugs): `elb` and `elbv2` intentionally share the operation name\n`describe-load-balancers` (two different services); `batch` uses\n`describe-compute-environments` rather than `list-jobs` because `ListJobs` declares no\nrequired members but errors at runtime without a queue filter.\n\n<skills>\nThis repo has no `.claude/skills/` directory. Container-level skills that apply:\n- @/root/.claude/skills/python/SKILL.md — all `.py` edits in this plan\n\nRepo CLAUDE.md additionally mandates specialised agents (binding on the executor):\n`@agent-python-infra-automator` for Python implementation, `@agent-test-writer` for all test\nwork, `@agent-code-reviewer` proactively after the code changes land.\n</skills>\n\n<context>\nIssue: @.issues/ty5dx-add-per-service-default-actions-so-awsquery-ec2-runs-without-an-action/ISSUE.md\nResearch: @.issues/ty5dx-add-per-service-default-actions-so-awsquery-ec2-runs-without-an-action/RESEARCH.md\nDecisions: @.issues/ty5dx-add-per-service-default-actions-so-awsquery-ec2-runs-without-an-action/CONTEXT.md\n\n**Precedence when sources conflict: RESEARCH.md > CONTEXT.md > ISSUE.md.** Research verified\nits claims by executing code and overturned exactly two points: (a) ISSUE.md's \"substitute\nwhen `args.action` is empty\" is wrong — use pre-parse argv injection; (b) CONTEXT.md's\nillustrative snake_case YAML (`ec2: describe_instances`) is wrong — values MUST be kebab-case.\nEvery other locked decision in CONTEXT.md stands unchanged.\n\n<interfaces>\n<!-- Executor: use these contracts directly. Do not explore the codebase for them. -->\n\n# ── src/awsquery/config.py (EXISTING — the exact shape to mirror) ────────────\n@lru_cache(maxsize=1)\ndef load_default_filters():                       # -> dict | {} on any error\n    config_path = os.path.join(os.path.dirname(__file__), \"default_filters.yaml\")\n    # try: open + yaml.safe_load + debug_print(...)  # pragma: no mutate\n    # except FileNotFoundError / yaml.YAMLError / Exception: debug_print(...); return {}\ndef get_default_columns(service, action):         # -> list[str] ([] when unset)\n    # config.get(service.lower(), {}).get(action.lower(), {}).get(\"columns\", [])\n    # debug_print on BOTH hit and miss, each with a trailing  # pragma: no mutate\ndef apply_default_filters(service, action, user_columns=None, additive=False)\n\n# NEW in config.py — mirror the above exactly (including # pragma: no mutate markers):\n@lru_cache(maxsize=1)\ndef load_default_actions():                       # -> dict[str, str] | {}\ndef get_default_action(service):                  # -> str | None\n\n# ── src/awsquery/cli.py (EXISTING) ──────────────────────────────────────────\n# line 237-238:\nSIMPLE_FLAGS = [\"-d\", \"--debug\", \"-j\", \"--json\", \"-k\", \"--keys\", \"--allow-unsafe\"]\nVALUE_FLAGS  = [\"--region\", \"--profile\", \"-p\", \"--parameter\", \"-i\", \"--input\"]\ndef _build_filter_argv(args, remaining)           # line 298 — needs NO change\ndef action_completer(prefix, parsed_args, **kwargs)  # line 632 — needs NO change\ndef main()                                        # line 668\n#   line 674-699: parser epilog with the `Examples:` block\n#   line 749: argcomplete.autocomplete(parser, validator=_enhanced_completion_validator)\n#   line 752: args, remaining = parser.parse_known_args()          <-- INJECTION CALL SITE\n#   line 762: has_separator = \"--\" in sys.argv                     <-- reads sys.argv directly\n#   line 806: reordered_argv = [sys.argv[0]]                       <-- reads sys.argv directly\n#   line 830: if not args.service or not args.action:              <-- SPLIT INTO TWO BRANCHES\n#                 services = get_aws_services(); print(\"Available services:\", ...); sys.exit(0)\n\n# NEW in cli.py:\ndef _inject_default_action(argv)                  # -> list[str] (pure; must never raise)\ndef _print_service_actions(service)               # -> None (writes stderr)\n\n# cli.py CURRENT imports (verified) — these are ALREADY available, add no duplicates:\nfrom .case_utils import to_kebab_case                             # line 15\nfrom .config import apply_default_filters                         # line 16  <-- ADD get_default_action\nfrom .security import get_service_valid_operations, validate_readonly   # lines 32-35\nfrom .utils import (_BotocoreSessionContext, create_session, debug_print,\n                    get_aws_services, get_service_operations, sanitize_input)  # lines 36-43\n# NOT currently imported and REQUIRED by the injector:\nfrom .case_utils import to_kebab_case, to_snake_case              # extend line 15\n\n# ── src/awsquery/security.py ────────────────────────────────────────────────\nSAFE_READONLY_PREFIXES = [\"List\",\"Get\",\"Describe\",\"BatchGet\",\"BatchDescribe\",\"BatchCheck\",\n    \"BatchDetect\",\"Search\",\"Query\",\"View\",\"Lookup\",\"Read\",\"Scan\",\"Select\",\"Check\",\"Validate\",\n    \"Test\",\"Preview\",\"Verify\",\"Estimate\",\"Discover\",\"Retrieve\",\"Has\"]\ndef is_readonly_operation(action: str) -> bool\n    # security.py:41-44:  if \"-\" in action: action = to_pascal_case(action.replace(\"-\",\"_\"))\n    # ⚠ snake_case input is NEVER PascalCased -> ALWAYS returns False -> blocking input()\ndef validate_readonly(service, action, allow_unsafe=False) -> bool\ndef get_service_valid_operations(service: str, all_operations: list) -> set\n\n# ── src/awsquery/utils.py ───────────────────────────────────────────────────\ndef get_service_operations(service) -> list[str]  # PascalCase op names; [] for unknown service\n                                                  # uses _BotocoreSessionContext — no creds needed\ndef get_aws_services() -> list[str]\ndef sanitize_input(value) -> str\nnormalize_action_name = to_snake_case             # accepts kebab | snake | Pascal\ndef debug_print(*args, **kwargs)                  # stderr, only when debug enabled\n\n# ── src/awsquery/case_utils.py ──────────────────────────────────────────────\ndef to_snake_case(text) -> str    # verified == botocore.xform_name for all 50 curated picks\ndef to_kebab_case(text) -> str\ndef to_pascal_case(text) -> str\n\n# ── src/awsquery/shapes.py (pattern for the credential-free validation test) ─\nclass ShapeCache:\n    def get_service_model(self, service) -> ServiceModel | None   # botocore Loader, no creds\n    def get_operation_shape(self, service, operation)             # case-insensitive fallback,\n                                                                  # shapes.py:70-84\n# ── botocore, credential-free (use THIS in the map-validation test, not boto3.client) ──\nfrom botocore.loaders import Loader\nfrom botocore.model import ServiceModel\nloader = Loader()\nloader.list_available_services(\"service-2\")       # -> list[str] service ids\nversions = loader.list_api_versions(service, \"service-2\")\nmodel = ServiceModel(loader.load_service_model(service, \"service-2\", versions[-1]))\nmodel.operation_names                              # PascalCase, e.g. \"ListSAMLProviders\"\nop = model.operation_model(pascal_name); shape = op.input_shape   # ⚠ shape MAY BE None\nrequired = list(shape.required_members) if shape is not None else []\n\n# ── pyproject.toml:82 (EXISTING) ────────────────────────────────────────────\n[tool.setuptools.package-data]\nawsquery = [\"policy.json\", \"default_filters.yaml\"]     # <-- must gain \"default_actions.yaml\"\n# There is no MANIFEST.in. This line is the ONLY packaging list in the repo.\n</interfaces>\n\n<call_sites>\nSearched: bare-service invocations of the `awsquery` CLI (`awsquery <service>` with no action),\nplus every reference to the `Available services:` string this change stops emitting for the\nservice-given case.\nSurfaces grepped: `.github/workflows/`, `Makefile`, `scripts/`, `README.md`, `tests/`.\n\nFound:\n- `README.md:83` — `awsquery ec2 <TAB>   # Shows available ec2 actions` — OUT OF SCOPE.\n  Shell completion runs inside `argcomplete.autocomplete()` at cli.py:749, which `exit()`s\n  before line 752; injection happens after it, so completion behaviour is untouched.\n- `tests/integration/test_end_to_end.py:889` `test_main_function_service_listing` —\n  `sys.argv = [\"awsquery\",\"ec2\"]`, assertions guarded by `if \"Available services:\" in output`\n  — IN SCOPE (Task 5), must be rewritten, see that task for why \"still passes\" is a trap.\n- `tests/integration/test_end_to_end.py:629` `test_missing_service_action_edge_cases` —\n  `[\"awsquery\",\"\",\"describe-instances\"]` (empty service) — OUT OF SCOPE, verified safe: the\n  injector sees `\"\"` as the service candidate, `get_default_action(\"\")` returns `None`, no\n  injection occurs, and `not args.service` still fires.\n- `Makefile` / `.github/workflows/*.yml` / `scripts/validate-awsquery.sh` — no bare-service\n  invocation anywhere; every call passes an explicit action. OUT OF SCOPE.\n- `README.md:455-462` additive-columns table and `README.md:293` Default Filters section —\n  IN SCOPE (Task 6, documentation).\n\nNo other call sites found.\n</call_sites>\n\nKey files:\n@src/awsquery/cli.py — injection call site (752), branch split (830), epilog (674-699)\n@src/awsquery/config.py — 86 lines; the loader/accessor pair to mirror\n@src/awsquery/security.py — the kebab/snake casing trap at lines 41-44\n@pyproject.toml — package-data list at line 82\n@tests/integration/test_end_to_end.py — the vacuously-green test at line 889\n@README.md — sections at lines ~30 (feature bullets), 293, 453-462\n</context>\n\n<commit_format>\nFormat: plain, single-line summary, no issue prefix (per `.issues/config.yaml`\n`commits: {format: plain, prefix: false}` and CLAUDE.md's commit guidelines).\nHard rules: maximum 72 characters, ONE line, no bullets, no multi-line body.\n**No AI-attribution trailer** — the global no-attribution policy overrides the trailer block\nshown in CLAUDE.md's \"COMMIT FORMAT\" example. Do not add `Co-Authored-By: Claude` or the\n\"Generated with Claude Code\" line.\nExamples: `Add curated default_actions.yaml and config loader`\n          `Default the action when only a service is given`\n          `Document default action shortcut`\n</commit_format>\n\n<tasks>\n\n<task type=\"auto\">\n  <name>Task 1: Add the curated default_actions.yaml and register it for packaging</name>\n  <files>src/awsquery/default_actions.yaml, pyproject.toml</files>\n  <action>\n  Create `src/awsquery/default_actions.yaml` as a FLAT `service: action` map. Copy the 50\n  entries below VERBATIM — do not re-derive, re-order, or \"improve\" them. Every entry was\n  verified against botocore 1.43.89 to be a real operation with zero required shape members,\n  ReadOnly under the project's prefix rule, and already present in `default_filters.yaml`\n  (0 failures across all 50). Values are kebab-case: this is a correctness requirement, not\n  style — `security.is_readonly_operation` only PascalCases input containing `-`, so a\n  snake_case value returns `is_readonly=False`, falls through to `prompt_unsafe_operation()`\n  and blocks on `input()`, hanging `awsquery ec2` in a pipe.\n\n  File contents (header comment + the map, exactly):\n\n      # Per-service default action for `awsquery <service>` with no action.\n      # Values are kebab-case CLI operation names, exactly as a user would type them.\n      # Every entry must be ReadOnly and take no required parameters — enforced by\n      # tests/unit/test_default_column_filters.py::TestDefaultActionsMap.\n      acm: list-certificates\n      apigateway: get-rest-apis\n      apigatewayv2: get-apis\n      appsync: list-graphql-apis\n      athena: list-work-groups\n      autoscaling: describe-auto-scaling-groups\n      backup: list-backup-vaults\n      batch: describe-compute-environments\n      cloudformation: describe-stacks\n      cloudfront: list-distributions\n      cloudwatch: describe-alarms\n      codebuild: list-projects\n      codecommit: list-repositories\n      codepipeline: list-pipelines\n      directconnect: describe-connections\n      dynamodb: list-tables\n      ec2: describe-instances\n      ecr: describe-repositories\n      ecs: list-clusters\n      efs: describe-file-systems\n      eks: list-clusters\n      elasticache: describe-cache-clusters\n      elasticbeanstalk: describe-environments\n      elb: describe-load-balancers\n      elbv2: describe-load-balancers\n      es: list-domain-names\n      events: list-rules\n      firehose: list-delivery-streams\n      fsx: describe-file-systems\n      glue: get-databases\n      iam: list-users\n      kafka: list-clusters\n      kinesis: list-streams\n      kms: list-keys\n      lambda: list-functions\n      logs: describe-log-groups\n      organizations: list-accounts\n      rds: describe-db-instances\n      redshift: describe-clusters\n      route53: list-hosted-zones\n      s3: list-buckets\n      sagemaker: list-endpoints\n      secretsmanager: list-secrets\n      ses: list-identities\n      sns: list-topics\n      sqs: list-queues\n      ssm: describe-parameters\n      stepfunctions: list-state-machines\n      sts: get-caller-identity\n      xray: get-sampling-rules\n\n  Do NOT add entries for `application-autoscaling`, `budgets`, `ce`, `cognito-identity`,\n  `cognito-idp` — each was swept and has ZERO ReadOnly operations with no required\n  parameters, so the locked \"no required parameters\" rule excludes them. They intentionally\n  get the Task 3 stderr fallback.\n\n  Then edit `pyproject.toml:82` from\n  `awsquery = [\"policy.json\", \"default_filters.yaml\"]` to\n  `awsquery = [\"policy.json\", \"default_filters.yaml\", \"default_actions.yaml\"]`.\n  This must land in the SAME commit as the YAML: there is no `MANIFEST.in`, so omitting it\n  produces a wheel with no defaults that works perfectly from a source checkout and silently\n  falls back for every service after `pip install`. The unit tests read from the source tree\n  and CANNOT catch this.\n  </action>\n  <verify>\n  <automated>python3 -c \"\nimport yaml, pathlib\nm = yaml.safe_load(pathlib.Path('src/awsquery/default_actions.yaml').read_text())\nassert isinstance(m, dict) and len(m) == 50, len(m)\nassert all(isinstance(k, str) and isinstance(v, str) for k, v in m.items())\nassert all('_' not in v and v == v.lower() and '-' in v for v in m.values()), 'values must be kebab-case'\nassert m['ec2'] == 'describe-instances' and m['s3'] == 'list-buckets'\nassert not ({'budgets','ce','cognito-idp','cognito-identity','application-autoscaling'} & set(m))\nprint('map ok', len(m))\" && grep -q 'default_actions.yaml' pyproject.toml && echo packaging-ok</automated>\n  </verify>\n  <done>\n  - `src/awsquery/default_actions.yaml` exists, parses via `yaml.safe_load`, and is a flat\n    `dict[str, str]` with exactly 50 entries\n  - Every value is kebab-case; no value contains `_`\n  - `ec2 -> describe-instances`, `s3 -> list-buckets`; none of the five skipped services present\n  - `pyproject.toml:82` lists `default_actions.yaml` alongside `policy.json` and\n    `default_filters.yaml`\n  </done>\n</task>\n\n<task type=\"auto\">\n  <name>Task 2: Add load_default_actions() and get_default_action() to config.py</name>\n  <files>src/awsquery/config.py, tests/unit/test_config_loading_simple.py</files>\n  <action>\n  In `src/awsquery/config.py`, add two functions modelled line-for-line on the existing\n  `load_default_filters()` / `get_default_columns()` pair (locked decision in CONTEXT.md):\n\n  - `load_default_actions()` decorated `@lru_cache(maxsize=1)`. Resolve the path as\n    `os.path.join(os.path.dirname(__file__), \"default_actions.yaml\")`. Same three excepts\n    (`FileNotFoundError`, `yaml.YAMLError`, bare `Exception`), each `debug_print`ing a warning\n    and returning `{}`. Also return `{}` when `yaml.safe_load` yields a falsy value, so an\n    empty file cannot make `get_default_action` raise.\n  - `get_default_action(service)` returning `str | None`: `config.get(service.lower())`,\n    `debug_print` on BOTH the hit and the miss path (mirroring `get_default_columns`), return\n    `None` when unset. Guard against a falsy/None `service` argument so `get_default_action(\"\")`\n    returns `None` rather than raising.\n\n  Every `debug_print` in this module carries a trailing `# pragma: no mutate` — the repo runs\n  mutmut. Keep that convention on the new calls. flake8-docstrings is active outside `tests/*`\n  with only `D103` ignored, so both functions need a docstring. Line length is 100.\n\n  Do NOT touch `default_filters.yaml`, `load_default_filters`, `get_default_columns`, or\n  `apply_default_filters` — the separate-file decision exists precisely so those stay untouched.\n\n  Tests (via `@agent-test-writer`): add a new class `TestDefaultActionsConfig` to the EXISTING\n  `tests/unit/test_config_loading_simple.py`, next to `TestDefaultFiltersConfig`. Do not create\n  a new test file. Exercise the real loader against the real YAML — no mocking of any kind is\n  needed or permitted here. Assertions: `load_default_actions()` returns a non-empty\n  `dict[str, str]`; `get_default_action(\"ec2\") == \"describe-instances\"`;\n  `get_default_action(\"EC2\") == get_default_action(\"ec2\")`;\n  `get_default_action(\"s3\") == \"list-buckets\"`; `get_default_action(\"budgets\") is None`;\n  `get_default_action(\"nonexistent-service\") is None`; `get_default_action(\"\") is None`; and a\n  caching test asserting `load_default_actions.cache_info().hits` grows on a second call\n  (mirror `TestLoadDefaultFilters::test_caching_behavior` in\n  `tests/unit/test_default_column_filters.py`). No `@pytest.mark.*` decorators. No docstring\n  that merely restates the test name.\n  </action>\n  <verify>\n  <automated>python3 -m pytest tests/unit/test_config_loading_simple.py -v && python3 -m pytest tests/unit/test_default_column_filters.py -q</automated>\n  </verify>\n  <done>\n  - `config.load_default_actions()` is `@lru_cache(maxsize=1)` and returns `{}` on\n    FileNotFoundError / YAMLError / any exception / empty file\n  - `config.get_default_action(service)` is case-insensitive, `debug_print`s on hit and miss,\n    returns `None` for unconfigured, unknown, and empty service names\n  - New `# pragma: no mutate` markers present on every new `debug_print`\n  - `TestDefaultActionsConfig` added to the existing file and passing; no new test file created\n  - `load_default_filters` / `get_default_columns` / `apply_default_filters` unchanged\n  </done>\n</task>\n\n<task type=\"auto\">\n  <name>Task 3: Pre-parse argv injection in cli.py plus the no-default stderr fallback</name>\n  <files>src/awsquery/cli.py</files>\n  <action>\n  Two changes in `src/awsquery/cli.py`, both required for the acceptance criteria.\n\n  **(a) `_inject_default_action(argv)` — a pure function, list in / list out, never raises.**\n  Place it near the other argv helpers (after `_build_filter_argv`, ~line 320). Extend the\n  existing imports: `from .case_utils import to_kebab_case, to_snake_case` and\n  `from .config import apply_default_filters, get_default_action`. `to_kebab_case`,\n  `get_service_operations`, `get_service_valid_operations`, `get_aws_services`, `sanitize_input`\n  and `debug_print` are ALREADY imported — do not duplicate them.\n\n      def _inject_default_action(argv):\n          \"\"\"Splice the configured default action in after a bare service name.\"\"\"\n          i = 0\n          while i < len(argv):\n              arg = argv[i]\n              if arg == \"--\":\n                  return argv\n              if arg in VALUE_FLAGS:\n                  i += 2 if (i + 1 < len(argv) and not argv[i + 1].startswith(\"-\")) else 1\n                  continue\n              if arg.startswith(\"-\"):\n                  i += 1\n                  continue\n              break\n          if i >= len(argv):\n              return argv\n          service = argv[i]\n          following = argv[i + 1] if i + 1 < len(argv) else None\n          if following is not None and following != \"--\" and not following.startswith(\"-\"):\n              return argv\n          action = get_default_action(service)\n          if not action:\n              return argv\n          action = to_kebab_case(to_snake_case(action))\n          debug_print(f\"Using default action for {service}: {action}\")\n          return argv[: i + 1] + [action] + argv[i + 1 :]\n\n  Scanning `VALUE_FLAGS` is required, not optional: `awsquery --region us-west-2 ec2` must not\n  treat `us-west-2` as the service. The `--region=us-west-2` equals-form is not in\n  `VALUE_FLAGS`, starts with `-`, and is correctly skipped as one self-contained token. The\n  `to_kebab_case(to_snake_case(...))` line is the defensive canonicalisation for the casing\n  trap — keep it even though Task 1's YAML is already canonical.\n\n  **Call site — replace `cli.py:752`** `args, remaining = parser.parse_known_args()` with:\n\n      args, remaining = parser.parse_known_args(_inject_default_action(sys.argv[1:]))\n\n  Ordering is load-bearing: it must come AFTER `argcomplete.autocomplete(...)` (line 749),\n  which reads `COMP_LINE` and `exit()`s during shell completion. **Never mutate `sys.argv`** —\n  line 762 (`has_separator = \"--\" in sys.argv`) and line 806 (`reordered_argv = [sys.argv[0]]`)\n  both read it directly, and every existing test assigns it to describe the user's real command.\n  Injection never adds or removes a `--`, so line 762 stays correct.\n\n  `_build_filter_argv` (line 298) and the two-pass reorder (755-815) need NO change — the\n  reorder rebuilds `reordered_argv` from `args.service`/`args.action`, so the injected action\n  survives the re-parse. `parse_multi_level_filters_for_mode` needs no change either.\n\n  **(b) Split the dead-end branch at `cli.py:830` into two.** It must stay AFTER the\n  `filter_argv` / `parse_multi_level_filters_for_mode` block (824-828) exactly as today, or\n  `-d` debug output ordering changes.\n\n      if not args.service:\n          services = get_aws_services()\n          print(\"Available services:\", \", \".join(services))\n          sys.exit(0)\n\n      if not args.action:\n          _print_service_actions(sanitize_input(args.service))\n          sys.exit(1)\n\n  And add, next to `action_completer` (~line 632):\n\n      def _print_service_actions(service):\n          \"\"\"List a service's read-only actions on stderr when no default is configured.\"\"\"\n          operations = get_service_operations(service)\n          if not operations:\n              print(f\"ERROR: Unknown service '{service}'\", file=sys.stderr)\n              return\n          valid = get_service_valid_operations(service, operations)\n          actions = sorted(to_kebab_case(op) for op in operations if op in valid)\n          print(\n              f\"No default action configured for '{service}'. Available actions:\",\n              file=sys.stderr,\n          )\n          for action in actions:\n              print(f\"  {action}\", file=sys.stderr)\n\n  This is the same four-step sequence `action_completer` runs at cli.py:638-655 — reuse by\n  copy, not by extracting a shared helper (the completer additionally mutates\n  `_current_completion_context` and swallows every exception, so the shared core would be a\n  3-line comprehension). `get_service_operations` uses `_BotocoreSessionContext`, which pops\n  `AWS_PROFILE` and needs no credentials, and returns `[]` for an unknown service — hence the\n  explicit unknown-service message before the listing.\n\n  **(c) Parser epilog** (line 675, inside the `Examples:` block): add two lines,\n  `  awsquery ec2  (uses the default action, describe-instances)` and\n  `  awsquery s3 -- Name  (default action + column filter)`. Keep the existing first example\n  line byte-identical — `tests/unit/test_cli_help_output.py:98` asserts on it — and keep the\n  `Autocomplete Setup:` block after `Examples:` (asserted at line 131).\n\n  Do NOT implement any post-parse substitution keyed on `args.action is None`: proven\n  insufficient because argparse makes `ec2 -- InstanceId` and `ec2 InstanceId` identical\n  post-parse. Do NOT demote an unrecognised second positional to a value filter.\n\n  Constraints: flake8-docstrings requires docstrings on both new functions (D103 ignored but\n  the repo style has them); line length 100; run `make format` before verifying.\n  </action>\n  <verify>\n  <automated>python3 -m pytest tests/unit/test_cli_parser.py tests/unit/test_cli_flags.py tests/unit/test_cli_help_output.py tests/unit/test_cli_arg_processing.py -q && python3 -c \"\nimport sys; sys.path.insert(0,'src')\nfrom awsquery.cli import _inject_default_action as f\nassert f(['ec2']) == ['ec2','describe-instances']\nassert f(['ec2','--','InstanceId']) == ['ec2','describe-instances','--','InstanceId']\nassert f(['-j','ec2','--','X']) == ['-j','ec2','describe-instances','--','X']\nassert f(['--region','us-west-2','ec2']) == ['--region','us-west-2','ec2','describe-instances']\nassert f(['ec2','describe-instances','--','X']) == ['ec2','describe-instances','--','X']\nassert f(['ec2','prod']) == ['ec2','prod']\nassert f(['budgets']) == ['budgets']\nassert f(['']) == [''] and f([]) == [] and f(['--help']) == ['--help']\nprint('injector ok')\" && make lint</automated>\n  </verify>\n  <done>\n  - `_inject_default_action` exists, is pure, and satisfies every case in the verify command\n  - `cli.py:752` passes `_inject_default_action(sys.argv[1:])` to `parse_known_args`; the call\n    sits after `argcomplete.autocomplete(...)`; `sys.argv` is never mutated\n  - The `cli.py:830` branch is split: no-service prints services on stdout and exits 0;\n    service-with-no-default calls `_print_service_actions` and exits 1\n  - `_print_service_actions` writes to stderr and prints an explicit unknown-service error\n  - Two default-action examples added to the parser epilog; `test_cli_help_output.py` still passes\n  - `make lint` clean\n  </done>\n</task>\n\n<task type=\"auto\">\n  <name>Task 4: Curated-map validation, injector, flag pass-through and casing tests</name>\n  <files>tests/unit/test_default_column_filters.py, tests/unit/test_cli_parser.py, tests/unit/test_cli_flags.py, tests/unit/test_security.py</files>\n  <action>\n  All test work goes through `@agent-test-writer`. Extend the four EXISTING files below — do\n  NOT create `tests/unit/test_default_actions.py` or any other new file (CLAUDE.md forbids\n  duplicate test files, and a grep of `tests/` found no existing coverage of this feature).\n\n  **1. `tests/unit/test_default_column_filters.py` — new class `TestDefaultActionsMap`**, placed\n  next to `TestYAMLConfigurationStructure` (line 326), which is already the home for\n  data-validation tests that reach into botocore. This is the whole-map guard. Use\n  `@pytest.mark.parametrize` over `sorted(load_default_actions().items())` — `parametrize` is\n  the ONLY marker CLAUDE.md permits. Per entry assert:\n    1. the service is in `Loader().list_available_services(\"service-2\")`;\n    2. the operation resolves **case-insensitively** in `model.operation_names` — match on\n       `op.lower() == to_pascal_case(to_snake_case(action)).lower()`. A plain PascalCase match\n       fails on acronyms: `to_pascal_case(\"list_saml_providers\")` yields `ListSamlProviders`\n       but botocore's real name is `ListSAMLProviders`. `shapes.py:70-84` already implements\n       this fallback — copy the approach;\n    3. `input_shape is None or not input_shape.required_members` — the `is None` guard is\n       required, e.g. `sts:GetCallerIdentity` has no input shape at all and would otherwise\n       raise `AttributeError: 'NoneType' object has no attribute 'required_members'`;\n    4. `security.is_readonly_operation(action) is True`;\n    5. `action == to_kebab_case(to_snake_case(action))` — pins the file as canonical kebab-case\n       so the defensive normalisation in `_inject_default_action` never has to do real work;\n    6. `to_snake_case(action) in load_default_filters()[service]` — every defaulted action has\n       curated columns.\n  Plus one non-parametrized test asserting\n  `set(load_default_actions()) <= set(load_default_filters())`.\n  Build the model **credential-free** via `botocore.loaders.Loader` + `botocore.model.ServiceModel`\n  (see `<interfaces>`), NOT `boto3.client()` — the latter needs a region and sometimes\n  credentials and would break CI. Cache the loader/model per service so the parametrized run\n  does not reload 50 service models repeatedly.\n\n  **2. `tests/unit/test_cli_parser.py` — new class `TestDefaultActionInjection`** (this file\n  already owns separator-parsing behaviour). Pure-function tests on `_inject_default_action`\n  with **zero mocks** — it takes a list and returns a list:\n  `[\"ec2\"] -> [\"ec2\",\"describe-instances\"]`;\n  `[\"ec2\",\"--\",\"InstanceId\"] -> [\"ec2\",\"describe-instances\",\"--\",\"InstanceId\"]`;\n  `[\"ec2\",\"--\",\"InstanceId\",\"State\"]` injects and preserves both filters;\n  `[\"-j\",\"ec2\",\"--\",\"X\"]` injects at index 2; `[\"--region\",\"us-west-2\",\"ec2\"]` does not treat\n  `us-west-2` as the service; `[\"-p\",\"MaxResults=5\",\"ec2\"]` likewise; and unchanged for\n  `[\"ec2\",\"describe-instances\",\"--\",\"X\"]`, `[\"ec2\",\"prod\"]`, `[\"budgets\"]`, `[\"\"]`, `[]`,\n  `[\"--help\"]`, `[\"--\",\"ec2\"]`.\n  Then the equivalence tests: with **boto3 mocked only**, run `main()` for\n  `[\"awsquery\",\"ec2\",\"--\",\"InstanceId\"]` and for\n  `[\"awsquery\",\"ec2\",\"describe-instances\",\"--\",\"InstanceId\"]` and assert\n  `format_table_output` received identical column filters — this is the acceptance criterion\n  that a post-parse implementation silently fails.\n\n  **3. `tests/unit/test_cli_flags.py` — extend `TestCLIFlagHandling`**: flag/parameter\n  pass-through on a defaulted action. `[\"awsquery\",\"ec2\",\"-j\"]` produces JSON output for\n  `describe_instances`; `[\"awsquery\",\"-d\",\"ec2\"]` emits the `Using default action` line on\n  **stderr**; `[\"awsquery\",\"ec2\",\"-p\",\"MaxResults=5\"]` reaches `execute_aws_call` with the\n  parameter. Also assert `validate_readonly` is reached with the **kebab** spelling for a\n  defaulted action.\n\n  **4. `tests/unit/test_security.py` — extend `TestReadOnlyOperations`**: pin the casing trap\n  with a direct pair — `is_readonly_operation(\"describe-instances\") is True` and\n  `is_readonly_operation(\"describe_instances\") is False` (plus `list-buckets` /\n  `list_buckets`). A test, not a comment, is what keeps a future contributor from\n  \"normalising\" the YAML to snake_case.\n\n  Style constraints, enforced (CLAUDE.md): no `@pytest.mark.*` except `parametrize`; mock\n  `boto3` ONLY — never patch `get_default_action`, `_inject_default_action`,\n  `filter_resources`, or `determine_column_filters`, the functions under test; at most two\n  nested `with patch()` contexts — the existing `test_cli_parser.py` tests already sit at three\n  and must NOT be used as the template, prefer decorator-stacked `@patch` as\n  `test_cli_flags.py` does; no docstring that restates the test name; no TDD placeholder\n  comments.\n  </action>\n  <verify>\n  <automated>python3 -m pytest tests/unit/test_default_column_filters.py tests/unit/test_cli_parser.py tests/unit/test_cli_flags.py tests/unit/test_security.py -v && grep -rn \"@pytest.mark.\" tests/unit/ tests/integration/ | grep -v \"parametrize\" | (! grep .) && echo no-banned-markers</automated>\n  </verify>\n  <done>\n  - `TestDefaultActionsMap` parametrizes over all 50 entries and all six per-entry assertions\n    pass, using `botocore.loaders.Loader` with no boto3 client and no credentials\n  - `TestDefaultActionInjection` covers all listed argv shapes with zero mocks, plus the\n    `ec2 -- InstanceId` == `ec2 describe-instances -- InstanceId` equivalence via `main()`\n  - Flag/parameter pass-through and the debug line are asserted for a defaulted action\n  - `is_readonly_operation` kebab-vs-snake asymmetry is pinned by a test\n  - No new test files; no markers other than `parametrize`; no over-mocking\n  </done>\n</task>\n\n<task type=\"auto\">\n  <name>Task 5: Rewrite the vacuously-green integration test at test_end_to_end.py:889</name>\n  <files>tests/integration/test_end_to_end.py</files>\n  <action>\n  `test_main_function_service_listing` (line 889) sets `sys.argv = [\"awsquery\",\"ec2\"]` and\n  guards every assertion behind `if \"Available services:\" in output:`. After this change that\n  string is no longer emitted for a service-given invocation, so **the test goes green\n  vacuously while `main()` actually proceeds to attempt AWS work** under a partially-mocked\n  `boto3.Session` — a silent hang or credential-error risk in CI, and zero real coverage.\n  It must be rewritten, not left \"still passing\".\n\n  Replace it with two focused tests (this task is done by `@agent-test-writer`):\n\n  - `awsquery` with NO arguments (`sys.argv = [\"awsquery\"]`) still prints\n    `Available services:` on **stdout** and exits 0. Assert unconditionally — no\n    `if ... in output` guard. Assert on the captured `SystemExit` code rather than patching\n    `sys.exit` to a Mock, so execution actually stops where it should.\n  - `awsquery budgets` (a service deliberately absent from `default_actions.yaml` because\n    `DescribeBudgets` requires `AccountId`) writes the action listing to **stderr** — capture\n    stderr, not stdout — and exits non-zero. Assert the `No default action configured for\n    'budgets'` prefix and that at least one kebab-case action line is present.\n\n  Leave `test_missing_service_action_edge_cases` (line 629) alone: `[\"awsquery\",\"\",\"describe-instances\"]`\n  is verified safe — the injector finds `\"\"` as the service candidate, `get_default_action(\"\")`\n  returns `None`, no injection happens, and `not args.service` still fires.\n\n  Mock `boto3` only. No markers. No docstring that restates the test name.\n  </action>\n  <verify>\n  <automated>python3 -m pytest tests/integration/test_end_to_end.py -v && ! grep -n 'if \"Available services:\" in output' tests/integration/test_end_to_end.py</automated>\n  </verify>\n  <done>\n  - `test_main_function_service_listing` no longer exists in its guarded form; the\n    `if \"Available services:\" in output` conditional is gone from the file\n  - A no-argument test asserts `Available services:` on stdout and exit code 0 unconditionally\n  - A `budgets` test asserts the action listing on stderr and a non-zero exit code\n  - `test_missing_service_action_edge_cases` is unchanged and still passes\n  - The integration suite completes without attempting a real AWS call\n  </done>\n</task>\n\n<task type=\"auto\">\n  <name>Task 6: Document the default-action shortcut in the README</name>\n  <files>README.md</files>\n  <action>\n  Three README edits (line numbers from the current file; locate by heading text if they drift).\n\n  1. **Feature bullets (~line 30)**, next to the existing `**Default Column Filters**` bullet:\n     add `- **Default Actions**: A bare service name runs its curated default operation —\n     `awsquery ec2` == `awsquery ec2 describe-instances`` plus one bare-service example\n     (`awsquery s3 -- Name`) so the shortcut is discoverable above the fold.\n\n  2. **New `### Default Actions Configuration` subsection** under `## Configuration`, as a\n     sibling immediately after `### Default Filters Configuration` (line 293). Cover: bare\n     `awsquery <service>` runs the curated default; the map lives in\n     `src/awsquery/default_actions.yaml` as a flat `service: action` map; **values are\n     kebab-case** (state that this is required, because the ReadOnly validator only recognises\n     kebab spellings — a snake_case value turns the command into an interactive prompt);\n     adding a service is a one-line YAML edit; the two rules an entry must satisfy (ReadOnly,\n     no required parameters); and that a service with no entry prints its available actions on\n     stderr and exits non-zero, while `awsquery` with no service still lists services and exits\n     0. Include the shortcut table:\n\n     | Command | Equivalent to |\n     | `awsquery ec2` | `awsquery ec2 describe-instances` |\n     | `awsquery s3` | `awsquery s3 list-buckets` |\n     | `awsquery ec2 -- InstanceId` | `awsquery ec2 describe-instances -- InstanceId` |\n\n     Show a short YAML snippet (3-4 entries from the real file, kebab-case).\n\n  3. **Additive column filters table (lines 455-462)**: add one row so the shortcut is visible\n     where columns are explained — `awsquery ec2 -- +InstanceId` → \"defaults + `InstanceId`,\n     using the `ec2` default action\".\n\n  Document only what this issue ships. Do NOT document the deferred items (heuristic\n  inference, default parameters, `~/.awsquery/` user overrides). No AI attribution anywhere.\n  </action>\n  <verify>\n  <automated>grep -q \"Default Actions Configuration\" README.md && grep -q \"default_actions.yaml\" README.md && grep -q \"awsquery ec2 -- +InstanceId\" README.md && grep -qi \"kebab\" README.md && echo readme-ok</automated>\n  </verify>\n  <done>\n  - A `**Default Actions**` feature bullet and a bare-service example appear above the fold\n  - A `### Default Actions Configuration` subsection sits beside the Default Filters section and\n    documents the file location, kebab-case requirement, the two entry rules, the shortcut\n    table, and both fallback behaviours\n  - The additive-columns table has a default-action row\n  - No deferred feature is documented as shipped\n  </done>\n</task>\n\n</tasks>\n\n<verification>\nRun all three gates from the project environment (Docker image or a venv with the project's\ndependencies). **The research agent could NOT run the suite — its interpreter lacked `boto3`,\n`botocore`, `argcomplete` and `pytest` — so the pre-existing state of the suite is\ngreen-until-proven-otherwise, not verified green. Actually run these; do not assume.**\n\n- `make test` — full suite (`python3 -m pytest tests/ -v`), all tests, no marker selection\n- `make lint` — `flake8 src/ tests/ --count --statistics --show-source` and `pylint src/awsquery`\n- `make format-check` — `black --check --diff src/ tests/` and `isort --check-only --diff src/ tests/`\n  (run `make format` first if it reports diffs)\n- Coverage gate: `pytest.ini` enforces an 80% minimum — confirm `make test` does not fail on it\n\nSingle test runner: this repo uses pytest exclusively (`Makefile:39-61` and\n`.github/workflows/test.yml:41` both invoke `python -m pytest`). There is no unittest CI path,\nso no dual-runner gate applies.\n\nPackaging spot-check (cannot be covered by unit tests, which read the source tree):\n`python3 -m build && unzip -l dist/*.whl | grep default_actions.yaml`\n</verification>\n\n<success_criteria>\nMaps 1:1 to ISSUE.md's acceptance criteria, with the two research-driven corrections applied\n(separate YAML file instead of a `default_action:` key; kebab-case values):\n\n- `src/awsquery/default_actions.yaml` carries 50 curated `service: kebab-action` entries, parses\n  via `load_default_actions()`, and is registered in `pyproject.toml` package data\n- `default_filters.yaml` is untouched and still parses via `load_default_filters()`\n- `config.get_default_action(service)` returns the configured action, is case-insensitive in the\n  same way as `get_default_columns`, and returns `None` for unconfigured/unknown/empty services\n- `awsquery ec2` produces the same output as `awsquery ec2 describe-instances`\n- `awsquery s3` produces the same output as `awsquery s3 list-buckets`\n- `awsquery ec2 -- InstanceId` produces the same output as\n  `awsquery ec2 describe-instances -- InstanceId` (the criterion a post-parse implementation\n  silently fails), and flags (`-j`, `-d`, `-p`, `--region`) apply to the defaulted action\n- The defaulted action passes through `validate_readonly` in its kebab form and never triggers\n  `prompt_unsafe_operation`; a non-ReadOnly default would be rejected like any other action\n- Default column filters from `default_filters.yaml` still apply to the defaulted action\n- `awsquery budgets` (no curated default) lists that service's ReadOnly actions on **stderr**\n  and exits non-zero\n- `awsquery` with no arguments still lists available services on stdout and exits 0\n- Only a `debug_print` announces the chosen default — stdout and stderr stay clean on normal runs\n- Tests cover: default resolution, unconfigured-service fallback, filter/flag pass-through,\n  readonly validation of the defaulted action, and a whole-map validation asserting every entry\n  is a real botocore operation with zero required members, ReadOnly, and canonical kebab-case\n- `tests/integration/test_end_to_end.py` no longer contains a vacuously-guarded service-listing\n  assertion\n- README documents the shortcut and the `default_actions.yaml` config file\n- `make test`, `make lint`, and `make format-check` all pass, run for real in the project\n  environment\n</success_criteria>\n"}
+</script>
+
+<script>
+(function () {
+  "use strict";
+  var dataEl = document.getElementById("artifact-source");
+  var target = document.getElementById("artifact-source-target");
+  if (dataEl && target) {
+    try {
+      target.textContent = JSON.parse(dataEl.textContent).source || "";
+    } catch (e) {
+      target.textContent = dataEl.textContent;
+    }
+  }
+  document.querySelectorAll('a[href^="#"]').forEach(function (a) {
+    a.addEventListener("click", function (ev) {
+      var el = document.getElementById(a.getAttribute("href").slice(1));
+      if (el) { ev.preventDefault(); el.scrollIntoView({ behavior: "smooth" }); }
+    });
+  });
+})();
+</script>
+</body>
+</html>
