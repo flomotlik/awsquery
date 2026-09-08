@@ -590,7 +590,7 @@ class TestCLIErrorHandling:
         from awsquery.cli import main
 
         # Test service listing which causes SystemExit(0)
-        with patch("sys.argv", ["awsquery", "--unknown-option", "value"]):
+        with patch("sys.argv", ["awsquery", "--unknown-option"]):
             # Mock botocore session to prevent actual AWS calls
             with patch("botocore.session.Session") as mock_session_class:
                 mock_session = Mock()

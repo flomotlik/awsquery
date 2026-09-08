@@ -12,8 +12,8 @@ import argcomplete
 import boto3
 
 from .auto_filters import smart_select_columns
-from .case_utils import to_kebab_case
-from .config import apply_default_filters
+from .case_utils import to_kebab_case, to_snake_case
+from .config import apply_default_filters, get_default_action
 from .core import (
     check_parameter_requirements,
     execute_aws_call,
@@ -317,6 +317,34 @@ def _build_filter_argv(args, remaining):
         filter_argv.append(arg)
         i += 1
     return filter_argv
+
+
+def _inject_default_action(argv):
+    """Splice the configured default action in after a bare service name."""
+    i = 0
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--":
+            return argv
+        if arg in VALUE_FLAGS:
+            i += 2 if (i + 1 < len(argv) and not argv[i + 1].startswith("-")) else 1
+            continue
+        if arg.startswith("-"):
+            i += 1
+            continue
+        break
+    if i >= len(argv):
+        return argv
+    service = argv[i]
+    following = argv[i + 1] if i + 1 < len(argv) else None
+    if following is not None and following != "--" and not following.startswith("-"):
+        return argv
+    action = get_default_action(service)
+    if not action:
+        return argv
+    action = to_kebab_case(to_snake_case(action))
+    debug_print(f"Using default action for {service}: {action}")  # pragma: no mutate
+    return argv[: i + 1] + [action] + argv[i + 1 :]
 
 
 def _format_columns_copyable(columns, additive_marks=None):
@@ -629,6 +657,22 @@ def _enhanced_completion_validator(completion_candidate, current_input):
     return False
 
 
+def _print_service_actions(service):
+    """List a service's read-only actions on stderr when no default is configured."""
+    operations = get_service_operations(service)
+    if not operations:
+        print(f"ERROR: Unknown service '{service}'", file=sys.stderr)
+        return
+    valid = get_service_valid_operations(service, operations)
+    actions = sorted(to_kebab_case(op) for op in operations if op in valid)
+    print(
+        f"No default action configured for '{service}'. Available actions:",
+        file=sys.stderr,
+    )
+    for action in actions:
+        print(f"  {action}", file=sys.stderr)
+
+
 def action_completer(prefix, parsed_args, **kwargs):
     """Autocomplete action names based on selected service"""
     if not parsed_args.service:
@@ -682,6 +726,8 @@ Examples:
   awsquery ec2 describe-instances -p MaxResults=10 prod  (parameter propagation)
   awsquery ec2 describe-instances --keys  (show all keys)
   awsquery ec2 describe-instances --debug  (enable debug output)
+  awsquery ec2  (uses the default action, describe-instances)
+  awsquery s3 -- Name  (default action + column filter)
 
 Autocomplete Setup:
   Bash:
@@ -749,7 +795,7 @@ Autocomplete Setup:
     argcomplete.autocomplete(parser, validator=_enhanced_completion_validator)
 
     # First pass: parse known args to get service and action
-    args, remaining = parser.parse_known_args()
+    args, remaining = parser.parse_known_args(_inject_default_action(sys.argv[1:]))
 
     # If there are remaining args, check if any are flags that should be parsed
     # This handles cases where flags appear after service/action but BEFORE --
@@ -827,10 +873,14 @@ Autocomplete Setup:
         filter_argv, mode="single"
     )
 
-    if not args.service or not args.action:
+    if not args.service:
         services = get_aws_services()
         print("Available services:", ", ".join(services))
         sys.exit(0)
+
+    if not args.action:
+        _print_service_actions(sanitize_input(args.service))
+        sys.exit(1)
 
     service = sanitize_input(args.service)
     action = sanitize_input(args.action)
