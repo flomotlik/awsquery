@@ -76,6 +76,14 @@ class TestReadOnlyOperations:
             is_readonly_operation("DESCRIBE-INSTANCES") is True
         )  # All caps gets converted to Describe-Instances
 
+    def test_snake_case_is_never_readonly(self):
+        # Only kebab-case (containing '-') gets PascalCased before the prefix
+        # check; snake_case falls through and is always rejected.
+        assert is_readonly_operation("describe-instances") is True
+        assert is_readonly_operation("describe_instances") is False
+        assert is_readonly_operation("list-buckets") is True
+        assert is_readonly_operation("list_buckets") is False
+
 
 class TestValidateReadonly:
     """Test the main validation function."""

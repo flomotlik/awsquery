@@ -28,6 +28,8 @@ the data you need during review, debugging or development.
 - **Region/Profile Support**: AWS CLI-compatible `--region` and `--profile` arguments for session management
 - **Tag Transformation**: Automatic conversion of AWS Tags list to key-value pairs for better readability
 - **Default Column Filters**: Configuration-based default columns for common AWS queries
+- **Default Actions**: A bare service name runs its curated default operation — `awsquery ec2`
+  == `awsquery ec2 describe-instances` (e.g. `awsquery s3 -- Name`)
 - **Parameter Passing**: Direct parameter passing to AWS APIs with `-p`/`--parameter` for advanced use cases
 - **Hint-Based Resolution**: Function selection hints with `-i`/`--input` for multi-step calls, including cross-service support and field extraction targeting
 
@@ -315,6 +317,37 @@ s3:
       - CreationDate
 ```
 
+### Default Actions Configuration
+
+Running `awsquery <service>` with no action runs that service's curated default operation —
+`awsquery ec2` is equivalent to `awsquery ec2 describe-instances`. This also works with column
+filters after `--`: `awsquery ec2 -- InstanceId` behaves identically to
+`awsquery ec2 describe-instances -- InstanceId`.
+
+| Command | Equivalent to |
+|---------|---------------|
+| `awsquery ec2` | `awsquery ec2 describe-instances` |
+| `awsquery s3` | `awsquery s3 list-buckets` |
+| `awsquery ec2 -- InstanceId` | `awsquery ec2 describe-instances -- InstanceId` |
+
+The curated map lives in `src/awsquery/default_actions.yaml` as a flat `service: action` map.
+**Values must be kebab-case** — the ReadOnly validator only recognizes kebab-case operation
+spellings; a snake_case value turns `is_readonly_operation` false, and the command falls
+through to an interactive confirmation prompt instead of running.
+
+```yaml
+ec2: describe-instances
+s3: list-buckets
+lambda: list-functions
+iam: get-account-summary
+```
+
+Adding a service is a one-line YAML edit. Every entry must satisfy two rules: the operation
+must be ReadOnly, and it must take no required parameters (so it can run without extra
+arguments). A service with no curated entry prints its available ReadOnly actions on stderr
+and exits non-zero; `awsquery` with no service at all is unchanged — it still lists available
+services on stdout and exits 0.
+
 ## Development
 
 ### Running Tests
@@ -461,6 +494,7 @@ Prefix any column with `+` to merge with the defaults instead:
 | `awsquery ec2 describe-instances -- InstanceId`          | only `InstanceId` (replaces defaults)                                                                  |
 | `awsquery ec2 describe-instances -- +InstanceId`         | defaults + `InstanceId` (merged, deduped, defaults first)                                              |
 | `awsquery ec2 describe-instances -- InstanceId +OwnerId` | defaults + `InstanceId` + `OwnerId` (any `+` triggers additive mode for the whole column-filter group) |
+| `awsquery ec2 -- +InstanceId`                            | defaults + `InstanceId`, using the `ec2` default action                                                |
 
 Notes:
 - `+` is recognised anywhere in the column-filter group (after the `--` separator).

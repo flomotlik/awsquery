@@ -5,9 +5,18 @@ import tempfile
 from unittest.mock import patch
 
 import pytest
+from botocore.loaders import Loader
+from botocore.model import ServiceModel
 
+from awsquery.case_utils import to_kebab_case, to_pascal_case, to_snake_case
 from awsquery.cli import determine_column_filters
-from awsquery.config import apply_default_filters, get_default_columns, load_default_filters
+from awsquery.config import (
+    apply_default_filters,
+    get_default_columns,
+    load_default_actions,
+    load_default_filters,
+)
+from awsquery.security import is_readonly_operation
 
 # Cache can be persistent since we use real config file
 
@@ -321,6 +330,42 @@ class TestDetermineColumnFiltersAdditive:
         )
         assert "InstanceId" in result
         assert "+InstanceId" not in result
+
+
+class TestDefaultActionsMap:
+    """Whole-map validation guard for src/awsquery/default_actions.yaml."""
+
+    _loader = Loader()
+    _models: dict = {}
+
+    @classmethod
+    def _get_model(cls, service):
+        if service not in cls._models:
+            versions = cls._loader.list_api_versions(service, "service-2")
+            service_data = cls._loader.load_service_model(service, "service-2", versions[-1])
+            cls._models[service] = ServiceModel(service_data)
+        return cls._models[service]
+
+    @pytest.mark.parametrize("service,action", sorted(load_default_actions().items()))
+    def test_default_action_entry_is_valid(self, service, action):
+        available_services = self._loader.list_available_services("service-2")
+        assert service in available_services
+
+        model = self._get_model(service)
+        pascal_lower = to_pascal_case(to_snake_case(action)).lower()
+        matched = next((op for op in model.operation_names if op.lower() == pascal_lower), None)
+        assert matched is not None, f"{action} has no matching operation for {service}"
+
+        operation = model.operation_model(matched)
+        input_shape = operation.input_shape
+        assert input_shape is None or not input_shape.required_members
+
+        assert is_readonly_operation(action) is True
+        assert action == to_kebab_case(to_snake_case(action))
+        assert to_snake_case(action) in load_default_filters().get(service, {})
+
+    def test_default_actions_are_subset_of_default_filters(self):
+        assert set(load_default_actions()) <= set(load_default_filters())
 
 
 class TestYAMLConfigurationStructure:

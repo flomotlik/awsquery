@@ -52,6 +52,51 @@ def get_default_columns(service, action):
     return columns
 
 
+@lru_cache(maxsize=1)
+def load_default_actions():
+    """Load default actions with caching and error handling"""
+    # Load default_actions.yaml from the package directory only
+    config_path = os.path.join(os.path.dirname(__file__), "default_actions.yaml")
+
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+            debug_print(
+                f"Loaded default actions configuration from {config_path}"
+            )  # pragma: no mutate
+            return config or {}
+    except FileNotFoundError:
+        debug_print(
+            f"Warning: {config_path} not found, no defaults will be applied"
+        )  # pragma: no mutate
+        return {}
+    except yaml.YAMLError as e:
+        debug_print(f"Warning: Could not parse {config_path}: {e}")  # pragma: no mutate
+        return {}
+    except Exception as e:
+        debug_print(
+            f"Warning: Could not load default actions from {config_path}: {e}"
+        )  # pragma: no mutate
+        return {}
+
+
+def get_default_action(service):
+    """Get the configured default action for a service"""
+    if not service:
+        debug_print("No service provided, no default action available")  # pragma: no mutate
+        return None
+
+    config = load_default_actions()
+    action = config.get(service.lower())
+
+    if action:
+        debug_print(f"Found default action for {service}: {action}")  # pragma: no mutate
+    else:
+        debug_print(f"No default action configured for {service}")  # pragma: no mutate
+
+    return action
+
+
 def apply_default_filters(service, action, user_columns=None, additive=False):
     """Apply default filters; in additive mode merge defaults with user columns."""
     if additive and user_columns:

@@ -277,3 +277,110 @@ class TestCLIFlagHandling:
 
                     assert utils.get_debug_enabled() is True
                     mock_json.assert_called_once()
+
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.validate_readonly")
+    def test_json_flag_with_defaulted_action(self, mock_validate, mock_execute, mock_session):
+        """-j flag applies to a service with no explicit action."""
+        mock_validate.return_value = True
+        mock_execute.return_value = [{"Instances": [{"InstanceId": "i-123"}]}]
+        mock_session.return_value = Mock()
+
+        sys.argv = ["awsquery", "ec2", "-j"]
+
+        with patch("awsquery.cli.flatten_response") as mock_flatten:
+            with patch("awsquery.cli.filter_resources") as mock_filter:
+                with patch("awsquery.cli.format_json_output") as mock_json:
+                    mock_flatten.return_value = [{"InstanceId": "i-123"}]
+                    mock_filter.return_value = [{"InstanceId": "i-123"}]
+                    mock_json.return_value = '{"InstanceId": "i-123"}'
+
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+
+                    mock_json.assert_called_once()
+                    mock_execute.assert_called_once_with(
+                        "ec2",
+                        "describe-instances",
+                        parameters={},
+                        session=mock_session.return_value,
+                    )
+
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.validate_readonly")
+    def test_debug_flag_announces_defaulted_action_on_stderr(
+        self, mock_validate, mock_execute, mock_session, capsys
+    ):
+        """-d with a bare service prints the 'Using default action' line on stderr."""
+        mock_validate.return_value = True
+        mock_execute.return_value = [{"Instances": []}]
+        mock_session.return_value = Mock()
+
+        sys.argv = ["awsquery", "-d", "ec2"]
+
+        with patch("awsquery.cli.flatten_response", return_value=[]):
+            with patch("awsquery.cli.filter_resources", return_value=[]):
+                with patch("awsquery.cli.format_table_output", return_value=""):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+
+        captured = capsys.readouterr()
+        assert "Using default action for ec2: describe-instances" in captured.err
+        assert "Using default action for ec2: describe-instances" not in captured.out
+
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.validate_readonly")
+    def test_parameter_flag_reaches_execute_aws_call_for_defaulted_action(
+        self, mock_validate, mock_execute, mock_session
+    ):
+        """-p MaxResults=5 reaches execute_aws_call for a defaulted service action."""
+        mock_validate.return_value = True
+        mock_execute.return_value = [{"Instances": []}]
+        mock_session.return_value = Mock()
+
+        sys.argv = ["awsquery", "ec2", "-p", "MaxResults=5"]
+
+        with patch("awsquery.cli.flatten_response", return_value=[]):
+            with patch("awsquery.cli.filter_resources", return_value=[]):
+                with patch("awsquery.cli.format_table_output", return_value=""):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+
+        mock_execute.assert_called_once_with(
+            "ec2",
+            "describe-instances",
+            parameters={"MaxResults": 5},
+            session=mock_session.return_value,
+        )
+
+    @patch("awsquery.cli.create_session")
+    @patch("awsquery.cli.execute_aws_call")
+    @patch("awsquery.cli.validate_readonly")
+    def test_validate_readonly_receives_kebab_defaulted_action(
+        self, mock_validate, mock_execute, mock_session
+    ):
+        """validate_readonly is reached with the kebab spelling for a defaulted action."""
+        mock_validate.return_value = True
+        mock_execute.return_value = [{"Instances": []}]
+        mock_session.return_value = Mock()
+
+        sys.argv = ["awsquery", "ec2"]
+
+        with patch("awsquery.cli.flatten_response", return_value=[]):
+            with patch("awsquery.cli.filter_resources", return_value=[]):
+                with patch("awsquery.cli.format_table_output", return_value=""):
+                    try:
+                        main()
+                    except SystemExit:
+                        pass
+
+        mock_validate.assert_called_once_with("ec2", "describe-instances", allow_unsafe=False)
