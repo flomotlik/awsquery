@@ -1639,6 +1639,18 @@ iam:
   get_user_policy:
     columns:
     - ^UserName$
+  get_account_summary:
+    columns:
+    - Users$
+    - Groups$
+    - Roles$
+    - Policies$
+    - InstanceProfiles$
+    - ServerCertificates$
+    - MFADevices$
+    - MFADevicesInUse$
+    - AccountMFAEnabled$
+    - PolicyVersionsInUse$
   get_account_authorization_details:
     columns:
     - GroupId$

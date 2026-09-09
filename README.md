@@ -339,7 +339,7 @@ through to an interactive confirmation prompt instead of running.
 ec2: describe-instances
 s3: list-buckets
 lambda: list-functions
-iam: list-users
+iam: get-account-summary
 ```
 
 Adding a service is a one-line YAML edit. Every entry must satisfy two rules: the operation

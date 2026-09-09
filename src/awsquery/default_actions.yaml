@@ -32,7 +32,7 @@ events: list-rules
 firehose: list-delivery-streams
 fsx: describe-file-systems
 glue: get-databases
-iam: list-users
+iam: get-account-summary
 kafka: list-clusters
 kinesis: list-streams
 kms: list-keys
