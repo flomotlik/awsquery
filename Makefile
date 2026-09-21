@@ -13,6 +13,7 @@ NC := \033[0m
 
 .PHONY: help clean install-dev test test-unit test-integration test-critical test-slow test-fast test-unit-fast \
         test-integration-fast coverage coverage-report lint format format-check type-check security-check ci build \
+        uv-sync uv-test uv-run uv-lock tool-install tool-uninstall \
         publish-test publish watch-tests version release update-policy validate-policy all ec2-instances s3-buckets \
         iam-users iam-roles lambda-functions cloudformation-stacks dynamodb-tables ec2-volumes \
         ec2-security-groups s3-bucket-versioning cloudwatch-alarms route53-zones shell \
@@ -35,6 +36,32 @@ help: ## Show this help message
 
 install-dev: ## Install development dependencies
 	pip3 install --user --break-system-packages -e ".[dev]" || pip3 install -e ".[dev]"
+
+# =============================================================================
+# UV TARGETS
+# =============================================================================
+
+uv-sync: ## Install project + dev dependencies into .venv with uv
+	uv sync --extra dev
+
+uv-test: ## Run all tests with uv
+	uv run --extra dev pytest tests/ -v
+
+uv-run: ## Run awsquery from the local checkout (use ARGS="ec2 describe-instances")
+	uv run awsquery $(ARGS)
+
+uv-lock: ## Regenerate uv.lock
+	uv lock
+
+tool-install: ## Install awsquery as a global uv tool from this checkout
+	uv tool install --force --editable .
+
+tool-uninstall: ## Remove the globally installed awsquery uv tool
+	uv tool uninstall awsquery
+
+# =============================================================================
+# TEST TARGETS
+# =============================================================================
 
 test: ## Run all tests
 	python3 -m pytest tests/ -v

@@ -12,6 +12,25 @@ awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId vpcid
 This creates endless flexibility to shape your aws cli calls, filter any output and present exactly
 the data you need during review, debugging or development.
 
+## Quick Start
+
+With [uv](https://docs.astral.sh/uv/) installed, there is nothing else to set up — no virtualenv, no
+`pip install`, not even a Python of your own:
+
+```bash
+uvx awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId
+```
+
+Want it as a permanent command with tab completion?
+
+```bash
+uv tool install awsquery
+awsquery ec2 describe-instances
+```
+
+See [Installation](#installation) for aliases, version pinning, running straight from GitHub, and CI
+usage.
+
 ## Features
 
 - **Smart Multi-Level Calls**: Automatically resolves missing parameters by inferring and calling list operations
@@ -35,29 +54,223 @@ the data you need during review, debugging or development.
 
 ## Installation
 
-### Via pip (Recommended)
+`awsquery` is on PyPI, so the fastest way to use it is [uv](https://docs.astral.sh/uv/): no
+virtualenv, no `pip install`, no Python version juggling. uv downloads a matching Python for you if
+you don't have one.
+
+| You want to... | Command |
+| --- | --- |
+| Try it once, install nothing | `uvx awsquery ec2 describe-instances` |
+| Use it every day (and get tab completion) | `uv tool install awsquery` |
+| Run a specific version | `uvx awsquery@1.1.0 ec2 describe-instances` |
+| Run unreleased code from GitHub | `uvx --from git+https://github.com/flomotlik/awsquery awsquery ec2` |
+| Hack on it locally | `uv run awsquery ec2` inside a checkout |
+
+### Install uv (one time)
 
 ```bash
-pip install awsquery
+# macOS / Linux
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Homebrew
+brew install uv
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### Development Installation
+That is the only thing anyone on your team has to install. uv itself is a single binary and brings
+its own Python.
+
+### Run without installing: `uvx`
 
 ```bash
-git clone https://github.com/yourusername/awsquery.git
+uvx awsquery ec2 describe-instances
+uvx awsquery s3 list-buckets backup -- Name CreationDate
+uvx awsquery -j cloudformation describe-stacks prod
+```
+
+The first run downloads awsquery and its dependencies into uv's cache (a few seconds). Every run
+after that starts in about a tenth of a second. Nothing is added to your `PATH`, no virtualenv is
+created, and nothing is left behind in your project.
+
+Pin an exact version when you want reproducibility, or force a check for the newest release:
+
+```bash
+uvx awsquery@1.1.0 ec2 describe-instances   # pinned, fully reproducible
+uvx awsquery@latest ec2 describe-instances  # re-checks PyPI for a newer version
+```
+
+### Make it feel like a normal command: alias
+
+Add one line to your shell config and the whole team is running the same tool without installing
+anything:
+
+```bash
+# ~/.bashrc or ~/.zshrc
+alias awsquery='uvx awsquery@latest'
+
+# pin the version instead, if you want everyone on the same release
+alias awsquery='uvx awsquery@1.1.0'
+```
+
+```fish
+# ~/.config/fish/config.fish
+alias --save awsquery 'uvx awsquery@latest'
+```
+
+```powershell
+# PowerShell $PROFILE
+function awsquery { uvx awsquery@latest @args }
+```
+
+Then use it exactly as documented everywhere else in this README:
+
+```bash
+awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId
+```
+
+Two things to know about the alias route: `@latest` contacts PyPI on every invocation (so it needs
+network and adds a moment of latency), and shell tab completion does not work through an alias
+because argcomplete needs a real executable on `PATH`. If either matters to you, use
+`uv tool install` instead — it gives you the same command with neither drawback.
+
+### Install as a persistent tool: `uv tool install`
+
+```bash
+uv tool install awsquery      # installs the awsquery command into ~/.local/bin
+awsquery ec2 describe-instances
+
+uv tool upgrade awsquery      # upgrade later
+uv tool uninstall awsquery    # remove it again
+uv tool list                  # see what's installed
+```
+
+uv keeps awsquery in its own isolated environment, so it can never conflict with your project
+virtualenvs or your system Python. If the command isn't found afterwards, run `uv tool update-shell`
+(it adds uv's bin directory to your `PATH`) and restart your shell.
+
+This is the recommended setup for daily use and the one that supports
+[shell autocomplete](#enable-shell-autocomplete).
+
+### Run unreleased code straight from GitHub
+
+```bash
+# latest commit on main, run once
+uvx --from git+https://github.com/flomotlik/awsquery awsquery ec2 describe-instances
+
+# a specific branch, tag or commit
+uvx --from git+https://github.com/flomotlik/awsquery@main awsquery ec2 describe-instances
+uvx --from git+https://github.com/flomotlik/awsquery@v1.1.0 awsquery ec2 describe-instances
+
+# install that version persistently
+uv tool install git+https://github.com/flomotlik/awsquery
+```
+
+`--from` is needed because the package name (`awsquery`) has to be resolved from the repository
+while the command to execute is still `awsquery`.
+
+### Run from a local checkout
+
+```bash
+git clone https://github.com/flomotlik/awsquery.git
 cd awsquery
-pip install -e ".[dev]"
+
+# run the working tree directly - uv creates and syncs .venv on the fly
+uv run awsquery ec2 describe-instances
+
+# or via make
+make uv-run ARGS="ec2 describe-instances"
+
+# put your local checkout on PATH as the global awsquery command
+uv tool install --editable .   # same as: make tool-install
 ```
+
+`uv run` resolves dependencies from `uv.lock`, which is committed to this repository, so every
+contributor gets an identical environment. Use `uv run --frozen awsquery ...` to fail instead of
+silently re-locking if the lockfile is out of date.
+
+### Python versions
+
+awsquery requires Python 3.10 or newer. uv fetches a suitable interpreter automatically, so you do
+not need a system Python at all. To force a specific version:
+
+```bash
+uvx --python 3.12 awsquery ec2 describe-instances
+uv tool install --python 3.12 awsquery
+uv run --python 3.12 awsquery ec2 describe-instances
+```
+
+### AWS credentials with uv
+
+uvx does not sandbox anything: the tool runs as you, with your environment and your `~/.aws`
+directory, so credentials, SSO sessions, profiles, assumed roles and `AWS_*` environment variables
+all behave exactly as they do with the AWS CLI.
+
+```bash
+AWS_PROFILE=prod uvx awsquery ec2 describe-instances
+uvx awsquery --profile prod --region eu-central-1 ec2 describe-instances
+```
+
+### Using awsquery in CI
+
+No install step is needed beyond uv itself:
+
+```yaml
+# GitHub Actions
+- uses: astral-sh/setup-uv@v6
+- run: uvx awsquery@1.1.0 -j cloudformation describe-stacks -- StackName StackStatus
+  env:
+    AWS_REGION: eu-central-1
+```
+
+Pin the version (`awsquery@1.1.0`) in CI so a new release can never change your output format
+underneath a pipeline.
+
+### Via pip
+
+If your team does not use uv, the classic routes still work:
+
+```bash
+pip install awsquery       # into the current environment
+pipx install awsquery      # isolated, like uv tool install
+```
+
+### Development installation
+
+```bash
+git clone https://github.com/flomotlik/awsquery.git
+cd awsquery
+uv sync --extra dev        # or: make uv-sync
+uv run pytest tests/ -v    # or: make uv-test
+```
+
+The pip equivalent is `pip install -e ".[dev]"` (`make install-dev`).
 
 ### Enable Shell Autocomplete
 
 awsquery supports tab completion for AWS services and actions through argcomplete.
 
+Completion requires a real `awsquery` executable on your `PATH`, because the shell calls that
+executable to compute the candidates. So it works with `uv tool install awsquery`, `pipx install`
+and `pip install` — but **not** with a `uvx` alias, since the alias is expanded by your shell after
+completion has already run.
+
+```bash
+uv tool install awsquery   # the setup below assumes this (or pip/pipx)
+```
+
 #### Setup
+
+The `register-python-argcomplete` helper comes from argcomplete. With uv you never have to install
+it: `uvx --from argcomplete register-python-argcomplete` runs it on demand.
 
 ##### Bash
 ```bash
 # Add to ~/.bashrc or ~/.bash_profile
+eval "$(uvx --from argcomplete register-python-argcomplete awsquery)"
+
+# If argcomplete is already installed in your environment (pip/pipx users):
 eval "$(register-python-argcomplete awsquery)"
 ```
 
@@ -65,13 +278,21 @@ eval "$(register-python-argcomplete awsquery)"
 ```bash
 # Add to ~/.zshrc
 autoload -U bashcompinit && bashcompinit
-eval "$(register-python-argcomplete awsquery)"
+eval "$(uvx --from argcomplete register-python-argcomplete awsquery)"
 ```
 
 ##### Fish
 ```bash
 # Add to ~/.config/fish/config.fish
-register-python-argcomplete --shell fish awsquery | source
+uvx --from argcomplete register-python-argcomplete --shell fish awsquery | source
+```
+
+To keep shell startup instant, write the completion script to a file once and source that instead of
+calling uvx on every new shell:
+
+```bash
+uvx --from argcomplete register-python-argcomplete awsquery > ~/.awsquery-complete.sh
+echo 'source ~/.awsquery-complete.sh' >> ~/.zshrc   # or ~/.bashrc
 ```
 
 After adding the appropriate line to your shell configuration, restart your shell or source the file:
@@ -133,7 +354,7 @@ awsquery -d ec2 describe-instances
 ## Command Structure
 
 ```
-awsquery [-j|--json] [-k|--keys] [-d|--debug] [-p PARAM] [-i HINT] [--region REGION] [--profile PROFILE] SERVICE ACTION [VALUE_FILTERS...] [-- TABLE_OUTPUT_FILTERS...]
+awsquery [-j|--json] [--format FMT] [--limit N] [-k|--keys] [-d|--debug] [-p PARAM] [-i HINT] [--region REGION] [--profile PROFILE] SERVICE ACTION [VALUE_FILTERS...] [-- TABLE_OUTPUT_FILTERS...]
 ```
 
 - **SERVICE**: AWS service name (ec2, s3, iam, etc.)
@@ -349,6 +570,31 @@ and exits non-zero; `awsquery` with no service at all is unchanged — it still 
 services on stdout and exits 0.
 
 ## Development
+
+### Environment setup with uv
+
+```bash
+# Create .venv and install the project plus dev dependencies from uv.lock
+uv sync --extra dev          # or: make uv-sync
+
+# Run anything inside that environment without activating it
+uv run awsquery ec2 describe-instances   # or: make uv-run ARGS="ec2 describe-instances"
+uv run pytest tests/ -v                  # or: make uv-test
+uv run black src tests
+uv run mypy src
+
+# Update the lockfile after changing dependencies in pyproject.toml
+uv lock                      # or: make uv-lock
+
+# Install your working tree as the global awsquery command
+uv tool install --editable . # or: make tool-install
+uv tool uninstall awsquery   # or: make tool-uninstall
+```
+
+`uv.lock` is committed, so `uv sync` gives every contributor byte-identical dependency versions.
+Regenerate it with `uv lock` whenever `pyproject.toml` dependencies change and commit the result.
+
+The `make` targets below use pip and the system Python; they work unchanged if you prefer that.
 
 ### Running Tests
 
@@ -628,7 +874,23 @@ awsquery s3 list-buckets backup -- Name Creation
 - Use more specific filters to reduce data volume
 - Consider using `--region` to target specific regions
 
+**`awsquery: command not found` after `uv tool install`**
+- Run `uv tool update-shell` and restart your shell; uv's bin directory (`~/.local/bin`) has to be on `PATH`
+- `uv tool list` shows what is installed
+
+**uvx keeps running an old version**
+- `uvx awsquery` reuses the cached version; use `uvx awsquery@latest` to re-check PyPI
+- `uv cache clean awsquery` drops the cached build entirely
+- For an installed tool use `uv tool upgrade awsquery`
+
+**Tab completion does not work**
+- Completion needs a real executable on `PATH`: use `uv tool install awsquery`, not a `uvx` alias
+- See [Enable Shell Autocomplete](#enable-shell-autocomplete)
+
 ## Requirements
+
+- Python 3.10 or newer - or just [uv](https://docs.astral.sh/uv/), which supplies its own Python
+- AWS credentials configured the same way the AWS CLI expects them
 
 The package dependencies are:
 

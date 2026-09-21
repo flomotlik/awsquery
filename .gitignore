@@ -216,3 +216,5 @@ __marimo__/
 sample-responses
 test_env
 awsinfo
+# Codebase graph output (local tooling)
+graphify-out/
