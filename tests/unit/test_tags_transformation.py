@@ -103,10 +103,7 @@ class TestTransformTagsStructure:
 
         assert result["InstanceId"] == "i-123"
         assert result["Tags"] == {"Name": "web-server", "Environment": "production"}
-        assert result["Tags_Original"] == [
-            {"Key": "Name", "Value": "web-server"},
-            {"Key": "Environment", "Value": "production"},
-        ]
+        assert "Tags_Original" not in result
 
     def test_transform_empty_tags_list(self):
         """Test transformation with empty tags list."""
@@ -161,12 +158,12 @@ class TestTransformTagsStructure:
         # Check first instance tags
         first_instance = result["Reservations"][0]["Instances"][0]
         assert first_instance["Tags"] == {"Name": "web-server-1", "Project": "webapp"}
-        assert "Tags_Original" in first_instance
+        assert "Tags_Original" not in first_instance
 
         # Check second instance tags
         second_instance = result["Reservations"][0]["Instances"][1]
         assert second_instance["Tags"] == {"Name": "web-server-2", "Environment": "staging"}
-        assert "Tags_Original" in second_instance
+        assert "Tags_Original" not in second_instance
 
     def test_transform_list_of_objects(self):
         """Test transformation works on lists of objects."""
@@ -216,7 +213,7 @@ class TestTransformTagsStructure:
 
         # Should only transform valid Key/Value pairs
         assert result["Tags"] == {"Name": "web-server", "Environment": "production"}
-        assert "Tags_Original" in result
+        assert "Tags_Original" not in result
 
     def test_transform_special_characters_in_tags(self):
         """Test transformation handles special characters in tag values."""
@@ -312,7 +309,7 @@ class TestTagsIntegrationWithFormatters:
         assert len(result) == 1
         instance = result[0]
         assert instance["Tags"] == {"Name": "web-server", "Environment": "production"}
-        assert "Tags_Original" in instance
+        assert "Tags_Original" not in instance
 
     def test_tags_column_selection_after_transformation(self):
         """Test that tag-based column selection works after transformation."""

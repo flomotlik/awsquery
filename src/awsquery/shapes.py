@@ -257,3 +257,22 @@ class ShapeCache:
         """
         _, simplified_fields, _ = self.get_response_fields(service, operation)
         return simplified_fields
+
+
+# One parsed service model per process: the JSON is multi-megabyte for large
+# services, and the query path would otherwise parse it once per call site.
+_shared_cache: Optional[ShapeCache] = None
+
+
+def get_shape_cache() -> ShapeCache:
+    """The process-wide ShapeCache. Build ShapeCache() directly for an isolated one."""
+    global _shared_cache  # pylint: disable=global-statement
+    if _shared_cache is None:
+        _shared_cache = ShapeCache()
+    return _shared_cache
+
+
+def reset_shape_cache() -> None:
+    """Drop the shared cache so nothing leaks between tests."""
+    global _shared_cache  # pylint: disable=global-statement
+    _shared_cache = None

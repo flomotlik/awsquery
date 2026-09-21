@@ -288,3 +288,31 @@ class TestHelpOutputEdgeCases:
         assert (
             found_indented_bash or found_indented_command
         ), "Autocomplete formatting not preserved"
+
+
+class TestHelpOutputHasNoSourceArtifacts:
+
+    def test_help_contains_no_mutation_pragma(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "awsquery.cli", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        assert result.returncode == 0
+        assert "pragma" not in result.stdout
+        assert "no mutate" not in result.stdout
+
+    def test_help_description_line_is_the_plain_summary(self):
+        result = subprocess.run(
+            [sys.executable, "-m", "awsquery.cli", "--help"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+
+        assert (
+            "Query AWS APIs with flexible filtering and automatic parameter resolution"
+            in result.stdout
+        )

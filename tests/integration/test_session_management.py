@@ -216,7 +216,7 @@ class TestSessionErrorScenarios:
             session = create_session(profile="empty-profile")
 
             # Should create session but fail when creating client
-            with pytest.raises(SystemExit, match="1"):
+            with pytest.raises(SystemExit, match="4"):
                 execute_aws_call("ec2", "describe-instances", session=session)
 
     def test_session_with_mixed_valid_invalid_params(self):
@@ -380,8 +380,10 @@ class TestCLISessionIntegration:
         import sys
 
         with patch.object(sys, "argv", test_args):
-            with pytest.raises(ProfileNotFound):
+            with pytest.raises(SystemExit) as exc_info:
                 main()
+
+        assert exc_info.value.code == 4
 
 
 class TestSessionMultiServiceIntegration:
@@ -492,10 +494,10 @@ class TestSessionWithKeysModeIntegration:
         import sys
 
         with patch.object(sys, "argv", test_args), patch(
-            "awsquery.cli.show_keys_from_result"
+            "awsquery.cli.keys_from_result"
         ) as mock_show_keys:
 
-            mock_show_keys.return_value = "  InstanceId\n  State"
+            mock_show_keys.return_value = (["InstanceId", "State"], None)
 
             try:
                 main()

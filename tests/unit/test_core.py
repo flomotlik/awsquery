@@ -1,5 +1,7 @@
 """Unit tests for AWS Query Tool core execution functions."""
 
+import contextlib
+import json
 import sys
 from unittest.mock import MagicMock, Mock, call, patch
 
@@ -17,6 +19,7 @@ from awsquery.core import (
     parameter_expects_list,
     parse_validation_error,
 )
+from awsquery.errors import CREDENTIALS_HINT, set_structured_errors
 
 
 class TestExecuteAwsCall:
@@ -110,19 +113,19 @@ class TestExecuteAwsCall:
 
         utils.boto3.client.return_value = mock_client
 
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="2"):
             execute_aws_call("ec2", "describe-nonexistent")
 
         captured = capsys.readouterr()
-        assert "Action describe-nonexistent" in captured.err
-        assert "not available for service ec2" in captured.err
+        assert "Unknown action 'describe-nonexistent' for service 'ec2'" in captured.err
+        assert "awsquery ec2 --list-actions" in captured.err
 
     def test_no_credentials_error_exits(self, capsys):
         from awsquery import utils
 
         utils.boto3.client.side_effect = NoCredentialsError()
 
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="4"):
             execute_aws_call("ec2", "describe-instances")
 
         captured = capsys.readouterr()
@@ -204,7 +207,7 @@ class TestExecuteAwsCall:
 
         utils.boto3.client.side_effect = mock_client_error
 
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="4"):
             execute_aws_call("ec2", "describe-instances")
 
         captured = capsys.readouterr()
@@ -364,11 +367,12 @@ class TestExecuteMultiLevelCall:
         ]
         mock_infer.return_value = ["list_nonexistent"]
 
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="2"):
             execute_multi_level_call("service", "describe-something", [], [], [])
 
         captured = capsys.readouterr()
         assert "Could not find working list operation" in captured.err
+        assert captured.out == ""
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.infer_list_operation")
@@ -391,11 +395,12 @@ class TestExecuteMultiLevelCall:
         mock_flatten.return_value = [{"Name": "cluster1"}]
         mock_filter.return_value = []  # No resources after filtering
 
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="2"):
             execute_multi_level_call("eks", "describe-cluster", ["nonexistent"], [], [])
 
         captured = capsys.readouterr()
         assert "No resources found matching resource filters" in captured.err
+        assert captured.out == ""
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.infer_list_operation")
@@ -427,11 +432,12 @@ class TestExecuteMultiLevelCall:
         ]  # Resources without the right field
         mock_extract.return_value = []  # No values extracted
 
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="2"):
             execute_multi_level_call("eks", "describe-cluster", [], [], [])
 
         captured = capsys.readouterr()
         assert "Could not extract parameter" in captured.err
+        assert captured.out == ""
 
     @patch("awsquery.core.execute_aws_call")
     @patch("awsquery.core.infer_list_operation")
@@ -544,6 +550,7 @@ class TestExecuteMultiLevelCall:
 
         captured = capsys.readouterr()
         assert "Still getting validation error after parameter resolution" in captured.err
+        assert captured.out == ""
 
 
 class TestParameterResolution:
@@ -1218,3 +1225,104 @@ class TestFilterValidParameters:
             result = filter_valid_parameters("ssm", "describe-parameters", parameters, None)
 
             assert result == {"MaxResults": 10}
+
+
+VALIDATION_ERROR = {
+    "parameter_name": "clusterName",
+    "is_required": True,
+    "error_type": "missing_parameter",
+}
+
+
+def run_resolved_call_that_fails_with(exception):
+    """Drive a multi-level call to its final API call and make that call raise."""
+    patches = {
+        "awsquery.core.execute_aws_call": Mock(
+            side_effect=[
+                {"validation_error": VALIDATION_ERROR, "original_error": Exception()},
+                [{"Name": "cluster1"}],
+                exception,
+            ]
+        ),
+        "awsquery.core.infer_list_operation": Mock(return_value=["list_clusters"]),
+        "awsquery.formatters.flatten_response": Mock(return_value=[{"Name": "cluster1"}]),
+        "awsquery.filters.filter_resources": Mock(return_value=[{"Name": "cluster1"}]),
+        "awsquery.filters.extract_parameter_values": Mock(return_value=["cluster1"]),
+        "awsquery.core.get_correct_parameter_name": Mock(return_value="ClusterName"),
+    }
+    with contextlib.ExitStack() as stack:
+        for target, replacement in patches.items():
+            stack.enter_context(patch(target, replacement))
+        with pytest.raises(SystemExit) as exit_info:
+            execute_multi_level_call("eks", "describe-cluster", [], [], [])
+    return exit_info.value
+
+
+class TestFinalCallFailureReporting:
+
+    def test_unexpected_error_reports_on_stderr_and_leaves_stdout_empty(self, capsys):
+        exit_info = run_resolved_call_that_fails_with(RuntimeError("socket exploded"))
+
+        captured = capsys.readouterr()
+        assert exit_info.code == 1
+        assert "Final call to eks.describe-cluster failed" in captured.err
+        assert "socket exploded" in captured.err
+        assert captured.out == ""
+
+    @pytest.mark.parametrize(
+        "exception,expected_code",
+        [
+            (RuntimeError("socket exploded"), 1),
+            (ValueError("bad value"), 1),
+            (
+                ClientError(
+                    {"Error": {"Code": "Throttling", "Message": "slow down"}}, "DescribeCluster"
+                ),
+                3,
+            ),
+            (
+                ClientError(
+                    {"Error": {"Code": "AccessDenied", "Message": "nope"}}, "DescribeCluster"
+                ),
+                4,
+            ),
+            (NoCredentialsError(), 4),
+        ],
+    )
+    def test_exit_code_matches_the_exception_classification(self, exception, expected_code):
+        assert run_resolved_call_that_fails_with(exception).code == expected_code
+
+    @pytest.mark.parametrize(
+        "exception",
+        [
+            RuntimeError("socket exploded"),
+            ClientError({"Error": {"Code": "Throttling", "Message": "slow"}}, "DescribeCluster"),
+            NoCredentialsError(),
+        ],
+    )
+    def test_every_failure_class_still_emits_a_message(self, exception, capsys):
+        run_resolved_call_that_fails_with(exception)
+
+        captured = capsys.readouterr()
+        assert "Final call to eks.describe-cluster failed" in captured.err
+        assert captured.out == ""
+
+    def test_credentials_failure_carries_the_credentials_hint(self, capsys):
+        run_resolved_call_that_fails_with(NoCredentialsError())
+
+        assert CREDENTIALS_HINT in capsys.readouterr().err
+
+    def test_structured_mode_reports_the_failure_as_one_json_object(self, capsys):
+        set_structured_errors(True)
+        try:
+            exit_info = run_resolved_call_that_fails_with(RuntimeError("socket exploded"))
+        finally:
+            set_structured_errors(False)
+
+        captured = capsys.readouterr()
+        error = json.loads(captured.err.splitlines()[-1])["error"]
+        assert exit_info.code == 1
+        assert error["code"] == 1
+        assert error["type"] == "RuntimeError"
+        assert "socket exploded" in error["message"]
+        assert captured.out == ""

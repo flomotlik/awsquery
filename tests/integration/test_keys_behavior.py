@@ -57,11 +57,18 @@ class TestKeysModeMultiLevelIntegration:
 
         with patch.object(sys, "argv", test_args), patch(
             "awsquery.cli.execute_multi_level_call_with_tracking"
-        ) as mock_multi_level, patch("awsquery.cli.show_keys_from_result") as mock_show_keys:
+        ) as mock_multi_level, patch("awsquery.cli.keys_from_result") as mock_show_keys:
 
             mock_show_keys.return_value = (
-                "  InstanceId\n  InstanceType\n  State.Name\n"
-                "  PublicIpAddress\n  Tags.Name\n  Tags.Environment"
+                [
+                    "InstanceId",
+                    "InstanceType",
+                    "State.Name",
+                    "PublicIpAddress",
+                    "Tags.Name",
+                    "Tags.Environment",
+                ],
+                None,
             )
 
             try:
@@ -115,11 +122,12 @@ class TestKeysModeMultiLevelIntegration:
         test_args = ["awsquery", "--keys", "eks", "describe-cluster"]
 
         with patch.object(sys, "argv", test_args), patch(
-            "awsquery.cli.show_keys_from_result"
+            "awsquery.cli.keys_from_result"
         ) as mock_show_keys:
 
             mock_show_keys.return_value = (
-                "  name\n  status\n  version\n  endpoint\n  tags.Environment\n  tags.Team"
+                ["name", "status", "version", "endpoint", "tags.Environment", "tags.Team"],
+                None,
             )
 
             try:
@@ -470,14 +478,24 @@ class TestKeysModeRealWorldScenarios:
         test_args = ["awsquery", "--keys", "--region", "us-west-2", "ec2", "describe-instances"]
 
         with patch.object(sys, "argv", test_args), patch(
-            "awsquery.cli.show_keys_from_result"
+            "awsquery.cli.keys_from_result"
         ) as mock_show_keys:
 
             mock_show_keys.return_value = (
-                "  InstanceId\n  InstanceType\n  State.Name\n  PublicIpAddress\n"
-                "  PrivateIpAddress\n  Tags.Name\n  Tags.Environment\n  Tags.Team\n"
-                "  NetworkInterfaces.NetworkInterfaceId\n  NetworkInterfaces.SubnetId\n"
-                "  NetworkInterfaces.VpcId"
+                [
+                    "InstanceId",
+                    "InstanceType",
+                    "State.Name",
+                    "PublicIpAddress",
+                    "PrivateIpAddress",
+                    "Tags.Name",
+                    "Tags.Environment",
+                    "Tags.Team",
+                    "NetworkInterfaces.NetworkInterfaceId",
+                    "NetworkInterfaces.SubnetId",
+                    "NetworkInterfaces.VpcId",
+                ],
+                None,
             )
 
             try:
@@ -576,10 +594,10 @@ class TestKeysModeDebugIntegration:
         test_args = ["awsquery", "--keys", "--debug", "s3", "list-buckets"]
 
         with patch.object(sys, "argv", test_args), patch(
-            "awsquery.cli.show_keys_from_result"
+            "awsquery.cli.keys_from_result"
         ) as mock_show_keys, patch("awsquery.utils.debug_print") as mock_debug:
 
-            mock_show_keys.return_value = "  Name\n  CreationDate"
+            mock_show_keys.return_value = (["Name", "CreationDate"], None)
 
             # Enable debug mode during test
             original_debug = utils.get_debug_enabled()

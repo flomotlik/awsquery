@@ -153,20 +153,23 @@ class TestAllFeaturesIntegration:
         ]
 
         with patch.object(sys, "argv", test_args), patch(
-            "awsquery.cli.show_keys_from_result"
+            "awsquery.cli.keys_from_result"
         ) as mock_show_keys:
 
             # Mock keys that should include transformed tag keys
             mock_show_keys.return_value = (
-                "  StackName\n"
-                "  StackStatus\n"
-                "  CreationTime\n"
-                "  Tags.Environment\n"  # Transformed from Key/Value format
-                "  Tags.Owner\n"  # Transformed from Key/Value format
-                "  Tags.CostCenter\n"  # Transformed from Key/Value format
-                "  Tags.Project\n"  # Transformed from Key/Value format
-                "  Parameters.ParameterKey\n"
-                "  Parameters.ParameterValue"
+                [
+                    "StackName",
+                    "StackStatus",
+                    "CreationTime",
+                    "Tags.Environment",
+                    "Tags.Owner",
+                    "Tags.CostCenter",
+                    "Tags.Project",
+                    "Parameters.ParameterKey",
+                    "Parameters.ParameterValue",
+                ],
+                None,
             )
 
             try:
@@ -332,27 +335,30 @@ class TestAllFeaturesIntegration:
         ]
 
         with patch.object(sys, "argv", test_args), patch(
-            "awsquery.cli.show_keys_from_result"
+            "awsquery.cli.keys_from_result"
         ) as mock_show_keys:
 
             # Keys should show RDS-specific fields with transformed TagList
             mock_show_keys.return_value = (
-                "  DBInstanceIdentifier\n"
-                "  DBInstanceClass\n"
-                "  Engine\n"
-                "  EngineVersion\n"
-                "  DBInstanceStatus\n"
-                "  Endpoint.Address\n"
-                "  Endpoint.Port\n"
-                "  AllocatedStorage\n"
-                "  StorageType\n"
-                "  VpcSecurityGroups.VpcSecurityGroupId\n"
-                "  VpcSecurityGroups.Status\n"
-                "  DBSubnetGroup.DBSubnetGroupName\n"
-                "  DBSubnetGroup.VpcId\n"
-                "  TagList.Environment\n"  # Transformed from Key/Value
-                "  TagList.Application\n"  # Transformed from Key/Value
-                "  TagList.Backup"  # Transformed from Key/Value
+                [
+                    "DBInstanceIdentifier",
+                    "DBInstanceClass",
+                    "Engine",
+                    "EngineVersion",
+                    "DBInstanceStatus",
+                    "Endpoint.Address",
+                    "Endpoint.Port",
+                    "AllocatedStorage",
+                    "StorageType",
+                    "VpcSecurityGroups.VpcSecurityGroupId",
+                    "VpcSecurityGroups.Status",
+                    "DBSubnetGroup.DBSubnetGroupName",
+                    "DBSubnetGroup.VpcId",
+                    "TagList.Environment",
+                    "TagList.Application",
+                    "TagList.Backup",
+                ],
+                None,
             )
 
             try:
@@ -488,9 +494,10 @@ class TestErrorHandlingAcrossFeatures:
         ]
 
         with patch.object(sys, "argv", test_args):
-            # Should raise the ProfileNotFound error
-            with pytest.raises(ProfileNotFound):
+            with pytest.raises(SystemExit) as exc_info:
                 main()
+
+        assert exc_info.value.code == 4
 
     def test_malformed_tags_with_column_selection(self):
         """Test that malformed tags don't break column selection."""

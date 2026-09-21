@@ -6,6 +6,7 @@ import argparse
 import os
 import re
 import sys
+import traceback
 from typing import Any
 
 import argcomplete
@@ -20,14 +21,32 @@ from .core import (
     execute_multi_level_call,
     execute_multi_level_call_with_tracking,
     execute_with_tracking,
-    show_keys_from_result,
+    keys_from_result,
+)
+from .errors import (
+    ExitCode,
+    classify_exception,
+    emit_notice,
+    fail,
+    looks_like_auth_failure,
+    set_structured_errors,
 )
 from .filters import filter_resources, parse_multi_level_filters_for_mode
 from .formatters import (
-    extract_and_sort_keys,
     flatten_response,
+    format_csv_output,
     format_json_output,
+    format_keys_output,
+    format_ndjson_output,
     format_table_output,
+    format_tsv_output,
+)
+from .introspection import (
+    list_actions,
+    list_services,
+    print_docs,
+    print_schema,
+    validate_service_action,
 )
 from .security import (
     get_service_valid_operations,
@@ -38,6 +57,7 @@ from .utils import (
     create_session,
     debug_print,
     get_aws_services,
+    get_debug_enabled,
     get_service_operations,
     sanitize_input,
 )
@@ -234,8 +254,33 @@ def get_parameter_type(service, action, parameter_name, session=None):
 
 
 # CLI flag constants
-SIMPLE_FLAGS = ["-d", "--debug", "-j", "--json", "-k", "--keys", "--allow-unsafe"]
-VALUE_FLAGS = ["--region", "--profile", "-p", "--parameter", "-i", "--input"]
+SIMPLE_FLAGS = [
+    "-d",
+    "--debug",
+    "-j",
+    "--json",
+    "-k",
+    "--keys",
+    "--allow-unsafe",
+    "--list-services",
+    "--list-actions",
+    "--schema",
+    "--docs",
+]
+VALUE_FLAGS = [
+    "--region",
+    "--profile",
+    "-p",
+    "--parameter",
+    "-i",
+    "--input",
+    "--format",
+    "--limit",
+]
+
+OUTPUT_FORMATS = ["table", "json", "csv", "tsv", "ndjson"]
+MACHINE_FORMATS = {"json", "ndjson", "csv", "tsv"}
+STRUCTURED_ERROR_FORMATS = {"json", "ndjson"}
 
 
 def service_completer(prefix, parsed_args, **kwargs):
@@ -405,9 +450,9 @@ def determine_column_filters(column_filters, service, action, json_output=False)
                 print(f"Using default columns: {cols}", file=sys.stderr)
         else:
             # Try auto-selection using shape introspection
-            from .shapes import ShapeCache
+            from .shapes import get_shape_cache
 
-            shape_cache = ShapeCache()
+            shape_cache = get_shape_cache()
             auto_fields = shape_cache.get_fields_for_auto_select(service, action)
             if auto_fields:
                 auto_columns = smart_select_columns(auto_fields, operation=action)
@@ -661,8 +706,12 @@ def _print_service_actions(service):
     """List a service's read-only actions on stderr when no default is configured."""
     operations = get_service_operations(service)
     if not operations:
-        print(f"ERROR: Unknown service '{service}'", file=sys.stderr)
-        return
+        fail(
+            ExitCode.USAGE,
+            "UnknownService",
+            f"Unknown service '{service}'",
+            hint="Run: awsquery --list-services",
+        )
     valid = get_service_valid_operations(service, operations)
     actions = sorted(to_kebab_case(op) for op in operations if op in valid)
     print(
@@ -709,14 +758,97 @@ def action_completer(prefix, parsed_args, **kwargs):
         return []
 
 
+def _handle_introspection_flags(args, output_format):
+    """Answer the credential-free introspection flags and exit."""
+    # Name lists are one-per-line under the line-oriented formats; only json wants an array
+    as_json = output_format == "json"
+    # A schema is a single object, so it stays JSON under both structured formats
+    schema_as_json = output_format in STRUCTURED_ERROR_FORMATS
+
+    if args.docs:
+        print_docs()
+        sys.exit(ExitCode.SUCCESS)
+
+    if args.list_services:
+        list_services(as_json=as_json)
+        sys.exit(ExitCode.SUCCESS)
+
+    if args.list_actions:
+        if not args.service:
+            fail(
+                ExitCode.USAGE,
+                "MissingService",
+                "--list-actions needs a service name",
+                hint="Run: awsquery --list-services",
+            )
+        list_actions(sanitize_input(args.service), as_json=as_json)
+        sys.exit(ExitCode.SUCCESS)
+
+    if args.schema:
+        if not args.service or not args.action:
+            fail(
+                ExitCode.USAGE,
+                "MissingAction",
+                "--schema needs a service and an action",
+                hint=(
+                    f"Run: awsquery {sanitize_input(args.service)} --list-actions"
+                    if args.service
+                    else "Run: awsquery --list-services"
+                ),
+            )
+        print_schema(
+            sanitize_input(args.service), sanitize_input(args.action), as_json=schema_as_json
+        )
+        sys.exit(ExitCode.SUCCESS)
+
+
+def _is_real_action(action):
+    """Whether an action survived parsing as an actual operation name."""
+    return bool(action) and str(action).strip() not in ("", "None")
+
+
+def _apply_row_limit(resources, limit):
+    """Truncate results to limit rows, reporting the truncation on stderr."""
+    if limit is None or len(resources) <= limit:
+        return resources
+
+    print(f"Showing {limit} of {len(resources)} rows (--limit {limit})", file=sys.stderr)
+    return resources[:limit]
+
+
+def _render_output(resources, column_filters, output_format):
+    """Render results in the selected output format."""
+    if output_format == "json":
+        return format_json_output(resources, column_filters)
+    if output_format == "csv":
+        return format_csv_output(resources, column_filters)
+    if output_format == "tsv":
+        return format_tsv_output(resources, column_filters)
+    if output_format == "ndjson":
+        return format_ndjson_output(resources, column_filters)
+    return format_table_output(resources, column_filters)
+
+
+def _fail_from_call_result(call_result, message):
+    """Exit with the AWS/auth exit code matching a failed call result."""
+    details = " ".join(call_result.error_messages or [])
+    if looks_like_auth_failure(details) or looks_like_auth_failure(message):
+        fail(ExitCode.AUTH_ERROR, "CredentialsError", message)
+    fail(ExitCode.AWS_ERROR, "AwsApiError", message)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=(
             "Query AWS APIs with flexible filtering and automatic parameter resolution"
         ),  # pragma: no mutate
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""  # pragma: no mutate
+        epilog="""
 Examples:
+  awsquery --docs  (full reference for AI agents and LLM tool calls)
+  awsquery --list-services  (every supported service, no AWS call)
+  awsquery ec2 --list-actions  (read-only actions of a service, no AWS call)
+  awsquery --schema ec2 describe-instances  (parameters and output fields, no AWS call)
   awsquery ec2 describe-instances prod web -- Tags.Name State InstanceId
   awsquery s3 list-buckets backup
   awsquery cloudformation describe-stack-events prod -- Created StackName
@@ -742,7 +874,7 @@ Autocomplete Setup:
 
   Add the appropriate command to your shell config (~/.bashrc, ~/.zshrc, etc.)
   For more details: https://github.com/flomotlik/awsquery#enable-shell-autocomplete
-        """,
+        """,  # pragma: no mutate
     )
 
     parser.add_argument(
@@ -780,6 +912,38 @@ Autocomplete Setup:
         "--allow-unsafe",
         action="store_true",
         help="Allow potentially unsafe (non-readonly) operations without prompting",
+    )  # pragma: no mutate
+    parser.add_argument(
+        "--format",
+        choices=OUTPUT_FORMATS,
+        default=None,
+        help="Output format (default: table); -j is equivalent to --format json",
+    )  # pragma: no mutate
+    parser.add_argument(
+        "--limit",
+        type=int,
+        metavar="N",
+        help="Truncate output to the first N rows",
+    )  # pragma: no mutate
+    parser.add_argument(
+        "--list-services",
+        action="store_true",
+        help="List every supported AWS service (no AWS call)",
+    )  # pragma: no mutate
+    parser.add_argument(
+        "--list-actions",
+        action="store_true",
+        help="List a service's read-only actions (no AWS call)",
+    )  # pragma: no mutate
+    parser.add_argument(
+        "--schema",
+        action="store_true",
+        help="Show an operation's parameters and output fields (no AWS call)",
+    )  # pragma: no mutate
+    parser.add_argument(
+        "--docs",
+        action="store_true",
+        help="Print the full reference for AI agents and LLM tool calls",
     )  # pragma: no mutate
 
     service_arg = parser.add_argument(
@@ -829,6 +993,18 @@ Autocomplete Setup:
             flags.append("-k")
         if getattr(args, "allow_unsafe", False):
             flags.append("--allow-unsafe")
+        if getattr(args, "list_services", False):
+            flags.append("--list-services")
+        if getattr(args, "list_actions", False):
+            flags.append("--list-actions")
+        if getattr(args, "schema", False):
+            flags.append("--schema")
+        if getattr(args, "docs", False):
+            flags.append("--docs")
+        if getattr(args, "format", None):
+            flags.extend(["--format", args.format])
+        if getattr(args, "limit", None) is not None:
+            flags.extend(["--limit", str(args.limit)])
         if getattr(args, "region", None):
             flags.extend(["--region", args.region])
         if getattr(args, "profile", None):
@@ -871,222 +1047,277 @@ Autocomplete Setup:
     # Set debug mode globally (authoritative value, supersedes the early guess above)
     utils.set_debug_enabled(args.debug)
 
-    # Build the argv for filter parsing (service, action, and remaining arguments)
-    # But exclude any flags that were already processed
-    filter_argv = _build_filter_argv(args, remaining)
+    if args.json and args.format not in (None, "json"):
+        fail(
+            ExitCode.USAGE,
+            "ConflictingFormat",
+            f"-j/--json conflicts with --format {args.format}",
+            hint="Pass only one of -j or --format",
+        )
 
-    _, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
-        filter_argv, mode="single"
-    )
+    output_format = "json" if args.json else (args.format or "table")
+    set_structured_errors(output_format in STRUCTURED_ERROR_FORMATS)
 
-    if not args.service:
-        services = get_aws_services()
-        print("Available services:", ", ".join(services))
-        sys.exit(0)
+    try:
+        # Credential-free introspection: answer and exit before touching AWS.
+        # Its sys.exit raises SystemExit (a BaseException), so it passes through
+        # the except Exception boundary below untouched.
+        _handle_introspection_flags(args, output_format)
 
-    if not args.action:
-        _print_service_actions(sanitize_input(args.service))
-        sys.exit(1)
+        if args.limit is not None and args.limit < 0:
+            fail(ExitCode.USAGE, "InvalidLimit", f"--limit must not be negative (got {args.limit})")
 
-    service = sanitize_input(args.service)
-    action = sanitize_input(args.action)
-    resource_filters = [sanitize_input(f) for f in resource_filters] if resource_filters else []
-    value_filters = [sanitize_input(f) for f in value_filters] if value_filters else []
-    column_filters = [sanitize_input(f) for f in column_filters] if column_filters else []
+        # Build the argv for filter parsing (service, action, and remaining arguments)
+        # But exclude any flags that were already processed
+        filter_argv = _build_filter_argv(args, remaining)
 
-    # Parse -p parameters if provided
-    parsed_parameters = {}
-    if args.parameter:
-        for param_str in args.parameter:
-            try:
-                param_dict = parse_parameter_string(param_str)
-                parsed_parameters.update(param_dict)
-            except ValueError as e:
-                print(f"ERROR: Invalid parameter format '{param_str}': {e}", file=sys.stderr)
-                sys.exit(1)
+        _, resource_filters, value_filters, column_filters = parse_multi_level_filters_for_mode(
+            filter_argv, mode="single"
+        )
 
-    debug_print(
-        f"DEBUG: Parsed parameters (before type correction): {parsed_parameters}"
-    )  # pragma: no mutate
-
-    # Validate and correct parameter types
-    if parsed_parameters:
-        corrected_parameters = {}
-        for key, value in parsed_parameters.items():
-            expected_type = get_parameter_type(service, action, key, session=None)
-
-            if expected_type == "list" and not isinstance(value, list):
-                # Auto-wrap single values in list
-                debug_print(
-                    f"Auto-wrapping parameter '{key}' in list "
-                    f"(expected type: list, got: {type(value).__name__})"
-                )
-                corrected_parameters[key] = [value]
+        if not args.service:
+            # stdout must stay parseable under the machine formats
+            if output_format in MACHINE_FORMATS:
+                list_services(as_json=output_format == "json")
             else:
-                corrected_parameters[key] = value
+                print("Available services:", ", ".join(get_aws_services()))
+            sys.exit(ExitCode.SUCCESS)
 
-        parsed_parameters = corrected_parameters
+        if not args.action:
+            _print_service_actions(sanitize_input(args.service))
+            fail(
+                ExitCode.USAGE,
+                "NoDefaultAction",
+                f"No default action configured for '{sanitize_input(args.service)}'",
+                hint=f"Run: awsquery {sanitize_input(args.service)} --list-actions",
+            )
 
-    debug_print(
-        f"DEBUG: Parsed parameters (after type correction): {parsed_parameters}"
-    )  # pragma: no mutate
+        service = sanitize_input(args.service)
+        action = sanitize_input(args.action)
 
-    def _execute_multi_level_workflow(
-        service,
-        action,
-        filter_argv,
-        session,
-        hint_service,
-        hint_function,
-        hint_field,
-        hint_limit,
-        parsed_parameters,
-    ):
-        """Helper to execute multi-level call with filter parsing."""
-        _, multi_resource_filters, multi_value_filters, multi_column_filters = (
-            parse_multi_level_filters_for_mode(filter_argv, mode="multi")
-        )
-        final_multi_column_filters = determine_column_filters(
-            multi_column_filters, service, action, json_output=args.json
-        )
-        return execute_multi_level_call(
+        # Offline: an unknown service or action is a usage error, not a failed AWS call
+        validate_service_action(service, action if _is_real_action(action) else None)
+
+        resource_filters = [sanitize_input(f) for f in resource_filters] if resource_filters else []
+        value_filters = [sanitize_input(f) for f in value_filters] if value_filters else []
+        column_filters = [sanitize_input(f) for f in column_filters] if column_filters else []
+
+        # Parse -p parameters if provided
+        parsed_parameters = {}
+        if args.parameter:
+            for param_str in args.parameter:
+                try:
+                    param_dict = parse_parameter_string(param_str)
+                    parsed_parameters.update(param_dict)
+                except ValueError as e:
+                    fail(
+                        ExitCode.USAGE,
+                        "InvalidParameter",
+                        f"Invalid parameter format '{param_str}': {e}",
+                        hint=f"Run: awsquery --schema {service} {action}",
+                    )
+
+        debug_print(
+            f"DEBUG: Parsed parameters (before type correction): {parsed_parameters}"
+        )  # pragma: no mutate
+
+        # Validate and correct parameter types
+        if parsed_parameters:
+            corrected_parameters = {}
+            for key, value in parsed_parameters.items():
+                expected_type = get_parameter_type(service, action, key, session=None)
+
+                if expected_type == "list" and not isinstance(value, list):
+                    # Auto-wrap single values in list
+                    debug_print(
+                        f"Auto-wrapping parameter '{key}' in list "
+                        f"(expected type: list, got: {type(value).__name__})"
+                    )
+                    corrected_parameters[key] = [value]
+                else:
+                    corrected_parameters[key] = value
+
+            parsed_parameters = corrected_parameters
+
+        debug_print(
+            f"DEBUG: Parsed parameters (after type correction): {parsed_parameters}"
+        )  # pragma: no mutate
+
+        def _execute_multi_level_workflow(
             service,
             action,
-            multi_resource_filters,
-            multi_value_filters,
-            final_multi_column_filters,
+            filter_argv,
             session,
+            hint_service,
             hint_function,
             hint_field,
             hint_limit,
-            user_parameters=parsed_parameters,
-            hint_service=hint_service,
+            parsed_parameters,
+        ):
+            """Helper to execute multi-level call with filter parsing."""
+            _, multi_resource_filters, multi_value_filters, multi_column_filters = (
+                parse_multi_level_filters_for_mode(filter_argv, mode="multi")
+            )
+            final_multi_column_filters = determine_column_filters(
+                multi_column_filters, service, action, json_output=output_format == "json"
+            )
+            return execute_multi_level_call(
+                service,
+                action,
+                multi_resource_filters,
+                multi_value_filters,
+                final_multi_column_filters,
+                session,
+                hint_function,
+                hint_field,
+                hint_limit,
+                user_parameters=parsed_parameters,
+                hint_service=hint_service,
+            )
+
+        # Process -i hint if provided
+        hint_service = None
+        hint_function = None
+        hint_field = None
+        hint_limit = None
+        hint_alternatives = []
+        if args.input:
+            hint_service, hint_function, hint_field, hint_limit, hint_alternatives = (
+                find_hint_function(args.input, service, session=None)
+            )
+            if hint_function:
+                # Convert hint function to CLI format for display
+                hint_function_cli = to_kebab_case(hint_function)
+                hint_parts = []
+                if hint_service:
+                    hint_parts.append(f"service '{hint_service}'")
+                hint_parts.append(f"function '{hint_function_cli}'")
+                if hint_field:
+                    hint_parts.append(f"field '{hint_field}'")
+                if hint_limit is not None:
+                    hint_parts.append(f"limit {hint_limit}")
+
+                print(
+                    f"Using hint {' with '.join(hint_parts)} for multi-step calls",
+                    file=sys.stderr,
+                )
+                if hint_alternatives:
+                    # Convert alternatives to CLI format for display
+                    cli_alternatives = [to_kebab_case(alt) for alt in hint_alternatives]
+                    print(f"Alternative options: {', '.join(cli_alternatives)}", file=sys.stderr)
+                debug_print(
+                    f"DEBUG: Hint '{args.input}' matched service: {hint_service}, "
+                    f"function: {hint_function}, field: {hint_field}, limit: {hint_limit}"
+                )  # pragma: no mutate
+                if hint_alternatives:
+                    cli_alternatives_debug = [to_kebab_case(alt) for alt in hint_alternatives]
+                    debug_print(
+                        f"DEBUG: Alternative matches: {', '.join(cli_alternatives_debug)}"
+                    )  # pragma: no mutate
+            elif hint_field or hint_limit is not None:
+                # No function hint but we have field or limit
+                hint_parts = []
+                if hint_field:
+                    hint_parts.append(f"field '{hint_field}'")
+                if hint_limit is not None:
+                    hint_parts.append(f"limit {hint_limit}")
+                print(
+                    f"Using hint {' with '.join(hint_parts)} for multi-step calls "
+                    f"(function will be inferred)",
+                    file=sys.stderr,
+                )
+                debug_print(
+                    f"DEBUG: Hint '{args.input}' - field: {hint_field}, limit: {hint_limit}, "
+                    f"function will be inferred"
+                )  # pragma: no mutate
+            else:
+                print(
+                    f"Warning: Hint '{args.input}' did not match any available functions",
+                    file=sys.stderr,
+                )
+                debug_print(f"DEBUG: Hint '{args.input}' found no matches")  # pragma: no mutate
+
+        # Validate operation safety (only if we have a non-empty action)
+        if _is_real_action(action) and not validate_readonly(
+            service, action, allow_unsafe=args.allow_unsafe
+        ):
+            fail(
+                ExitCode.USAGE,
+                "UnsafeOperationRefused",
+                f"Operation {service}:{action} was not allowed",
+                hint="Pass --allow-unsafe to override",
+            )
+
+        debug_print(
+            f"DEBUG: Operation {service}:{action} validated successfully"
+        )  # pragma: no mutate
+
+        # Create session with region/profile if specified
+        session = create_session(region=args.region, profile=args.profile)
+        debug_print(
+            f"DEBUG: Created session with region={args.region}, profile={args.profile}"
+        )  # pragma: no mutate
+
+        # Determine final column filters (user-specified or defaults)
+        final_column_filters = determine_column_filters(
+            column_filters, service, action, json_output=output_format == "json"
         )
 
-    # Process -i hint if provided
-    hint_service = None
-    hint_function = None
-    hint_field = None
-    hint_limit = None
-    hint_alternatives = []
-    if args.input:
-        hint_service, hint_function, hint_field, hint_limit, hint_alternatives = find_hint_function(
-            args.input, service, session=None
-        )
-        if hint_function:
-            # Convert hint function to CLI format for display
-            hint_function_cli = to_kebab_case(hint_function)
-            hint_parts = []
-            if hint_service:
-                hint_parts.append(f"service '{hint_service}'")
-            hint_parts.append(f"function '{hint_function_cli}'")
-            if hint_field:
-                hint_parts.append(f"field '{hint_field}'")
-            if hint_limit is not None:
-                hint_parts.append(f"limit {hint_limit}")
+        if args.keys:
+            print(f"Showing all available keys for {service}.{action}:", file=sys.stderr)
+            if args.limit is not None:
+                print("Note: --limit does not apply to --keys output", file=sys.stderr)
 
-            print(
-                f"Using hint {' with '.join(hint_parts)} for multi-step calls",
-                file=sys.stderr,
-            )
-            if hint_alternatives:
-                # Convert alternatives to CLI format for display
-                cli_alternatives = [to_kebab_case(alt) for alt in hint_alternatives]
-                print(f"Alternative options: {', '.join(cli_alternatives)}", file=sys.stderr)
-            debug_print(
-                f"DEBUG: Hint '{args.input}' matched service: {hint_service}, "
-                f"function: {hint_function}, field: {hint_field}, limit: {hint_limit}"
-            )  # pragma: no mutate
-            if hint_alternatives:
-                cli_alternatives_debug = [to_kebab_case(alt) for alt in hint_alternatives]
-                debug_print(
-                    f"DEBUG: Alternative matches: {', '.join(cli_alternatives_debug)}"
-                )  # pragma: no mutate
-        elif hint_field or hint_limit is not None:
-            # No function hint but we have field or limit
-            hint_parts = []
-            if hint_field:
-                hint_parts.append(f"field '{hint_field}'")
-            if hint_limit is not None:
-                hint_parts.append(f"limit {hint_limit}")
-            print(
-                f"Using hint {' with '.join(hint_parts)} for multi-step calls "
-                f"(function will be inferred)",
-                file=sys.stderr,
-            )
-            debug_print(
-                f"DEBUG: Hint '{args.input}' - field: {hint_field}, limit: {hint_limit}, "
-                f"function will be inferred"
-            )  # pragma: no mutate
-        else:
-            print(
-                f"Warning: Hint '{args.input}' did not match any available functions",
-                file=sys.stderr,
-            )
-            debug_print(f"DEBUG: Hint '{args.input}' found no matches")  # pragma: no mutate
-
-    # Validate operation safety (only if we have a non-empty action)
-    if (
-        action is not None
-        and action
-        and str(action).strip() != "None"
-        and not validate_readonly(service, action, allow_unsafe=args.allow_unsafe)
-    ):
-        print(f"ERROR: Operation {service}:{action} was not allowed", file=sys.stderr)
-        sys.exit(1)
-
-    debug_print(f"DEBUG: Operation {service}:{action} validated successfully")  # pragma: no mutate
-
-    # Create session with region/profile if specified
-    session = create_session(region=args.region, profile=args.profile)
-    debug_print(
-        f"DEBUG: Created session with region={args.region}, profile={args.profile}"
-    )  # pragma: no mutate
-
-    # Determine final column filters (user-specified or defaults)
-    final_column_filters = determine_column_filters(
-        column_filters, service, action, json_output=args.json
-    )
-
-    if args.keys:
-        print(f"Showing all available keys for {service}.{action}:", file=sys.stderr)
-
-        try:
-            # Use tracking to get keys from the last successful request
-            call_result = execute_with_tracking(
-                service, action, parameters=parsed_parameters, session=session
-            )
-
-            # If the initial call failed, try multi-level resolution
-            if not call_result.final_success:
-                debug_print(
-                    "Keys mode: Initial call failed, trying multi-level resolution"
-                )  # pragma: no mutate
-                _, multi_resource_filters, multi_value_filters, multi_column_filters = (
-                    parse_multi_level_filters_for_mode(filter_argv, mode="multi")
-                )
-                call_result, _ = execute_multi_level_call_with_tracking(
-                    service,
-                    action,
-                    multi_resource_filters,
-                    multi_value_filters,
-                    multi_column_filters,
-                    session=session,
-                    hint_service=hint_service,
-                    hint_function=hint_function,
-                    hint_field=hint_field,
-                    limit=hint_limit,
-                    user_parameters=parsed_parameters,
+            try:
+                # Use tracking to get keys from the last successful request
+                call_result = execute_with_tracking(
+                    service, action, parameters=parsed_parameters, session=session
                 )
 
-            result = show_keys_from_result(call_result)
-            print(result)
-            return
-        except Exception as e:
-            print(f"Could not retrieve keys: {e}", file=sys.stderr)
-            sys.exit(1)
+                # If the initial call failed, try multi-level resolution
+                if not call_result.final_success:
+                    debug_print(
+                        "Keys mode: Initial call failed, trying multi-level resolution"
+                    )  # pragma: no mutate
+                    _, multi_resource_filters, multi_value_filters, multi_column_filters = (
+                        parse_multi_level_filters_for_mode(filter_argv, mode="multi")
+                    )
+                    call_result, _ = execute_multi_level_call_with_tracking(
+                        service,
+                        action,
+                        multi_resource_filters,
+                        multi_value_filters,
+                        multi_column_filters,
+                        session=session,
+                        hint_service=hint_service,
+                        hint_function=hint_function,
+                        hint_field=hint_field,
+                        limit=hint_limit,
+                        user_parameters=parsed_parameters,
+                    )
 
-    try:
+                keys, keys_error = keys_from_result(call_result)
+
+                if not call_result.final_success:
+                    # Never let a failure reach stdout as if it were data
+                    _fail_from_call_result(
+                        call_result, keys_error or "No successful response to show keys from"
+                    )
+
+                if keys_error:
+                    # Call succeeded but carried no data: an empty result, not a failure
+                    emit_notice("EmptyResult", keys_error)
+                    print(format_keys_output([], output_format))
+                    return
+
+                print(format_keys_output(keys, output_format))
+                return
+            except Exception as e:
+                if get_debug_enabled():
+                    traceback.print_exc(file=sys.stderr)
+                code, error_type, message, hint = classify_exception(e)
+                fail(code, error_type, f"Could not retrieve keys: {message}", hint)
+
         requirements = check_parameter_requirements(service, action, parsed_parameters, session)
 
         if requirements["needs_params"]:
@@ -1159,21 +1390,19 @@ Autocomplete Setup:
             for filter_word in final_column_filters:
                 debug_print(f"Applying column filter: {filter_word}")  # pragma: no mutate
 
-        if args.keys:
-            sorted_keys = extract_and_sort_keys(filtered_resources)
-            output = "\n".join(f"  {key}" for key in sorted_keys)
-            print("All available keys:", file=sys.stderr)
-            print(output)
-        else:
-            if args.json:
-                output = format_json_output(filtered_resources, final_column_filters)
-            else:
-                output = format_table_output(filtered_resources, final_column_filters)
+        filtered_resources = _apply_row_limit(filtered_resources, args.limit)
+
+        output = _render_output(filtered_resources, final_column_filters, output_format)
+        if output or output_format in ("table", "json"):
             print(output)
 
     except KeyboardInterrupt:
-        print("\nOperation cancelled by user.", file=sys.stderr)
-        sys.exit(1)
+        fail(ExitCode.ERROR, "KeyboardInterrupt", "Operation cancelled by user")
+    except Exception as e:  # error boundary: one exit code per failure class
+        if get_debug_enabled():
+            traceback.print_exc(file=sys.stderr)
+        code, error_type, message, hint = classify_exception(e)
+        fail(code, error_type, message, hint)
 
 
 if __name__ == "__main__":

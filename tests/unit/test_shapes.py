@@ -3,7 +3,8 @@ from unittest.mock import Mock, patch
 import pytest
 from botocore.model import ListShape, MapShape, ServiceModel, StringShape, StructureShape
 
-from awsquery.shapes import ShapeCache
+from awsquery.errors import set_structured_errors, structured_errors_enabled
+from awsquery.shapes import ShapeCache, get_shape_cache, reset_shape_cache
 
 
 class TestShapeCacheInitialization:
@@ -622,3 +623,55 @@ class TestShapeFlattening:
         result = cache._flatten_shape(mock_shape)
 
         assert result == {}
+
+
+class TestSharedShapeCache:
+
+    def test_repeated_calls_return_the_same_instance(self):
+        assert get_shape_cache() is get_shape_cache()
+
+    def test_parsed_models_are_reused_across_call_sites(self):
+        get_shape_cache().get_service_model("ec2")
+
+        assert "ec2" in get_shape_cache()._cache
+
+    def test_constructing_directly_gives_an_isolated_cache(self):
+        get_shape_cache().get_service_model("ec2")
+        isolated = ShapeCache()
+
+        assert isolated is not get_shape_cache()
+        assert isolated._cache == {}
+
+    def test_reset_drops_the_parsed_models(self):
+        shared = get_shape_cache()
+        shared.get_service_model("ec2")
+
+        reset_shape_cache()
+
+        assert get_shape_cache() is not shared
+        assert get_shape_cache()._cache == {}
+
+    def test_reset_is_safe_before_anything_built_the_cache(self):
+        reset_shape_cache()
+        reset_shape_cache()
+
+        assert get_shape_cache()._cache == {}
+
+
+class TestAutouseFixtureIsolation:
+    # Both tests dirty exactly the state they assert is clean, so they hold
+    # whichever order they run in.
+
+    def test_shared_state_starts_clean_first(self):
+        assert get_shape_cache()._cache == {}
+        assert structured_errors_enabled() is False
+
+        get_shape_cache().get_service_model("ec2")
+        set_structured_errors(True)
+
+    def test_shared_state_starts_clean_second(self):
+        assert get_shape_cache()._cache == {}
+        assert structured_errors_enabled() is False
+
+        get_shape_cache().get_service_model("s3")
+        set_structured_errors(True)

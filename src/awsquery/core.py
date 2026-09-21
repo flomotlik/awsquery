@@ -8,6 +8,13 @@ import boto3
 from botocore.exceptions import ClientError, NoCredentialsError
 
 from .case_utils import to_pascal_case, to_snake_case
+from .errors import (
+    CREDENTIALS_HINT,
+    ExitCode,
+    UnknownActionError,
+    classify_exception,
+    fail,
+)
 from .filters import extract_parameter_values, filter_resources
 from .utils import (
     convert_parameter_name,
@@ -168,10 +175,7 @@ def execute_aws_call(service, action, parameters=None, session=None):
         if not operation:
             operation = getattr(client, action, None)
             if not operation:
-                raise ValueError(
-                    f"Action {action} (normalized: {normalized_action}) "
-                    f"not available for service {service}"
-                )
+                raise UnknownActionError(service, action)
 
         call_params = parameters or {}
 
@@ -206,27 +210,34 @@ def execute_aws_call(service, action, parameters=None, session=None):
                 return [operation(**call_params)]
 
     except NoCredentialsError:
-        print("ERROR: AWS credentials not found. Configure credentials first.", file=sys.stderr)
-        sys.exit(1)
+        fail(
+            ExitCode.AUTH_ERROR,
+            "NoCredentialsError",
+            "AWS credentials not found. Configure credentials first.",
+            hint=CREDENTIALS_HINT,
+        )
     except Exception as e:
         if type(e).__name__ == "ParamValidationError":
             error_info = parse_validation_error(e)
             if error_info:
                 return {"validation_error": error_info, "original_error": e}
-            else:
-                print(f"ERROR: Could not parse parameter validation error: {e}", file=sys.stderr)
-                sys.exit(1)
+            fail(
+                ExitCode.ERROR,
+                "ParamValidationError",
+                f"Could not parse parameter validation error: {e}",
+            )
+
+        code, error_type, message, hint = classify_exception(e)
 
         if isinstance(e, ClientError):
             error_info = parse_validation_error(e)
             if error_info:
                 return {"validation_error": error_info, "original_error": e}
-            else:
-                print(f"ERROR: AWS API call failed: {e}", file=sys.stderr)
-                sys.exit(1)
+            fail(code, error_type, f"AWS API call failed: {e}", hint)
 
-        print(f"ERROR: Unexpected error: {e}", file=sys.stderr)
-        sys.exit(1)
+        if code is ExitCode.ERROR:
+            fail(code, error_type, f"Unexpected error: {e}")
+        fail(code, error_type, message, hint)
 
 
 def _execute_multi_level_call_internal(
@@ -403,36 +414,26 @@ def _execute_multi_level_call_internal(
 
         if not list_response or not successful_operation:
             error_msg = f"Could not find working list operation for parameter '{parameter_name}'"
-
-            print(f"ERROR: {error_msg}", file=sys.stderr)
-            print(f"Tried operations: {possible_operations}", file=sys.stderr)
-            print("", file=sys.stderr)
-            print(
-                f"Suggestion: Use the -i/--input flag to specify a hint:",
-                file=sys.stderr,
+            hint = "\n".join(
+                [
+                    f"Tried operations: {possible_operations}",
+                    "",
+                    "Use the -i/--input flag to specify a hint:",
+                    f"  Specify function: awsquery {service} {action} -i describe-param",
+                    f"  Use another service: awsquery {service} {action} -i ec2",
+                    f"  Cross-service with function: "
+                    f"awsquery {service} {action} -i ec2:describe-instances",
+                    "",
+                    f"Available operations for '{service}' can be viewed with:",
+                    f"  aws {service} help",
+                ]
             )
-            print(
-                f"  Specify function: awsquery {service} {action} -i describe-param",
-                file=sys.stderr,
-            )
-            print(
-                f"  Use another service: awsquery {service} {action} -i ec2",
-                file=sys.stderr,
-            )
-            print(
-                f"  Cross-service with function: "
-                f"awsquery {service} {action} -i ec2:describe-instances",
-                file=sys.stderr,
-            )
-            print("", file=sys.stderr)
-            print(f"Available operations for '{service}' can be viewed with:", file=sys.stderr)
-            print(f"  aws {service} help", file=sys.stderr)
 
             if with_tracking and call_result is not None:
                 call_result.error_messages.append(error_msg)
+                debug_print(f"{error_msg}. {hint}")  # pragma: no mutate
                 return call_result, []
-            else:
-                sys.exit(1)
+            fail(ExitCode.USAGE, "ParameterResolutionFailed", error_msg, hint)
 
         from .formatters import flatten_response
 
@@ -461,13 +462,15 @@ def _execute_multi_level_call_internal(
 
         if not filtered_list_resources:
             error_msg = f"No resources found matching resource filters: {resource_filters}"
+            hint = (
+                f"Relax the resource filters, or list the candidates with: "
+                f"awsquery {list_service} {successful_operation}"
+            )
             if with_tracking and call_result is not None:
                 call_result.error_messages.append(error_msg)
-                print(f"ERROR: {error_msg}", file=sys.stderr)
+                debug_print(f"{error_msg}. {hint}")  # pragma: no mutate
                 return call_result, []
-            else:
-                print(f"ERROR: {error_msg}", file=sys.stderr)
-                sys.exit(1)
+            fail(ExitCode.USAGE, "NoMatchingResources", error_msg, hint)
 
         # Singularize parameter name for better field matching
         singular_name = singularize_parameter_name(parameter_name)
@@ -481,13 +484,15 @@ def _execute_multi_level_call_internal(
 
         if not parameter_values:
             error_msg = f"Could not extract parameter '{parameter_name}' from filtered results"
+            hint = (
+                f"Name the source field with -i, e.g. "
+                f"awsquery {service} {action} -i {successful_operation}:{parameter_name}"
+            )
             if with_tracking and call_result is not None:
                 call_result.error_messages.append(error_msg)
-                print(f"ERROR: {error_msg}", file=sys.stderr)
+                debug_print(f"{error_msg}. {hint}")  # pragma: no mutate
                 return call_result, []
-            else:
-                print(f"ERROR: {error_msg}", file=sys.stderr)
-                sys.exit(1)
+            fail(ExitCode.USAGE, "ParameterResolutionFailed", error_msg, hint)
 
         expects_list = parameter_expects_list(parameter_name)
 
@@ -557,11 +562,15 @@ def _execute_multi_level_call_internal(
                 )
                 if with_tracking and call_result is not None:
                     call_result.error_messages.append(error_msg)
-                    print(f"ERROR: {error_msg}", file=sys.stderr)
+                    debug_print(error_msg)  # pragma: no mutate
                     return call_result, []
+                original_error = final_response.get("original_error")
+                if isinstance(original_error, BaseException):
+                    code, error_type, _, failure_hint = classify_exception(original_error)
                 else:
-                    print(f"ERROR: {error_msg}", file=sys.stderr)
-                    sys.exit(1)
+                    code, error_type = ExitCode.USAGE, "ParameterResolutionFailed"
+                    failure_hint = None
+                fail(code, error_type, error_msg, failure_hint)
             else:
                 # Final call succeeded
                 response = final_response
@@ -578,9 +587,14 @@ def _execute_multi_level_call_internal(
                 call_result.error_messages.append(f"Final call failed: {str(e)}")
                 debug_print(f"Final call failed: {e}")  # pragma: no mutate
                 return call_result, []
-            else:
-                debug_print(f"Final call failed: {e}")  # pragma: no mutate
-                sys.exit(1)
+            debug_print(f"Final call failed: {e}")  # pragma: no mutate
+            code, error_type, message, failure_hint = classify_exception(e)
+            fail(
+                code,
+                error_type,
+                f"Final call to {service}.{action} failed: {message}",
+                failure_hint,
+            )
 
     # Process final response
     final_response_to_use = (
@@ -1087,8 +1101,8 @@ def get_correct_parameter_name(client, action, parameter_name):
         return fallback
 
 
-def show_keys_from_result(call_result):
-    """Show keys only if final call succeeded"""
+def keys_from_result(call_result):
+    """Return (keys, error) for --keys; exactly one of the two is populated."""
     if call_result.final_success and call_result.last_successful_response:
         from .formatters import extract_and_sort_keys, flatten_response
 
@@ -1096,14 +1110,20 @@ def show_keys_from_result(call_result):
             call_result.last_successful_response, call_result.service, call_result.operation
         )
         if not resources:
-            return "Error: No data to extract keys from in successful response"
+            return [], "No data to extract keys from in successful response"
 
         # Use non-simplified keys to show full nested structure
-        sorted_keys = extract_and_sort_keys(resources, simplify=False)
-        return "\n".join(f"  {key}" for key in sorted_keys)
-    else:
-        if call_result.error_messages:
-            error_msg = "; ".join(call_result.error_messages)
-            return f"Error: No successful response to show keys from ({error_msg})"
-        else:
-            return "Error: No successful response to show keys from"
+        return extract_and_sort_keys(resources, simplify=False), None
+
+    if call_result.error_messages:
+        error_msg = "; ".join(call_result.error_messages)
+        return [], f"No successful response to show keys from ({error_msg})"
+    return [], "No successful response to show keys from"
+
+
+def show_keys_from_result(call_result):
+    """Human-readable rendering of keys_from_result (indented list or Error: line)."""
+    keys, error = keys_from_result(call_result)
+    if error:
+        return f"Error: {error}"
+    return "\n".join(f"  {key}" for key in keys)

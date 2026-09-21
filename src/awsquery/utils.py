@@ -6,6 +6,7 @@ import sys
 import boto3
 
 from .case_utils import to_kebab_case, to_snake_case
+from .errors import ExitCode, emit_error
 
 
 def convert_parameter_name(parameter_name):
@@ -155,7 +156,8 @@ def get_aws_services():
         with _BotocoreSessionContext() as session:
             return sorted(session.get_available_services())
     except Exception as e:
-        print(f"ERROR: Failed to get AWS services: {e}", file=sys.stderr)
+        # Callers (completers, hint resolution) must degrade, not die
+        emit_error(ExitCode.ERROR, type(e).__name__, f"Failed to get AWS services: {e}")
         return []
 
 
@@ -187,6 +189,11 @@ def create_session(region=None, profile=None):
     if region and region.strip():
         session_kwargs["region_name"] = region
         debug_print(f"Added region_name={region} to session")  # pragma: no mutate
+    elif not os.environ.get("AWS_DEFAULT_REGION") and os.environ.get("AWS_REGION"):
+        # boto3 reads AWS_DEFAULT_REGION but not AWS_REGION; accept both
+        env_region = os.environ["AWS_REGION"]
+        session_kwargs["region_name"] = env_region
+        debug_print(f"Using AWS_REGION={env_region} as session region")  # pragma: no mutate
     if profile and profile.strip():
         session_kwargs["profile_name"] = profile
         debug_print(f"Added profile_name={profile} to session")  # pragma: no mutate

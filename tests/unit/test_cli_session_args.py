@@ -268,8 +268,10 @@ class TestSessionErrorHandling:
         test_args = ["awsquery", "--region", "invalid", "ec2", "describe-instances"]
 
         with patch.object(sys, "argv", test_args):
-            with pytest.raises(Exception, match="Session creation failed"):
+            with pytest.raises(SystemExit) as exc_info:
                 main()
+
+        assert exc_info.value.code == 1
 
 
 class TestSessionDebugOutput:

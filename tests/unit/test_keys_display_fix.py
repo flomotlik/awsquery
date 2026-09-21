@@ -391,11 +391,9 @@ class TestKeysModeBehavior:
 
         test_args = ["awsquery", "--keys", "ec2", "describe-instances"]
 
-        with patch("sys.argv", test_args), patch(
-            "awsquery.cli.show_keys_from_result"
-        ) as mock_show_keys:
+        with patch("sys.argv", test_args), patch("awsquery.cli.keys_from_result") as mock_show_keys:
 
-            mock_show_keys.return_value = "  InstanceId\n  State"
+            mock_show_keys.return_value = (["InstanceId", "State"], None)
 
             from awsquery.cli import main
 
@@ -437,11 +435,9 @@ class TestKeysModeBehavior:
 
         test_args = ["awsquery", "--keys", "eks", "describe-cluster"]
 
-        with patch("sys.argv", test_args), patch(
-            "awsquery.cli.show_keys_from_result"
-        ) as mock_show_keys:
+        with patch("sys.argv", test_args), patch("awsquery.cli.keys_from_result") as mock_show_keys:
 
-            mock_show_keys.return_value = "  ClusterName\n  Status"
+            mock_show_keys.return_value = (["ClusterName", "Status"], None)
 
             from awsquery.cli import main
 

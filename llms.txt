@@ -1,0 +1,21 @@
+# awsquery
+
+> CLI tool that runs any read-only AWS API operation through boto3 and filters the response to the
+> rows and columns you asked for. Substring filters instead of JMESPath, automatic resolution of
+> missing API parameters, and credential-free schema introspection.
+
+Run it without installing anything: `uvx awsquery ec2 describe-instances`.
+
+The installed tool prints its own complete reference with `awsquery --docs`, and describes any
+operation's inputs and output fields with `awsquery --schema SERVICE ACTION` — both offline, with
+no AWS credentials. Prefer those over fetching these files when awsquery is available locally.
+
+## Docs
+
+- [Agent reference](https://raw.githubusercontent.com/flomotlik/awsquery/main/llms-full.txt): complete contract — filter grammar, flags, output formats, exit codes, safety model, recipes. Same text as `awsquery --docs`.
+- [README](https://raw.githubusercontent.com/flomotlik/awsquery/main/README.md): installation (uv, uvx, pip), full feature documentation and examples for human readers.
+
+## Optional
+
+- [AGENTS.md](https://raw.githubusercontent.com/flomotlik/awsquery/main/AGENTS.md): conventions for agents modifying this repository, not for agents using the tool.
+- [Repository](https://github.com/flomotlik/awsquery): source, issues and releases.

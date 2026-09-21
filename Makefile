@@ -14,6 +14,7 @@ NC := \033[0m
 .PHONY: help clean install-dev test test-unit test-integration test-critical test-slow test-fast test-unit-fast \
         test-integration-fast coverage coverage-report lint format format-check type-check security-check ci build \
         uv-sync uv-test uv-run uv-lock tool-install tool-uninstall \
+        llms llms-check \
         publish-test publish watch-tests version release update-policy validate-policy all ec2-instances s3-buckets \
         iam-users iam-roles lambda-functions cloudformation-stacks dynamodb-tables ec2-volumes \
         ec2-security-groups s3-bucket-versioning cloudwatch-alarms route53-zones shell \
@@ -207,6 +208,13 @@ validate-policy: ## Validate that policy.json is a valid AWS policy document
 		print('✓ policy.json is valid')" && \
 		echo "$(GREEN)✓ policy.json validation passed$(NC)" || \
 		echo "$(RED)✗ policy.json validation failed$(NC)"
+
+llms: ## Regenerate llms-full.txt from the packaged agent reference
+	cp src/awsquery/agent-reference.md llms-full.txt
+
+llms-check: ## Verify llms-full.txt matches the packaged agent reference
+	@cmp -s src/awsquery/agent-reference.md llms-full.txt || \
+		{ echo "llms-full.txt is out of date with src/awsquery/agent-reference.md - run 'make llms'"; exit 1; }
 
 # =============================================================================
 # AWS API RESPONSE SAMPLING TARGETS (PRESERVED)

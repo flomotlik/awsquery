@@ -255,6 +255,24 @@ def validation_error_fixtures():
 
 
 @pytest.fixture(autouse=True)
+def reset_structured_errors():
+    from awsquery import errors
+
+    errors.set_structured_errors(False)
+    yield
+    errors.set_structured_errors(False)
+
+
+@pytest.fixture(autouse=True)
+def reset_shared_shape_cache():
+    from awsquery import shapes
+
+    shapes.reset_shape_cache()
+    yield
+    shapes.reset_shape_cache()
+
+
+@pytest.fixture(autouse=True)
 def reset_debug_mode():
     from awsquery import utils
 

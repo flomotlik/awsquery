@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import shutil
 import sys
 from collections import OrderedDict
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from tabulate import tabulate
 
@@ -209,7 +211,6 @@ def transform_tags_structure(data, max_depth=10, current_depth=0):
 
     Converts Tags from [{"Key": "Name", "Value": "web-server"}] format
     to {"Name": "web-server"} format for easier searching and filtering.
-    Preserves original data alongside transformed data for debugging.
     """
     # Depth limiting prevents infinite recursion
     if current_depth > max_depth:
@@ -222,8 +223,6 @@ def transform_tags_structure(data, max_depth=10, current_depth=0):
                 # Transform Tag list to map
                 tag_map = _transform_aws_tags_list(value)
                 result[key] = tag_map
-                # Preserve original for debugging
-                result[f"{key}_Original"] = value
                 debug_print(
                     f"Transformed {len(tag_map)} AWS Tags to map format"
                 )  # pragma: no mutate
@@ -296,9 +295,9 @@ def flatten_single_response(response, service: str, operation: str):
     debug_print(f"Original response keys: {original_keys}")  # pragma: no mutate
 
     # Shape-aware data field detection (REQUIRED)
-    from .shapes import ShapeCache
+    from .shapes import get_shape_cache
 
-    shape_cache = ShapeCache()
+    shape_cache = get_shape_cache()
     data_field, _, _ = shape_cache.get_response_fields(service, operation)
 
     if data_field and data_field in response:
@@ -371,16 +370,36 @@ def flatten_dict_keys(d, parent_key="", sep="."):
     return dict(items)
 
 
-def format_table_output(resources, column_filters=None, max_width=None):
-    """Format resources as table using tabulate."""
-    if not resources:
-        return "No results found."
+def _headers_for_keys(keys):
+    """Build unique display headers for flattened keys.
 
-    # Apply tag transformation before processing
-    transformed_resources = []
-    for resource in resources:
-        transformed = transform_tags_structure(resource)
-        transformed_resources.append(transformed)
+    Returns (unique_headers, header_to_full_keys) where each header maps to the
+    full (index-carrying) keys that collapse into it.
+    """
+    normalized_to_full_keys: Dict[str, List[str]] = OrderedDict()
+    normalized_keys = []
+
+    for key in keys:
+        normalized = simplify_key(key)
+        if normalized not in normalized_to_full_keys:
+            normalized_keys.append(normalized)
+            normalized_to_full_keys[normalized] = []
+        normalized_to_full_keys[normalized].append(key)
+
+    unique_headers = make_unique_headers(normalized_keys)
+    header_to_full_keys = {
+        header: normalized_to_full_keys[normalized]
+        for header, normalized in zip(unique_headers, normalized_keys)
+    }
+    return unique_headers, header_to_full_keys
+
+
+def _select_columns(resources, column_filters):
+    """Flatten resources and choose the columns every row-based format shares.
+
+    Returns (flattened_resources, unique_headers, header_to_full_keys).
+    """
+    transformed_resources = [transform_tags_structure(resource) for resource in resources]
 
     flattened_resources = []
     all_keys_list = []  # Use list instead of set to preserve order
@@ -410,32 +429,83 @@ def format_table_output(resources, column_filters=None, max_width=None):
         selected_keys = sorted(all_keys_list, key=str.lower)
 
     if not selected_keys:
-        return "No matching columns found."
+        return flattened_resources, [], {}
 
-    # Normalize keys by removing numeric indices
-    normalized_keys = []
-    normalized_to_full_keys: Dict[str, List[str]] = {}
+    unique_headers, header_to_full_keys = _headers_for_keys(selected_keys)
+    return flattened_resources, unique_headers, header_to_full_keys
 
-    for key in selected_keys:
-        normalized = simplify_key(key)
-        if normalized not in normalized_to_full_keys:
-            normalized_keys.append(normalized)
-            normalized_to_full_keys[normalized] = []
-        normalized_to_full_keys[normalized].append(key)
 
-    # Create unique headers with parent context only when needed
-    unique_headers = make_unique_headers(normalized_keys)
+def select_typed_rows(resources, column_filters=None):
+    """Select columns once and keep native values.
 
-    # Build mapping from headers to normalized keys
-    header_to_normalized = {header: norm for header, norm in zip(unique_headers, normalized_keys)}
+    Returns (headers, rows) where each row is an OrderedDict of header ->
+    list of native values, one row per resource and no values dropped for
+    being falsy. Every machine-readable format builds on this.
+    """
+    if not resources:
+        return [], []
+
+    flattened_resources, unique_headers, header_to_full_keys = _select_columns(
+        resources, column_filters
+    )
+    if not unique_headers:
+        return [], []
+
+    rows = []
+    for resource in flattened_resources:
+        row: "OrderedDict[str, List[Any]]" = OrderedDict()
+        for header in unique_headers:
+            values: List[Any] = []
+            for full_key in header_to_full_keys[header]:
+                if full_key not in resource:
+                    continue
+                value = resource[full_key]
+                if value is None or value in values:
+                    continue
+                values.append(value)
+            row[header] = values
+        rows.append(row)
+
+    return unique_headers, rows
+
+
+def build_typed_objects(resources, column_filters=None):
+    """One JSON-ready object per resource, native types and falsy values kept."""
+    headers, typed_rows = select_typed_rows(resources, column_filters)
+    if not headers:
+        return []
+
+    return [
+        {
+            header: values[0] if len(values) == 1 else values
+            for header, values in row.items()
+            if values
+        }
+        for row in typed_rows
+    ]
+
+
+def build_rows(resources, column_filters=None):
+    """Flatten resources into (headers, rows) for the aligned table display.
+
+    Display semantics: long values truncated, blank values dropped, repeated
+    values deduplicated and capped. Use build_data_rows for lossless output.
+    """
+    if not resources:
+        return [], []
+
+    flattened_resources, unique_headers, header_to_full_keys = _select_columns(
+        resources, column_filters
+    )
+    if not unique_headers:
+        return [], []
 
     table_data = []
     for resource in flattened_resources:
         row = []
         for header in unique_headers:
-            normalized_key = header_to_normalized[header]
             values = set()
-            for full_key in normalized_to_full_keys[normalized_key]:
+            for full_key in header_to_full_keys[header]:
                 value = resource.get(full_key, "")
                 if value:
                     if isinstance(value, str) and len(value) > 80:
@@ -457,6 +527,19 @@ def format_table_output(resources, column_filters=None, max_width=None):
         if any(cell.strip() for cell in row):
             table_data.append(row)
 
+    return unique_headers, table_data
+
+
+def format_table_output(resources, column_filters=None, max_width=None):
+    """Format resources as table using tabulate."""
+    if not resources:
+        return "No results found."
+
+    unique_headers, table_data = build_rows(resources, column_filters)
+
+    if not unique_headers:
+        return "No matching columns found."
+
     if max_width is None:
         max_width = shutil.get_terminal_size((DEFAULT_TERMINAL_WIDTH, 24)).columns
     table_data, unique_headers, was_truncated = _fit_table_to_width(
@@ -472,85 +555,85 @@ def format_table_output(resources, column_filters=None, max_width=None):
     return tabulate(table_data, headers=unique_headers, tablefmt="grid")
 
 
-def _process_json_resource_with_filters(resource, column_filters):
-    """Process a single resource with column filters for JSON output."""
-    flat = flatten_dict_keys(resource)
-
-    # Use filter_columns to apply pattern matching with ! operators
-    filtered_flat = filter_columns(flat, column_filters)
-
-    # Normalize keys by removing numeric indices
-    normalized_to_full_keys: Dict[str, List[str]] = OrderedDict()
-    normalized_keys = []
-
-    # Process keys in the order they appear in filtered_flat
-    for key in filtered_flat.keys():
-        normalized = simplify_key(key)
-        if normalized not in normalized_to_full_keys:
-            normalized_keys.append(normalized)
-            normalized_to_full_keys[normalized] = []
-        normalized_to_full_keys[normalized].append(key)
-
-    # Create unique headers with parent context only when needed
-    unique_headers = make_unique_headers(normalized_keys)
-
-    # Build mapping from headers to normalized keys
-    header_to_normalized = {header: norm for header, norm in zip(unique_headers, normalized_keys)}
-
-    # Build final filtered dict preserving order
-    filtered: Dict[str, str] = OrderedDict()
-    for header in unique_headers:
-        normalized_key = header_to_normalized[header]
-        values = []
-        for full_key in normalized_to_full_keys[normalized_key]:
-            value = filtered_flat.get(full_key)
-            if value:
-                values.append(str(value))
-
-        if not values:
-            continue
-
-        # Deduplicate values while preserving order
-        unique_values = []
-        seen = set()
-        for v in values:
-            if v not in seen:
-                unique_values.append(v)
-                seen.add(v)
-        if len(unique_values) > MAX_AGGREGATED_VALUES:
-            shown = ", ".join(unique_values[:MAX_AGGREGATED_VALUES])
-            extra = len(unique_values) - MAX_AGGREGATED_VALUES
-            filtered[header] = f"{shown} (+{extra} more)"
-        elif len(unique_values) > 1:
-            filtered[header] = ", ".join(unique_values)
-        else:
-            filtered[header] = unique_values[0]
-
-    return dict(filtered) if filtered else None
-
-
 def format_json_output(resources, column_filters=None):
-    """Format resources as JSON output"""
+    """Format resources as JSON: one object per resource, values kept as-is."""
     if not resources:
         return json.dumps({"results": []}, indent=2)
 
-    # Apply tag transformation before processing
-    transformed_resources = []
-    for resource in resources:
-        transformed = transform_tags_structure(resource)
-        transformed_resources.append(transformed)
-
     if column_filters:
         debug_print(f"Applying column filters to JSON: {column_filters}")  # pragma: no mutate
-
-        filtered_resources = []
-        for resource in transformed_resources:
-            filtered = _process_json_resource_with_filters(resource, column_filters)
-            if filtered:
-                filtered_resources.append(filtered)
-        return json.dumps({"results": filtered_resources}, indent=2, default=str)
+        results = build_typed_objects(resources, column_filters)
     else:
-        return json.dumps({"results": transformed_resources}, indent=2, default=str)
+        results = [transform_tags_structure(resource) for resource in resources]
+
+    return json.dumps({"results": results}, indent=2, default=str)
+
+
+def build_data_rows(resources, column_filters=None):
+    """Flatten resources into (headers, rows) without display lossiness.
+
+    Same column selection as build_rows, but values are kept whole: no
+    truncation, no blank-value dropping, no reordering, no "(+N more)", and
+    one row per resource so row counts stay honest.
+    """
+    headers, typed_rows = select_typed_rows(resources, column_filters)
+    if not headers:
+        return [], []
+
+    rows = [
+        [", ".join(str(value) for value in row[header]) for header in headers] for row in typed_rows
+    ]
+    return headers, rows
+
+
+def format_csv_output(resources, column_filters=None, delimiter=","):
+    """Format resources as delimited text with a header row (RFC4180 quoting)."""
+    headers, rows = build_data_rows(resources, column_filters)
+    if not headers:
+        return ""
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, delimiter=delimiter, lineterminator="\n")
+    writer.writerow(headers)
+    writer.writerows(rows)
+    return buffer.getvalue().rstrip("\n")
+
+
+def format_tsv_output(resources, column_filters=None):
+    """Format resources as tab-separated values with a header row."""
+    return format_csv_output(resources, column_filters, delimiter="\t")
+
+
+def format_ndjson_output(resources, column_filters=None):
+    """Format resources as newline-delimited JSON, one compact object per line."""
+    if not resources:
+        return ""
+
+    if column_filters:
+        objects = build_typed_objects(resources, column_filters)
+    else:
+        objects = [transform_tags_structure(resource) for resource in resources]
+
+    return "\n".join(json.dumps(obj, separators=(",", ":"), default=str) for obj in objects)
+
+
+def format_keys_output(keys, output_format="table"):
+    """Render the --keys list in the requested output format."""
+    keys = list(keys)
+
+    if output_format == "json":
+        return json.dumps({"keys": keys}, indent=2)
+    if output_format == "ndjson":
+        return "\n".join(json.dumps(key) for key in keys)
+    if output_format in ("csv", "tsv"):
+        buffer = io.StringIO()
+        writer = csv.writer(
+            buffer, delimiter="\t" if output_format == "tsv" else ",", lineterminator="\n"
+        )
+        writer.writerow(["key"])
+        writer.writerows([key] for key in keys)
+        return buffer.getvalue().rstrip("\n")
+    return "\n".join(f"  {key}" for key in keys)
 
 
 def extract_and_sort_keys(resources, simplify=True):

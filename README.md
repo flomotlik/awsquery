@@ -51,6 +51,9 @@ usage.
   == `awsquery ec2 describe-instances` (e.g. `awsquery s3 -- Name`)
 - **Parameter Passing**: Direct parameter passing to AWS APIs with `-p`/`--parameter` for advanced use cases
 - **Hint-Based Resolution**: Function selection hints with `-i`/`--input` for multi-step calls, including cross-service support and field extraction targeting
+- **Agent/LLM Mode**: `--docs` prints the complete reference in one call; `--schema`, `--list-services` and `--list-actions` answer offline with no AWS credentials
+- **Token-Efficient Output**: `--format csv|tsv|ndjson` and `--limit` keep results small enough for a context window
+- **Predictable Exit Codes**: documented codes 0-4, structured JSON errors, and no interactive prompts when stdin is not a TTY
 
 ## Installation
 
@@ -355,6 +358,7 @@ awsquery -d ec2 describe-instances
 
 ```
 awsquery [-j|--json] [--format FMT] [--limit N] [-k|--keys] [-d|--debug] [-p PARAM] [-i HINT] [--region REGION] [--profile PROFILE] SERVICE ACTION [VALUE_FILTERS...] [-- TABLE_OUTPUT_FILTERS...]
+awsquery --docs | --list-services | [SERVICE] --list-actions | --schema SERVICE ACTION
 ```
 
 - **SERVICE**: AWS service name (ec2, s3, iam, etc.)
@@ -368,6 +372,12 @@ awsquery [-j|--json] [--format FMT] [--limit N] [-k|--keys] [-d|--debug] [-p PAR
 - **-i, --input HINT**: Multi-step control with cross-service support and function/field/limit hints (e.g., "ec2:desc-inst:instanceid", "desc-clus", ":arn", "::5")
 - **--region REGION**: AWS region to use for requests (e.g., us-west-2)
 - **--profile PROFILE**: AWS profile to use from ~/.aws/credentials
+- **--format FMT**: Output format - `table` (default), `json`, `csv`, `tsv`, `ndjson`
+- **--limit N**: Truncate printed rows to N (independent of the `-i ::N` resource cap)
+- **--docs**: Print the complete agent/LLM reference and exit (no AWS call)
+- **--schema**: Print an operation's input parameters and output fields (no AWS call)
+- **--list-services / --list-actions**: Enumerate services or a service's read-only actions (no AWS call)
+- **--allow-unsafe**: Permit a non-read-only operation without prompting
 
 ## Security
 
@@ -569,6 +579,121 @@ arguments). A service with no curated entry prints its available ReadOnly action
 and exits non-zero; `awsquery` with no service at all is unchanged — it still lists available
 services on stdout and exits 0.
 
+## Using awsquery with AI Agents and LLMs
+
+awsquery is built to be driven by coding agents and LLM tool calls, not just typed by hand. Three
+things make that work: the tool documents itself, it can describe any AWS operation without calling
+AWS, and its output can be made cheap in tokens.
+
+### The tool explains itself
+
+```bash
+awsquery --docs
+```
+
+Prints the complete agent reference - filter grammar, every flag, output formats, exit codes, the
+safety model, recipes and failure modes - as Markdown on stdout, in one call, with no AWS access.
+About 16 KB, sized to drop straight into a context window. This is the one command to give an agent
+that has never seen awsquery before.
+
+The same text is mirrored at [`llms-full.txt`](llms-full.txt) with an [`llms.txt`](llms.txt) index
+([llmstxt.org](https://llmstxt.org/) convention) for agents that fetch from GitHub rather than run
+the binary. [`AGENTS.md`](AGENTS.md) is the separate file for agents working *on* this repository.
+
+### Discovery without credentials
+
+These make no AWS API call, need no credentials and no region, and answer in well under a second -
+so an agent can plan a query before it has any access at all:
+
+```bash
+awsquery --list-services                      # every supported service
+awsquery ec2 --list-actions                   # that service's read-only operations
+awsquery --schema ec2 describe-instances      # inputs, and every field the API can return
+awsquery --schema -j ec2 describe-instances   # the same as JSON
+```
+
+`--schema` reads botocore's service model, so it lists all 213 output field paths for
+`ec2 describe-instances` with their types - including fields that happen to be absent from your
+account right now. It also tells you how to turn those paths into column filters.
+
+That is the difference from `-k`/`--keys`, which is still there and still useful:
+
+| | `--schema` | `-k` / `--keys` |
+| --- | --- | --- |
+| Answers | what the API **can** return | what your account **did** return |
+| AWS call | none | yes |
+| Needs credentials | no | yes |
+| Completeness | every field | only fields populated in existing resources |
+
+Use `--schema` to choose columns; use `-k` to inspect real data. `-k` follows `--format` too.
+
+### Token-efficient output
+
+Table borders and indented JSON are expensive to read. Measured on 50 rows by 5 columns: grid table
+~2340 tokens, `--format json` ~2440, `--format csv` ~790.
+
+```bash
+awsquery --format csv --limit 50 ec2 describe-instances prod -- InstanceId Tags.Name State.Name
+```
+
+- `--format table` (default), `json`, `csv`, `tsv`, `ndjson`
+- `-j`/`--json` is equivalent to `--format json`
+- `csv`, `tsv`, `ndjson` and `json` are faithful: values are not truncated, falsy values are
+  preserved, native types survive in the JSON formats (csv/tsv cells are text), and one resource
+  is always one row. `table` is a display format - it truncates long values, summarises repeats as
+  `(+N more)`, renders falsy cells blank and drops all-blank rows, so never parse it
+- An empty result set prints nothing at all under `csv`/`tsv`/`ndjson` (headers come from the
+  data); only `json` still returns `{"results": []}`. Exit status is 0 either way
+- `--limit N` truncates the printed resources in any format and notes the truncation on stderr
+- `--limit` is independent of `-i ::N`, which caps resources fed into multi-level resolution
+  (note `-i ::0` means unlimited, while `--limit 0` means zero rows)
+
+### Predictable in a tool-call loop
+
+```bash
+export AWSQUERY_NON_INTERACTIVE=1
+```
+
+A non-read-only operation is then refused immediately with exit 2 instead of prompting - awsquery
+never blocks on stdin and never returns a traceback for it. The same applies automatically whenever
+stdin is not a TTY.
+
+stdout carries data only; notices and errors go to stderr, so stdout stays parseable.
+
+| Exit code | Meaning |
+| --- | --- |
+| 0 | success, including an empty result set |
+| 1 | general or unexpected error |
+| 2 | usage error, unknown service/action, or unsafe operation refused |
+| 3 | AWS API error |
+| 4 | credentials, region or authentication failure |
+
+Unknown services and actions are caught offline, before any AWS call, so a typo costs nothing and
+comes back with the command that fixes it. Under `--format json` and `--format ndjson`, errors are
+also emitted to stderr as one compact JSON object:
+
+```json
+{"error": {"code": 2, "type": "UnknownService", "message": "Unknown service 'ec3'",
+           "hint": "Run: awsquery --list-services"}}
+```
+
+A successful run with nothing to report uses a `notice` key instead, so branching on the presence
+of `error` is safe.
+
+`AWS_REGION` is honoured as a fallback when `AWS_DEFAULT_REGION` is unset, since agents commonly set
+the former and plain boto3 ignores it.
+
+### Recommended agent workflow
+
+```bash
+awsquery --docs                                        # once, to learn the tool
+awsquery --schema -j ec2 describe-instances            # pick fields, no credentials needed
+awsquery --format csv --limit 50 \
+  ec2 describe-instances prod -- InstanceId Tags.Name State.Name   # one narrow query
+```
+
+Combined with `uvx`, an agent needs no install step at all: `uvx awsquery --docs`.
+
 ## Development
 
 ### Environment setup with uv
@@ -686,9 +811,11 @@ All filters in awsquery use **case-insensitive matching** with optional anchorin
 - No operators: matches values that CONTAIN the pattern (partial match)
 
 #### Value Filters (before `--`)
-- Match against ANY field in the response data
+- Match against ANY field in the response data - both the values **and the field names**
 - ALL specified filters must match (AND logic)
 - Case-insensitive matching with optional anchoring
+- Because names are searched too, a field name used as a value filter matches every resource
+  (`awsquery ec2 describe-instances InstanceId` returns everything). Column names belong after `--`
 
 ```bash
 # "prod" matches: "production", "prod-server", "my-prod-app" (contains)
@@ -711,6 +838,9 @@ awsquery ec2 describe-instances ^prod web$
 - Match against column/field names in the output
 - Case-insensitive matching with optional anchoring
 - Multiple columns can be specified
+- Anchors apply to the full flattened key (`Instances.0.State.Name`), not the displayed header, so
+  prefer suffix anchors (`State.Name$`) for nested fields - which is why the curated defaults in
+  `default_filters.yaml` are all `$`-anchored
 
 ```bash
 # "Instance" matches: "InstanceId", "InstanceType", "InstanceName" (contains)
@@ -722,8 +852,10 @@ awsquery ec2 describe-instances -- ^Instance
 # "Name$" matches: "InstanceName", "GroupName", "Tags.Name" (ends with)
 awsquery ec2 describe-instances -- Name$
 
-# "^State.Name$" matches: only exactly "State.Name" (exact match)
-awsquery ec2 describe-instances -- ^State.Name$
+# Anchors apply to the FULL flattened key, which includes list indices
+# (e.g. "Instances.0.State.Name"), so "^State.Name$" matches nothing here.
+# Use a suffix anchor for nested fields:
+awsquery ec2 describe-instances -- State.Name$
 
 # Multiple patterns
 awsquery ec2 describe-instances -- ^Instance Name$ State
@@ -800,7 +932,7 @@ awsquery elbv2 describe-tags -i desc-clus:clusterarn prod
 # Result limiting - control how many resources are processed (default: 10)
 awsquery ssm get-parameters -i ::5  # Limit to 5 parameters
 awsquery ec2 describe-instances -i ::20  # Limit to 20 instances
-awsquery s3api list-objects -i ::0  # Unlimited (remove default limit)
+awsquery s3 list-objects-v2 -i ::0  # Unlimited (remove default limit)
 
 # Field override without function (uses inferred function)
 awsquery ecs describe-tasks -i :clusterarn  # Extract ClusterArn field
