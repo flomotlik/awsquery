@@ -63,9 +63,13 @@ Output fields (213):
   ...
 ```
 
-**Turning a schema path into a column filter.** Do not paste the full path. At runtime every list
-level carries an index — the real flattened key is `Instances.0.State.Name` — so `Instances.State.Name`
-matches nothing. Filter on the trailing segments with a `$` anchor instead:
+**Turning a schema path into a column filter.** Paths are relative to the extracted data field, so
+they are often usable as-is: `iam list-roles` reports `RoleName`, and `-- RoleName$` works. But where
+a path crosses a *further* list level, that level carries an index at runtime — `ec2
+describe-instances` reports `Instances.State.Name` while the real flattened key is
+`Instances.0.State.Name`, so the literal path matches nothing.
+
+Anchoring on the trailing segments with `$` works in both cases, so prefer it:
 
 | Schema says | Use | Why |
 | --- | --- | --- |
@@ -73,8 +77,9 @@ matches nothing. Filter on the trailing segments with a `$` anchor instead:
 | `Instances.InstanceId` | `InstanceId$` | same |
 | — | `^Instances` | matches everything below that node |
 
-`^path$` exact-match only works for top-level scalar fields. That is why the curated defaults in
-`default_filters.yaml` are all `$`-anchored leaf names.
+`^path$` exact-match only works for fields with no list level above them. That is why the curated
+defaults in `default_filters.yaml` are all `$`-anchored leaf names — the one form that works
+regardless of how deeply the operation nests.
 
 **Tags are special.** AWS tag lists are converted at runtime into `Tags.<Key>` columns, so a tag
 becomes `Tags.Name$`, `Tags.Environment$` and so on. The schema cannot know your tag keys; it only
@@ -243,7 +248,12 @@ compact JSON object, with a `hint` naming the next command to run where one appl
 ```json
 {"error": {"code": 2, "type": "UnknownService", "message": "Unknown service 'ec3'",
            "hint": "Run: awsquery --list-services"}}
+{"error": {"code": 4, "type": "AccessDeniedException", "message": "...",
+           "hint": "Credentials are valid but lack permission for this operation; try a different profile or role"}}
 ```
+
+Exit 4 covers both halves of the identity problem, and the hint says which: re-authenticate, or use an
+identity with more permission. Retrying either is pointless, which is why neither is a code 3.
 
 A successful run that simply has nothing to report uses a different key, so branching on the
 presence of `error` is safe:

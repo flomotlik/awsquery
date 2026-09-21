@@ -16,7 +16,11 @@ from botocore.exceptions import (
 )
 
 from awsquery.errors import (
+    AUTH_CLIENT_ERROR_CODES,
+    AUTHENTICATION_CLIENT_ERROR_CODES,
+    AUTHORIZATION_CLIENT_ERROR_CODES,
     CREDENTIALS_HINT,
+    PERMISSIONS_HINT,
     REGION_HINT,
     ExitCode,
     classify_exception,
@@ -101,12 +105,27 @@ class TestClassifyException:
 
     @pytest.mark.parametrize(
         "exception",
-        [NoCredentialsError(), client_error("ExpiredToken")],
+        [
+            NoCredentialsError(),
+            client_error("ExpiredToken"),
+            client_error("ExpiredTokenException"),
+            client_error("SignatureDoesNotMatch"),
+        ],
     )
-    def test_auth_failures_suggest_credentials(self, exception):
+    def test_authentication_failures_suggest_credentials(self, exception):
         _, _, _, hint = classify_exception(exception)
 
         assert hint == CREDENTIALS_HINT
+
+    @pytest.mark.parametrize(
+        "code", ["AccessDenied", "AccessDeniedException", "UnauthorizedOperation"]
+    )
+    def test_authorization_failures_suggest_a_different_identity(self, code):
+        exit_code, error_type, _, hint = classify_exception(client_error(code))
+
+        assert exit_code == ExitCode.AUTH_ERROR
+        assert error_type == code
+        assert hint == PERMISSIONS_HINT
 
     def test_aws_errors_carry_no_hint(self):
         _, _, _, hint = classify_exception(client_error("Throttling"))
@@ -117,6 +136,22 @@ class TestClassifyException:
         code, _, _, _ = classify_exception(ClientError({}, "DescribeInstances"))
 
         assert code == ExitCode.AWS_ERROR
+
+
+class TestAuthErrorCodes:
+
+    def test_authentication_and_authorization_codes_are_disjoint(self):
+        assert not AUTHENTICATION_CLIENT_ERROR_CODES & AUTHORIZATION_CLIENT_ERROR_CODES
+
+    def test_combined_view_is_the_union_of_both_groups(self):
+        assert (
+            AUTH_CLIENT_ERROR_CODES
+            == AUTHENTICATION_CLIENT_ERROR_CODES | AUTHORIZATION_CLIENT_ERROR_CODES
+        )
+
+    def test_every_auth_code_still_exits_four(self):
+        for code in AUTH_CLIENT_ERROR_CODES:
+            assert classify_exception(client_error(code))[0] == ExitCode.AUTH_ERROR
 
 
 class TestEmitErrorHumanMode:

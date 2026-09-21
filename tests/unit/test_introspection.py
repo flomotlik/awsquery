@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from awsquery.formatters import filter_columns, flatten_dict_keys
 from awsquery.introspection import (
     build_schema,
     list_actions,
@@ -118,6 +119,27 @@ class TestBuildSchema:
 
         assert schema["filter_hint"].strip()
         assert "$" in schema["filter_hint"]
+
+    def test_filter_hint_stays_one_line(self):
+        schema = build_schema("ec2", "describe-instances")
+
+        assert "\n" not in schema["filter_hint"]
+
+    def test_schema_path_below_the_data_field_matches_real_keys(self):
+        schema = build_schema("iam", "list-roles")
+        flattened = flatten_dict_keys({"RoleName": "admin", "Arn": "arn:aws:iam::1:role/admin"})
+
+        assert "RoleName" in schema["output_fields"]
+        assert filter_columns(flattened, ["RoleName$"]) == {"RoleName": "admin"}
+        assert filter_columns(flattened, ["RoleName"]) == {"RoleName": "admin"}
+
+    def test_schema_path_crossing_a_list_level_needs_the_trailing_anchor(self):
+        schema = build_schema("ec2", "describe-instances")
+        flattened = flatten_dict_keys({"Instances": [{"State": {"Name": "running"}}]})
+
+        assert "Instances.State.Name" in schema["output_fields"]
+        assert filter_columns(flattened, ["Instances.State.Name"]) == {}
+        assert filter_columns(flattened, ["State.Name$"]) == {"Instances.0.State.Name": "running"}
 
     def test_required_parameters_are_reported(self):
         schema = build_schema("ec2", "describe-instance-attribute")

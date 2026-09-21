@@ -62,11 +62,10 @@ class ExitCode(IntEnum):
     AUTH_ERROR = 4
 
 
-# ClientError codes that mean "your identity is the problem", not "your request is"
-AUTH_CLIENT_ERROR_CODES = frozenset(
+# ClientError codes that mean the credentials themselves are missing, malformed or
+# expired: re-authenticating fixes them
+AUTHENTICATION_CLIENT_ERROR_CODES = frozenset(
     {
-        "AccessDenied",
-        "AccessDeniedException",
         "AuthFailure",
         "ExpiredToken",
         "ExpiredTokenException",
@@ -74,12 +73,28 @@ AUTH_CLIENT_ERROR_CODES = frozenset(
         "InvalidClientTokenId",
         "RequestExpired",
         "SignatureDoesNotMatch",
-        "UnauthorizedOperation",
         "UnrecognizedClientException",
     }
 )
 
+# ClientError codes that mean the credentials are fine but the principal lacks
+# permission: re-authenticating is a dead end, a different identity is needed
+AUTHORIZATION_CLIENT_ERROR_CODES = frozenset(
+    {
+        "AccessDenied",
+        "AccessDeniedException",
+        "UnauthorizedOperation",
+    }
+)
+
+# Either way the identity is the problem, not the request, so both exit AUTH_ERROR
+AUTH_CLIENT_ERROR_CODES = AUTHENTICATION_CLIENT_ERROR_CODES | AUTHORIZATION_CLIENT_ERROR_CODES
+
 CREDENTIALS_HINT = "Configure AWS credentials, or pass --profile"
+PERMISSIONS_HINT = (
+    "Credentials are valid but lack permission for this operation; "
+    "try a different profile or role"
+)
 REGION_HINT = "Set AWS_DEFAULT_REGION or AWS_REGION, or pass --region"
 SERVICE_LIST_HINT = "Run: awsquery --list-services"
 
@@ -166,7 +181,9 @@ def classify_exception(exc: BaseException) -> Tuple[ExitCode, str, str, Optional
         # The AWS error code is the machine-readable discriminator, not the class name
         aws_code = exc.response.get("Error", {}).get("Code", "")
         error_type = aws_code or error_type
-        if aws_code in AUTH_CLIENT_ERROR_CODES:
+        if aws_code in AUTHORIZATION_CLIENT_ERROR_CODES:
+            return ExitCode.AUTH_ERROR, error_type, str(exc), PERMISSIONS_HINT
+        if aws_code in AUTHENTICATION_CLIENT_ERROR_CODES:
             return ExitCode.AUTH_ERROR, error_type, str(exc), CREDENTIALS_HINT
         return ExitCode.AWS_ERROR, error_type, str(exc), None
 

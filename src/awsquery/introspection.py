@@ -29,9 +29,10 @@ MIN_TYPE_WIDTH = 16
 
 # Printed field paths are structural; runtime column filters see indexed keys
 FILTER_HINT = (
-    "Filter columns by the trailing segments with a $ anchor (State.Name$) - list levels "
-    "carry indices at runtime (Instances.0.State.Name), so full paths do not match; AWS Tags "
-    "become Tags.<Key> columns (Tags.Name$) and are absent from the field list below."
+    "Filter columns by the trailing segments with a $ anchor (State.Name$) - always matches; "
+    "paths crossing a further list level pick up an index at runtime "
+    "(Instances.0.State.Name), so the literal path fails there; AWS Tags become Tags.<Key> "
+    "columns (Tags.Name$) and are absent from the field list below."
 )
 
 
