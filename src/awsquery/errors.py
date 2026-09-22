@@ -25,6 +25,7 @@ from botocore.exceptions import (
     NoRegionError,
     PartialCredentialsError,
     ProfileNotFound,
+    RefreshWithMFAUnsupportedError,
     SSOError,
     TokenRetrievalError,
     UnknownServiceError,
@@ -49,7 +50,14 @@ AUTH_EXCEPTIONS = (
     ProfileNotFound,
     SSOError,  # covers UnauthorizedSSOTokenError and SSOTokenLoadError
     CredentialRetrievalError,
+    RefreshWithMFAUnsupportedError,
 )
+
+# botocore's RefreshableCredentials._protected_refresh raises a bare RuntimeError, not a
+# botocore.exceptions class, when a refresh returns credentials that are already past their
+# expiry - the usual shape of a stale SSO or STS session. Match its full phrasing: a bare
+# "expired" would also catch "the stack has expired" or a resource named expired-thing.
+EXPIRED_CREDENTIALS_MARKER = "refreshed credentials are still expired"
 
 
 class ExitCode(IntEnum):
@@ -159,6 +167,17 @@ def first_sentence(text: str) -> str:
     return head[: stop + 1] if stop != -1 else head
 
 
+def is_expired_credentials_error(exc: BaseException) -> bool:
+    """Whether exc is botocore's untyped expired-credentials RuntimeError.
+
+    Deliberately not looks_like_auth_failure: that heuristic reads strings scraped from
+    failed AWS calls, where a bare "credential" always means an auth failure. Applied to
+    an arbitrary exception it would reclassify our own bugs (a KeyError on a credentials
+    field, say) as "re-authenticate", so the exception path gets this narrower check.
+    """
+    return isinstance(exc, RuntimeError) and EXPIRED_CREDENTIALS_MARKER in str(exc).lower()
+
+
 def classify_exception(exc: BaseException) -> Tuple[ExitCode, str, str, Optional[str]]:
     """Map an exception to (exit code, type name, message, hint)."""
     error_type = type(exc).__name__
@@ -176,6 +195,9 @@ def classify_exception(exc: BaseException) -> Tuple[ExitCode, str, str, Optional
 
     if isinstance(exc, AUTH_EXCEPTIONS):
         return ExitCode.AUTH_ERROR, error_type, str(exc), CREDENTIALS_HINT
+
+    if is_expired_credentials_error(exc):
+        return ExitCode.AUTH_ERROR, "ExpiredCredentials", str(exc), CREDENTIALS_HINT
 
     if isinstance(exc, ClientError):
         # The AWS error code is the machine-readable discriminator, not the class name

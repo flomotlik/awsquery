@@ -1,6 +1,8 @@
 """Integration tests for session management with regions and profiles."""
 
+import json
 import os
+import sys
 from unittest.mock import Mock, call, patch
 
 import pytest
@@ -8,7 +10,22 @@ from botocore.exceptions import ClientError, NoCredentialsError, ProfileNotFound
 
 from awsquery.cli import main
 from awsquery.core import execute_aws_call, execute_multi_level_call
+from awsquery.errors import CREDENTIALS_HINT
 from awsquery.utils import create_session, get_client
+
+EXPIRED_REFRESH_MESSAGE = (
+    "Credentials were refreshed, but the refreshed credentials are still expired."
+)
+
+
+def session_with_expired_credentials():
+    """Session whose every client call raises botocore's expired-refresh RuntimeError."""
+    client = Mock()
+    client.get_paginator.side_effect = RuntimeError(EXPIRED_REFRESH_MESSAGE)
+    client.list_buckets.side_effect = RuntimeError(EXPIRED_REFRESH_MESSAGE)
+    session = Mock()
+    session.client.return_value = client
+    return session
 
 
 class TestSessionManagementIntegration:
@@ -240,6 +257,52 @@ class TestSessionErrorScenarios:
             # Second call with only profile should work
             session = create_session(profile="valid-profile")
             assert session is not None
+
+
+class TestExpiredSessionCredentials:
+    """AWS_SESSION_TOKEN past AWS_CREDENTIAL_EXPIRATION: botocore raises a bare RuntimeError."""
+
+    def test_call_exits_four_with_the_reauthenticate_hint(self, capsys):
+        with pytest.raises(SystemExit) as exc_info:
+            execute_aws_call("s3", "list-buckets", session=session_with_expired_credentials())
+
+        assert exc_info.value.code == 4
+        stderr = capsys.readouterr().err
+        assert EXPIRED_REFRESH_MESSAGE in stderr
+        assert f"Hint: {CREDENTIALS_HINT}" in stderr
+        assert "Unexpected error" not in stderr
+
+    def test_cli_table_mode_prints_the_hint(self, capsys):
+        argv = ["awsquery", "s3", "list-buckets"]
+        with patch("boto3.Session", return_value=session_with_expired_credentials()):
+            with patch.object(sys, "argv", argv):
+                with pytest.raises(SystemExit) as exc_info:
+                    main()
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 4
+        assert f"ERROR: {EXPIRED_REFRESH_MESSAGE}" in captured.err
+        assert f"Hint: {CREDENTIALS_HINT}" in captured.err
+        assert captured.out == ""
+
+    def test_cli_json_mode_reports_the_expired_credentials_type(self, capsys):
+        argv = ["awsquery", "--format", "json", "s3", "list-buckets"]
+        with patch("boto3.Session", return_value=session_with_expired_credentials()):
+            with patch.object(sys, "argv", argv):
+                with pytest.raises(SystemExit) as exc_info:
+                    main()
+
+        captured = capsys.readouterr()
+        assert exc_info.value.code == 4
+        assert json.loads(captured.err) == {
+            "error": {
+                "code": 4,
+                "type": "ExpiredCredentials",
+                "message": EXPIRED_REFRESH_MESSAGE,
+                "hint": CREDENTIALS_HINT,
+            }
+        }
+        assert captured.out == ""
 
 
 class TestSessionEnvironmentIntegration:

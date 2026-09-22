@@ -2,16 +2,20 @@
 
 import ast
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
+from botocore.credentials import RefreshableCredentials
 from botocore.exceptions import (
     ClientError,
+    CredentialRetrievalError,
     EndpointConnectionError,
     NoCredentialsError,
     NoRegionError,
     ParamValidationError,
     PartialCredentialsError,
+    RefreshWithMFAUnsupportedError,
     TokenRetrievalError,
 )
 
@@ -20,6 +24,7 @@ from awsquery.errors import (
     AUTHENTICATION_CLIENT_ERROR_CODES,
     AUTHORIZATION_CLIENT_ERROR_CODES,
     CREDENTIALS_HINT,
+    EXPIRED_CREDENTIALS_MARKER,
     PERMISSIONS_HINT,
     REGION_HINT,
     ExitCode,
@@ -27,9 +32,14 @@ from awsquery.errors import (
     emit_error,
     emit_notice,
     fail,
+    is_expired_credentials_error,
     looks_like_auth_failure,
     set_structured_errors,
     structured_errors_enabled,
+)
+
+BOTOCORE_EXPIRED_REFRESH = (
+    "Credentials were refreshed, but the refreshed credentials are still expired."
 )
 
 
@@ -70,6 +80,9 @@ class TestClassifyException:
                 ExitCode.AUTH_ERROR,
             ),
             (TokenRetrievalError(provider="sso", error_msg="token expired"), ExitCode.AUTH_ERROR),
+            (CredentialRetrievalError(provider="sso", error_msg="boom"), ExitCode.AUTH_ERROR),
+            (RefreshWithMFAUnsupportedError(), ExitCode.AUTH_ERROR),
+            (RuntimeError(BOTOCORE_EXPIRED_REFRESH), ExitCode.AUTH_ERROR),
             (NoRegionError(), ExitCode.AUTH_ERROR),
             (client_error("AuthFailure"), ExitCode.AUTH_ERROR),
             (client_error("UnauthorizedOperation"), ExitCode.AUTH_ERROR),
@@ -107,6 +120,8 @@ class TestClassifyException:
         "exception",
         [
             NoCredentialsError(),
+            RefreshWithMFAUnsupportedError(),
+            RuntimeError(BOTOCORE_EXPIRED_REFRESH),
             client_error("ExpiredToken"),
             client_error("ExpiredTokenException"),
             client_error("SignatureDoesNotMatch"),
@@ -136,6 +151,71 @@ class TestClassifyException:
         code, _, _, _ = classify_exception(ClientError({}, "DescribeInstances"))
 
         assert code == ExitCode.AWS_ERROR
+
+
+def expired_refreshable_credentials():
+    """Real botocore credentials whose refresh hands back an already-expired set."""
+    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    metadata = {"access_key": "AK", "secret_key": "SK", "token": "TK", "expiry_time": past}
+    return RefreshableCredentials.create_from_metadata(
+        metadata=metadata, refresh_using=lambda: dict(metadata), method="sts-assume-role"
+    )
+
+
+class TestExpiredCredentialsRuntimeError:
+
+    def test_botocore_raises_a_bare_runtime_error(self):
+        with pytest.raises(RuntimeError) as exc_info:
+            expired_refreshable_credentials().get_frozen_credentials()
+
+        assert type(exc_info.value) is RuntimeError
+        assert str(exc_info.value) == BOTOCORE_EXPIRED_REFRESH
+
+    def test_real_botocore_failure_exits_four_with_the_credentials_hint(self):
+        with pytest.raises(RuntimeError) as exc_info:
+            expired_refreshable_credentials().get_frozen_credentials()
+
+        code, error_type, message, hint = classify_exception(exc_info.value)
+
+        assert code == ExitCode.AUTH_ERROR
+        assert error_type == "ExpiredCredentials"
+        assert message == BOTOCORE_EXPIRED_REFRESH
+        assert hint == CREDENTIALS_HINT
+
+    def test_marker_still_matches_the_installed_botocore_phrasing(self):
+        assert EXPIRED_CREDENTIALS_MARKER in BOTOCORE_EXPIRED_REFRESH.lower()
+
+    def test_matching_is_case_insensitive(self):
+        assert is_expired_credentials_error(RuntimeError(BOTOCORE_EXPIRED_REFRESH.upper())) is True
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "The stack has expired",
+            "Stack prod-expired-thing does not exist",
+            "expired",
+            "An error occurred (ExpiredThing) when calling DescribeExpiredThings",
+            "refreshed credentials are fine",
+            "credentials are still valid",
+            "",
+        ],
+    )
+    def test_other_runtime_errors_stay_general_errors(self, text):
+        exc = RuntimeError(text)
+        code, error_type, _, hint = classify_exception(exc)
+
+        assert is_expired_credentials_error(exc) is False
+        assert code == ExitCode.ERROR
+        assert error_type == "RuntimeError"
+        assert hint is None
+
+    def test_the_narrow_check_does_not_fall_back_to_the_keys_heuristic(self):
+        # looks_like_auth_failure reads strings scraped from failed AWS calls, where a bare
+        # "credential" means auth; on an arbitrary exception it would mislabel our own bugs
+        exc = KeyError("credentials")
+
+        assert looks_like_auth_failure(str(exc)) is True
+        assert classify_exception(exc)[0] == ExitCode.ERROR
 
 
 class TestAuthErrorCodes:
@@ -330,6 +410,7 @@ class TestLooksLikeAuthFailure:
             "Error when retrieving token from sso: Token has expired",
             "UnauthorizedSSOTokenError: the SSO token is invalid",
             "The config profile (dev) could not be found",
+            BOTOCORE_EXPIRED_REFRESH,
         ],
     )
     def test_auth_related_messages_match(self, text):
@@ -347,6 +428,8 @@ class TestLooksLikeAuthFailure:
             "An error occurred (InvalidAssociationID.NotFound) when calling DescribeAssociation",
             "Stack with id foo could not be found",
             "The SSO directory has no matching user",
+            "The stack has expired",
+            "Stack prod-expired-thing does not exist",
         ],
     )
     def test_unrelated_messages_do_not_match(self, text):
