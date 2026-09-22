@@ -69,17 +69,22 @@ a path crosses a *further* list level, that level carries an index at runtime �
 describe-instances` reports `Instances.State.Name` while the real flattened key is
 `Instances.0.State.Name`, so the literal path matches nothing.
 
-Anchoring on the trailing segments with `$` works in both cases, so prefer it:
+Pick the filter from the shape of the path:
 
-| Schema says | Use | Why |
+| Schema path | Use | Why |
 | --- | --- | --- |
-| `Instances.State.Name` | `State.Name$` | suffix anchor ignores the `Instances.0.` prefix |
-| `Instances.InstanceId` | `InstanceId$` | same |
-| — | `^Instances` | matches everything below that node |
+| `RoleName` (no dots) | `^RoleName$` | exact — selects that column and nothing else |
+| `Instances.State.Name` (crosses a list) | `State.Name$` | suffix anchor ignores the `Instances.0.` prefix |
+| anything below one node | `^Instances` | matches everything under it |
 
-`^path$` exact-match only works for fields with no list level above them. That is why the curated
-defaults in `default_filters.yaml` are all `$`-anchored leaf names — the one form that works
-regardless of how deeply the operation nests.
+`$` alone is the safe fallback when you are unsure, but it is a *suffix* match, so it also catches
+same-named fields nested elsewhere: on `rds describe-db-instances`, `DBInstanceIdentifier$` returns
+both `DBInstanceIdentifier` and `PendingModifiedValues.DBInstanceIdentifier`. When the schema path
+has no dots, `^…$` gives you exactly the one column.
+
+`^path$` only matches when the path has no list level above it — which is why the curated defaults
+in `default_filters.yaml` are `$`-anchored leaf names: that form works regardless of nesting, at the
+cost of occasionally pulling in a same-named nested sibling.
 
 **Tags are special.** AWS tag lists are converted at runtime into `Tags.<Key>` columns, so a tag
 becomes `Tags.Name$`, `Tags.Environment$` and so on. The schema cannot know your tag keys; it only
