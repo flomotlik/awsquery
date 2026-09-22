@@ -13,10 +13,13 @@ from awsquery.cli import determine_column_filters
 from awsquery.config import (
     apply_default_filters,
     get_default_columns,
+    load_data_fields,
     load_default_actions,
     load_default_filters,
 )
+from awsquery.formatters import flatten_response
 from awsquery.security import is_readonly_operation
+from awsquery.shapes import ShapeCache
 
 # Cache can be persistent since we use real config file
 
@@ -330,6 +333,52 @@ class TestDetermineColumnFiltersAdditive:
         )
         assert "InstanceId" in result
         assert "+InstanceId" not in result
+
+
+def _data_field_overrides():
+    """Every entry of data_fields.yaml as (service, action, field)."""
+    return sorted(
+        (service, action, field)
+        for service, actions in load_data_fields().items()
+        for action, field in actions.items()
+    )
+
+
+class TestDataFieldOverrides:
+    """Per-entry validation guard for src/awsquery/data_fields.yaml."""
+
+    @pytest.mark.parametrize("service,action,field", _data_field_overrides())
+    def test_override_names_a_list_member_of_the_service_model(self, service, action, field):
+        shape = ShapeCache().get_operation_shape(service, action)
+
+        assert shape is not None, f"{service} {action} has no output shape"
+        assert field in shape.members, f"{service} {action} has no member {field}"
+        assert shape.members[field].type_name == "list"
+
+    @pytest.mark.parametrize("service,action,field", _data_field_overrides())
+    def test_override_wins_over_the_shape_heuristic(self, service, action, field):
+        data_field, _, _ = ShapeCache().get_response_fields(service, action)
+
+        assert data_field == field
+
+    @pytest.mark.parametrize("service,action,field", _data_field_overrides())
+    def test_two_records_stay_two_resources(self, service, action, field):
+        response = {field: [{"Probe": "first"}, {"Probe": "second"}], "Wrapper": "ignored"}
+
+        result = flatten_response(response, service, action)
+
+        assert [item["Probe"] for item in result] == ["first", "second"]
+
+    @pytest.mark.parametrize("service,action", [(s, a) for s, a, _ in _data_field_overrides()])
+    def test_override_key_matches_the_curated_filters(self, service, action):
+        assert action in load_default_filters().get(service, {})
+
+    def test_stale_override_falls_back_to_the_shape(self):
+        cache = ShapeCache()
+        shape = cache.get_operation_shape("s3", "get-bucket-acl")
+
+        with patch("awsquery.shapes.get_data_field_override", return_value="RemovedMember"):
+            assert cache.identify_data_field(shape, "s3", "get-bucket-acl") is None
 
 
 class TestDefaultActionsMap:

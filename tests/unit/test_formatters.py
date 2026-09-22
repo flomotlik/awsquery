@@ -179,6 +179,69 @@ class TestFlattenSingleResponse:
         assert "development-assets" in bucket_names
 
 
+class TestSingleObjectResponses:
+    # A Get/Describe of one object must not be reduced to whichever list it carries.
+
+    FUNCTION = {
+        "FunctionName": "my-fn",
+        "Runtime": "python3.12",
+        "MemorySize": 512,
+        "Timeout": 30,
+        "Handler": "app.handler",
+        "FunctionArn": "arn:aws:lambda:eu-west-1:111111111111:function:my-fn",
+    }
+
+    def test_nested_list_does_not_replace_the_object(self):
+        response = dict(self.FUNCTION, Layers=[{"Arn": "arn:layer:1", "CodeSize": 1024}])
+
+        result = flatten_response(response, "lambda", "get-function-configuration")
+
+        assert len(result) == 1
+        assert result[0]["FunctionName"] == "my-fn"
+        assert result[0]["Layers"] == [{"Arn": "arn:layer:1", "CodeSize": 1024}]
+
+    @pytest.mark.parametrize("layers", [None, [{"Arn": "arn:layer:1", "CodeSize": 1024}]])
+    def test_default_columns_render_with_and_without_a_layer(self, layers):
+        response = dict(self.FUNCTION)
+        if layers is not None:
+            response["Layers"] = layers
+
+        result = flatten_response([response], "lambda", "get-function-configuration")
+        table = format_table_output(result, ["FunctionName$", "Runtime$", "MemorySize$"])
+
+        assert "my-fn" in table
+        assert "python3.12" in table
+        assert "512" in table
+
+    def test_response_metadata_is_still_dropped(self):
+        response = dict(self.FUNCTION, ResponseMetadata={"RequestId": "abc"})
+
+        result = flatten_response(response, "lambda", "get-function-configuration")
+
+        assert "ResponseMetadata" not in result[0]
+
+    def test_sibling_lists_all_survive(self):
+        response = {
+            "TopicConfigurations": [{"Id": "topic", "TopicArn": "arn:topic"}],
+            "QueueConfigurations": [{"Id": "queue", "QueueArn": "arn:queue"}],
+        }
+
+        result = flatten_response(response, "s3", "get-bucket-notification-configuration")
+
+        assert len(result) == 1
+        assert result[0]["QueueConfigurations"][0]["QueueArn"] == "arn:queue"
+
+    def test_collection_response_still_yields_one_row_per_item(self):
+        response = {
+            "Buckets": [{"Name": "one"}, {"Name": "two"}],
+            "Owner": {"DisplayName": "me"},
+        }
+
+        result = flatten_response(response, "s3", "list-buckets")
+
+        assert [bucket["Name"] for bucket in result] == ["one", "two"]
+
+
 class TestFlattenDictKeys:
 
     def test_flatten_dict_keys_simple_dict(self):

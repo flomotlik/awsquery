@@ -314,14 +314,23 @@ def flatten_single_response(response, service: str, operation: str):
             )  # pragma: no mutate
             return [data_value]
     else:
-        # Shape didn't identify data field - apply simple extraction
-        debug_print(
-            f"No data field identified for {service}:{operation}, using simple extraction"
-        )  # pragma: no mutate
         # Remove ResponseMetadata
         filtered = {k: v for k, v in response.items() if k != "ResponseMetadata"}
         if not filtered:
             return []
+
+        if data_field is None and shape_cache.get_operation_shape(service, operation) is not None:
+            # The shape names no collection, so the response is one resource and its
+            # nested lists are its children - extracting one of them would drop the rest.
+            debug_print(
+                f"Shape-aware extraction: {service}:{operation} returns a single object"
+            )  # pragma: no mutate
+            return [filtered]
+
+        # Shape didn't identify data field - apply simple extraction
+        debug_print(
+            f"No data field identified for {service}:{operation}, using simple extraction"
+        )  # pragma: no mutate
 
         # Simple heuristic: extract list fields
         list_fields = [(k, v) for k, v in filtered.items() if isinstance(v, list)]

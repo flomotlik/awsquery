@@ -1,0 +1,31 @@
+# Response members that hold the resources, for operations where the name cannot say so.
+#
+# shapes.identify_data_field() reads a Get/Describe of a singular noun as "one object"
+# and renders that object, which is what you want for lambda get-function-configuration
+# or sagemaker describe-notebook-instance. A few operations look identical in the service
+# model but are really a thin wrapper around one collection: s3 get-bucket-lifecycle-
+# configuration is a list of rules, codepipeline get-pipeline-state is a list of stages.
+# Nothing in the shape separates the two classes, so those exceptions are named here.
+#
+# Add an entry when the command prints a single row whose cells carry comma-joined values
+# from independent records ("expire-logs, archive" under ID) - that means per-record
+# correspondence was lost. The value is the response member holding those records; check
+# it against `awsquery <service> <action> --schema`. Entries are verified against the
+# service model by the test suite, so a member that stops existing fails a test rather
+# than silently doing nothing.
+#
+# Keys are service, then action in snake_case, as in default_filters.yaml.
+
+ce:
+  get_cost_and_usage: ResultsByTime
+  get_cost_forecast: ForecastResultsByTime
+  get_reservation_utilization: UtilizationsByTime
+codepipeline:
+  get_pipeline_state: stageStates
+s3:
+  get_bucket_acl: Grants
+  get_bucket_lifecycle_configuration: Rules
+ses:
+  describe_configuration_set: EventDestinations
+xray:
+  get_service_graph: Services

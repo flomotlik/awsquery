@@ -79,7 +79,13 @@ Changelog = "https://github.com/flomotlik/awsquery/releases"
 where = ["src"]
 
 [tool.setuptools.package-data]
-awsquery = ["policy.json", "default_filters.yaml", "default_actions.yaml", "agent-reference.md"]
+awsquery = [
+    "policy.json",
+    "default_filters.yaml",
+    "default_actions.yaml",
+    "data_fields.yaml",
+    "agent-reference.md",
+]
 
 [tool.black]
 line-length = 100

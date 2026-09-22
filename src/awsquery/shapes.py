@@ -4,13 +4,105 @@ This module provides shape-aware response parsing using boto3's service model
 introspection to validate filters and identify data fields before making API calls.
 """
 
-from typing import Dict, Optional, Tuple
+import re
+from typing import Dict, List, Optional, Tuple
 
 from botocore.loaders import Loader
 from botocore.model import ServiceModel
 
 from .case_utils import to_pascal_case
+from .config import get_data_field_override
 from .utils import debug_print, simplify_key
+
+# Response members that carry pagination or protocol state, never resource data.
+METADATA_FIELDS = frozenset(
+    {
+        "ResponseMetadata",
+        "NextMarker",
+        "NextToken",
+        "IsTruncated",
+        "Marker",
+        "HasMoreDeliveryStreams",
+        "MaxResults",
+    }
+)
+
+# Verbs AWS puts in front of the noun an operation acts on.
+_OPERATION_VERBS = (
+    "BatchDescribe",
+    "BatchGet",
+    "Describe",
+    "Estimate",
+    "Generate",
+    "Lookup",
+    "Retrieve",
+    "Search",
+    "Simulate",
+    "Preview",
+    "Query",
+    "Scan",
+    "List",
+    "Get",
+)
+
+# Verbs that promise a collection whatever the noun looks like (ListObjectsV2 -> Contents).
+_COLLECTION_VERBS = ("List", "Search", "Scan", "Query", "Lookup")
+
+_WORD_BOUNDARY = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+_VERSION_SUFFIX = re.compile(r"V\d+$")
+
+
+def _split_verb(operation: str) -> Tuple[str, str]:
+    """Split an operation name into its leading verb and the noun it acts on.
+
+    A bare verb (dynamodb Scan, kendra Query) leaves no noun.
+    """
+    for verb in _OPERATION_VERBS:
+        if operation.startswith(verb):
+            return verb, operation[len(verb) :]
+    return "", operation
+
+
+def _singularize(word: str) -> str:
+    """Crude English singular, enough to line up member names with operation nouns."""
+    if word.endswith("ies") and len(word) > 4:
+        return word[:-3] + "y"
+    if word.endswith(("ses", "xes", "zes", "ches", "shes")):
+        return word[:-2]
+    if word.endswith("s") and not word.endswith(("ss", "us", "sis")):
+        return word[:-1]
+    return word
+
+
+def _words(name: str) -> List[str]:
+    """Split a camel/pascal name into lowercase words, with the last one singularized."""
+    words = [w.lower() for w in _WORD_BOUNDARY.split(_VERSION_SUFFIX.sub("", name)) if w]
+    if words:
+        words[-1] = _singularize(words[-1])
+    return words
+
+
+def _is_plural(word: str) -> bool:
+    """True when the trailing noun reads as a plural (Stacks, Policies, Addresses)."""
+    words = [w.lower() for w in _WORD_BOUNDARY.split(_VERSION_SUFFIX.sub("", word)) if w]
+    return bool(words) and _singularize(words[-1]) != words[-1]
+
+
+def _names_the_same_thing(noun: str, member: str) -> bool:
+    """True when a list member name refers to the noun the operation is named after.
+
+    Matching is by trailing words, so ListBuckets/Buckets and DescribeDimensionKeys/Keys
+    line up while GetType/directParentTypes does not: a member that merely ends in a
+    one-word noun describes something else the object points at.
+    """
+    op_words, member_words = _words(noun), _words(member)
+    if not op_words or not member_words:
+        return False
+    if op_words == member_words:
+        return True
+    if len(member_words) < len(op_words):
+        return op_words[-len(member_words) :] == member_words
+    return len(op_words) > 1 and member_words[-len(op_words) :] == op_words
 
 
 class ShapeCache:
@@ -101,7 +193,7 @@ class ShapeCache:
         if not output_shape:
             return None, {}, {}
 
-        data_field = self.identify_data_field(output_shape)
+        data_field = self.identify_data_field(output_shape, service, operation)
         all_fields = self._flatten_shape(output_shape)
 
         # Adjust paths if there's a data field that gets extracted
@@ -150,42 +242,62 @@ class ShapeCache:
 
         return data_field, simplified_fields, all_fields
 
-    def identify_data_field(self, shape) -> Optional[str]:
-        """Identify the main data field (vs metadata fields).
+    def identify_data_field(self, shape, service: str, operation: str) -> Optional[str]:
+        """Identify the member holding the resources, or None when the response is one object.
+
+        A list member only holds "the resources" when the response *is* a collection.
+        A response that is a single object (GetFunctionConfiguration) merely *contains*
+        lists, and picking one of them throws the object's own fields away. The operation
+        name decides: a list named after the operation noun is the collection
+        (ListBuckets -> Buckets), and so is any list under a collection verb or a plural
+        noun (ListObjectsV2 -> Contents, DescribeInstances -> Reservations).
+
+        Operations whose object is only a wrapper around one collection are indistinguishable
+        in the service model, so data_fields.yaml names them.
 
         Args:
             shape: Botocore shape object
+            service: AWS service name, for the data_fields.yaml lookup
+            operation: Operation name - the shape alone cannot tell a collection from an
+                object, so this is required
 
         Returns:
-            Field name containing main data, or None if cannot determine
+            Field name containing main data, or None if the response is a single object
         """
         if not shape or not hasattr(shape, "members") or not shape.members:
             return None
 
-        # Skip known metadata fields
-        metadata_fields = {
-            "ResponseMetadata",
-            "NextMarker",
-            "NextToken",
-            "IsTruncated",
-            "Marker",
-            "HasMoreDeliveryStreams",
-            "MaxResults",
-        }
-        data_fields = {k: v for k, v in shape.members.items() if k not in metadata_fields}
+        override = get_data_field_override(service, operation)
+        if override:
+            if override in shape.members:
+                return str(override)
+            debug_print(
+                f"data_fields.yaml names '{override}' for {service}:{operation}, "
+                f"which the service model no longer has - falling back to the shape"
+            )  # pragma: no mutate
 
-        # Look for list fields first (most common pattern)
-        list_fields = [(k, v) for k, v in data_fields.items() if v.type_name == "list"]
+        data_fields = {k: v for k, v in shape.members.items() if k not in METADATA_FIELDS}
+        list_fields: List[str] = [k for k, v in data_fields.items() if v.type_name == "list"]
 
-        if len(list_fields) == 1:
-            return str(list_fields[0][0])
-        elif len(list_fields) > 1:
-            # Multiple lists - return first
-            return str(list_fields[0][0])
-        elif len(data_fields) == 1:
-            # Single non-list field
-            return str(list(data_fields.keys())[0])
+        if not list_fields:
+            # Single non-list field is the payload; several mean the response is the object.
+            return str(next(iter(data_fields))) if len(data_fields) == 1 else None
 
+        if len(data_fields) == 1:
+            # Nothing but the list, so there is no object to lose.
+            return list_fields[0]
+
+        verb, noun = _split_verb(to_pascal_case(operation))
+
+        for member in list_fields:
+            if _names_the_same_thing(noun, member):
+                return member
+
+        if verb in _COLLECTION_VERBS or _is_plural(noun):
+            return list_fields[0]
+
+        # A single object that happens to carry child collections.
+        debug_print(f"{operation}: response is a single object, keeping its own fields")
         return None
 
     def _flatten_shape(
