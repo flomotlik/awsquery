@@ -453,28 +453,36 @@ def _sample_for_shape(shape, depth=0, path=()):
     return _STRING_VALUE
 
 
-def _runtime_keys(service, action):
-    """The flat keys one rendered resource of service.action really carries.
+def _runtime_shape(service, action):
+    """What one rendered resource of service.action really looks like.
 
-    Returns (keys, map_backed_containers), and empty keys when the operation
-    cannot be sampled at all: the payload is a bare map whose keys are account
-    data (iam get-account-summary renders its columns out of SummaryMap), a list
-    of primitives, or the service model has no output shape for it.
+    Returns (kind, keys, map_containers) where kind is one of:
+      "fields"  - a structure whose flat keys are `keys`
+      "strings" - bare strings, which render under the single key `value`
+      "map"     - a map whose keys are account data rather than model
+                  (iam get-account-summary renders its columns out of SummaryMap)
+      "unknown" - no output shape, or nothing the sampler can render
+
+    `map_containers` names the members holding such a map. Their keys are
+    unknowable, so a column drilling through one is left alone - but a column
+    naming the container itself never reaches a key inside it.
     """
     shape = get_shape_cache().get_operation_shape(service, action)
     if shape is None:
-        return (), ()
+        return "unknown", (), ()
     sample = _sample_for_shape(shape)
     if not isinstance(sample, dict):
-        return (), ()
+        return "unknown", (), ()
     # Pagination state is stripped long before anything renders, so never a column.
     sample = {name: value for name, value in sample.items() if name not in METADATA_FIELDS}
     resources = flatten_response(sample, service, action)
-    if not resources or not isinstance(resources[0], dict):
-        return (), ()
+    if not resources:
+        return "unknown", (), ()
+    if not isinstance(resources[0], dict):
+        return "strings", ("value",), ()
     keys = list(flatten_dict_keys(resources[0]))
     if keys == ["value"]:
-        return (), ()
+        return "strings", ("value",), ()
 
     static, containers = [], set()
     for key in keys:
@@ -483,15 +491,23 @@ def _runtime_keys(service, action):
         if not dynamic:
             static.append(key)
             continue
-        containers.update(s for s in segments[: dynamic[0]] if not s.isdigit())
-    return tuple(static), tuple(sorted(containers))
+        named = [segment for segment in segments[: dynamic[0]] if not segment.isdigit()]
+        if not named:
+            return "map", (), ()
+        containers.add(named[-1])
+    return "fields", tuple(static), tuple(sorted(containers))
 
 
 def _column_complaint(column, keys, containers):
     """Say why this column filter is wrong for these runtime keys, or None."""
     pattern, mode = parse_filter_pattern(column)
-    if any(segment in containers for segment in pattern.split(".")):
+    segments = pattern.split(".")
+    if any(segment in containers for segment in segments[:-1]):
         return None  # drills into a map, whose keys are data rather than model
+    if segments[-1] in containers:
+        if mode in ("suffix", "exact"):
+            return f"'{column}' names the map '{segments[-1]}', never a key inside it"
+        return None  # unanchored, so it still reaches the keys inside that map
 
     matches = [key for key in keys if matches_pattern(key, pattern, mode)]
     if not matches:
@@ -515,6 +531,13 @@ def _column_complaint(column, keys, containers):
     return f"'{column}' matches {matches}; anchor it as '^{shallowest}$'"
 
 
+def _string_list_complaints(columns):
+    """A response of bare strings renders one column, and it is always 'value'."""
+    if columns == ["value$"]:
+        return ()
+    return (f"a list of bare strings renders ['value$'], not {columns}",)
+
+
 @lru_cache(maxsize=1)
 def _default_filter_complaints():
     """Audit every curated column against the response it will really render.
@@ -525,15 +548,16 @@ def _default_filter_complaints():
     complaints = {}
     for service, actions in load_default_filters().items():
         for action, config in actions.items():
-            keys, containers = _runtime_keys(service, action)
-            if not keys:
+            kind, keys, containers = _runtime_shape(service, action)
+            columns = config.get("columns") or []
+            if kind == "strings":
+                complaints[(service, action)] = _string_list_complaints(columns)
+                continue
+            if kind != "fields":
                 continue
             complaints[(service, action)] = tuple(
                 complaint
-                for complaint in (
-                    _column_complaint(column, keys, containers)
-                    for column in config.get("columns") or []
-                )
+                for complaint in (_column_complaint(column, keys, containers) for column in columns)
                 if complaint
             )
     return complaints
@@ -561,13 +585,21 @@ class TestDefaultColumnsSelectRealFields:
         audited = len(_default_filter_complaints())
         total = len(_default_filter_entries())
 
-        assert audited >= total * 0.85, f"only {audited} of {total} entries were sampled"
+        assert audited >= total * 0.95, f"only {audited} of {total} entries were sampled"
 
     def test_a_map_backed_response_is_left_alone(self):
-        keys, _ = _runtime_keys("iam", "get_account_summary")
+        kind, keys, _ = _runtime_shape("iam", "get_account_summary")
 
-        assert keys == ()
+        assert (kind, keys) == ("map", ())
         assert _default_filter_complaints().get(("iam", "get_account_summary")) is None
+
+    def test_a_string_list_response_is_held_to_its_one_column(self):
+        kind, keys, _ = _runtime_shape("ecs", "list_clusters")
+
+        assert (kind, keys) == ("strings", ("value",))
+        assert _string_list_complaints(["value$"]) == ()
+        assert _string_list_complaints([]) != ()
+        assert _string_list_complaints(["value$", "nextToken$"]) != ()
 
     def test_a_column_naming_no_field_is_reported(self):
         complaint = _column_complaint("NoSuchField$", ("StackName", "StackId"), ())
@@ -592,6 +624,15 @@ class TestDefaultColumnsSelectRealFields:
 
     def test_a_column_drilling_into_a_map_is_accepted(self):
         assert _column_complaint("Tags.Name$", ("InstanceId",), ("Tags",)) is None
+
+    def test_a_column_naming_a_map_container_is_reported(self):
+        complaint = _column_complaint("Tags$", ("InstanceId",), ("Tags",))
+
+        assert complaint is not None
+        assert "names the map 'Tags'" in complaint
+
+    def test_an_unanchored_map_container_is_accepted(self):
+        assert _column_complaint("Tags", ("InstanceId",), ("Tags",)) is None
 
 
 class TestYAMLConfigurationStructure:

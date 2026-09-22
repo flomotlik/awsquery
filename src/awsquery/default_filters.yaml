@@ -61,7 +61,6 @@ apigateway:
     - parentId$
     - path$
     - pathPart$
-    - resourceMethods$
   get_rest_apis:
     columns:
     - name$
@@ -175,7 +174,7 @@ appsync:
     - name$
     - apiId$
     - ^authenticationType$
-    - uris$
+    - uris
   list_resolvers:
     columns:
     - dataSourceName$
@@ -216,10 +215,10 @@ athena:
     columns:
     - Name$
     - Description$
-    - Parameters$
+    - Parameters
   list_query_executions:
     columns:
-    - NextToken$
+    - value$
   list_table_metadata:
     columns:
     - ^Name$
@@ -276,7 +275,6 @@ backup:
     - VersionId$
     - BackupPlanArn$
     - ResourceType$
-    - AdvancedBackupSettings$
   list_backup_vaults:
     columns:
     - BackupVaultName$
@@ -300,7 +298,6 @@ batch:
   describe_compute_environments:
     columns:
     - computeEnvironmentName$
-    - computeResources$
     - desiredvCpus$
     - imageId$
     - ^type$
@@ -312,7 +309,6 @@ batch:
   list_jobs:
     columns:
     - JobId$
-    - arrayProperties$
     - container
     - exitCode$
     - createdAt$
@@ -332,7 +328,6 @@ budgets:
     - BudgetType$
     - IncludeDiscount$
     - BudgetLimit
-    - PlannedBudgetLimits$
   describe_budget_performance_history:
     columns:
     - BillingViewArn$
@@ -354,11 +349,10 @@ budgets:
 ce:
   get_cost_and_usage:
     columns:
-    - Groups$
     - Keys
-    - Metrics$
+    - Metrics
     - End$
-    - Total$
+    - Total
   get_cost_forecast:
     columns:
     - MeanValue$
@@ -450,7 +444,7 @@ cloudformation:
     - Value$
   list_imports:
     columns:
-    - NextToken$
+    - value$
   list_stack_resources:
     columns:
     - LogicalResourceId$
@@ -553,7 +547,7 @@ cloudwatch:
     - SampleCount$
     - Timestamp$
     - Average$
-    - ExtendedStatistics$
+    - ExtendedStatistics
     - Maximum$
     - Minimum$
     - Sum$
@@ -608,7 +602,6 @@ codecommit:
   list_branches:
     columns:
     - value$
-    - nextToken$
   list_repositories:
     columns:
     - repositoryId$
@@ -636,7 +629,6 @@ codepipeline:
     columns:
     - actionExecutionId$
     - actionName$
-    - configuration$
     - pipelineExecutionId$
     - roleArn$
     - stageName$
@@ -761,12 +753,10 @@ dynamodb:
     - RegionName$
     - ReplicationGroup
   list_tables:
-    columns: []
-  list_tags_of_resource:
     columns:
-    - NextToken$
-    - Key$
-    - Value$
+    - value$
+  list_tags_of_resource:
+    columns: []
 ec2:
   describe_availability_zones:
     columns:
@@ -1037,7 +1027,6 @@ ecs:
   list_container_instances:
     columns:
     - value$
-    - nextToken$
   list_services:
     columns:
     - value$
@@ -1078,7 +1067,8 @@ efs:
     - TransitionToArchive$
     - TransitionToIA$
   describe_mount_target_security_groups:
-    columns: []
+    columns:
+    - value$
   describe_mount_targets:
     columns:
     - ^FileSystemId$
@@ -1126,7 +1116,7 @@ eks:
     - value$
   list_clusters:
     columns:
-    - value
+    - value$
   list_fargate_profiles:
     columns:
     - value$
@@ -1321,7 +1311,7 @@ firehose:
     - MSKClusterARN$
   list_delivery_streams:
     columns:
-    - HasMoreDeliveryStreams$
+    - value$
 fsx:
   describe_backups:
     columns:
@@ -1372,7 +1362,6 @@ glue:
     - AuthenticationType$
     - ConnectionType$
     - CreationTime$
-    - AuthenticationConfiguration$
   get_crawlers:
     columns:
     - ^Name$
@@ -1407,7 +1396,6 @@ glue:
     - ExecutionClass$
     - Runtime$
     - AllocatedCapacity$
-    - CodeGenConfigurationNodes$
   get_partitions:
     columns:
     - CatalogId$
@@ -1525,8 +1513,7 @@ iam:
     - PolicyName$
   list_group_policies:
     columns:
-    - IsTruncated$
-    - Marker$
+    - value$
   list_groups:
     columns:
     - Arn$
@@ -1543,7 +1530,6 @@ iam:
     - ^Path$
     - RoleId$
     - RoleName$
-    - Roles$
   list_mfa_devices:
     columns:
     - UserName$
@@ -1559,8 +1545,7 @@ iam:
     - DefaultVersionId$
   list_role_policies:
     columns:
-    - IsTruncated$
-    - Marker$
+    - value$
   list_roles:
     columns:
     - RoleName$
@@ -1576,8 +1561,7 @@ iam:
     - ^Arn$
   list_user_policies:
     columns:
-    - IsTruncated$
-    - Marker$
+    - value$
   list_users:
     columns:
     - UserName$
@@ -1709,9 +1693,7 @@ kms:
     - KeyId$
     - Name$
     - IssuingAccount$
-    - Constraints$
-    - EncryptionContextEquals$
-    - EncryptionContextSubset$
+    - Constraints
   list_keys:
     columns:
     - KeyId$
@@ -1824,7 +1806,6 @@ logs:
     - creationTime$
     - applyOnTransformedLogs$
     - filterPattern$
-    - metricTransformations$
   describe_queries:
     columns:
     - queryId$
@@ -2030,7 +2011,6 @@ redshift:
     - EC2SecurityGroupName$
     - Status$
     - Description$
-    - EC2SecurityGroups$
     - Tags.Name$
   describe_cluster_snapshots:
     columns:
@@ -2138,7 +2118,7 @@ s3:
     - StorageClass$
   get_bucket_location:
     columns:
-    - LocationConstraint$
+    - value$
   get_bucket_logging:
     columns:
     - TargetBucket$
@@ -2152,7 +2132,7 @@ s3:
     - TopicArn$
   get_bucket_policy:
     columns:
-    - Policy$
+    - value$
   get_bucket_replication:
     columns:
     - ID$
@@ -2314,7 +2294,8 @@ ses:
     - IAMRoleARN$
     - TopicARN$
   list_identities:
-    columns: []
+    columns:
+    - value$
 sns:
   get_topic_attributes:
     columns:
@@ -2344,9 +2325,11 @@ sqs:
     - ApproximateNumberOfMessagesNotVisible$
     - VisibilityTimeout$
   list_dead_letter_source_queues:
-    columns: []
+    columns:
+    - value$
   list_queues:
-    columns: []
+    columns:
+    - value$
 ssm:
   describe_document:
     columns:
@@ -2422,7 +2405,6 @@ ssm:
     - ^Name$
     - DetailedStatus$
     - ^Overview.Status$
-    - AssociationStatusAggregatedCount$
   list_documents:
     columns:
     - DisplayName$
