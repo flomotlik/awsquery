@@ -2,6 +2,7 @@
 
 import os
 import tempfile
+from functools import lru_cache
 from unittest.mock import patch
 
 import pytest
@@ -17,9 +18,10 @@ from awsquery.config import (
     load_default_actions,
     load_default_filters,
 )
-from awsquery.formatters import flatten_response
+from awsquery.filters import matches_pattern, parse_filter_pattern
+from awsquery.formatters import flatten_dict_keys, flatten_response
 from awsquery.security import is_readonly_operation
-from awsquery.shapes import ShapeCache
+from awsquery.shapes import METADATA_FIELDS, ShapeCache, get_shape_cache
 
 # Cache can be persistent since we use real config file
 
@@ -62,7 +64,6 @@ class TestGetDefaultColumns:
             "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
-            "Placement$",
             "AvailabilityZone$",
             "PublicIpAddress$",
             "PrivateIpAddress$",
@@ -73,7 +74,7 @@ class TestGetDefaultColumns:
         """Test retrieving columns for different action of same service."""
         columns = get_default_columns("ec2", "describe_security_groups")
 
-        expected = ["GroupName$", "Description$", "GroupId$", "VpcId$"]
+        expected = ["^GroupName$", "^Description$", "^GroupId$", "^VpcId$"]
         assert columns == expected
 
     def test_case_insensitive_service_action(self):
@@ -105,7 +106,7 @@ class TestGetDefaultColumns:
         assert lambda_columns == [
             "FunctionName$",
             "Runtime$",
-            "Timeout$",
+            "^Timeout$",
             "MemorySize$",
             "Handler$",
             "LastModified$",
@@ -134,7 +135,6 @@ class TestApplyDefaultFilters:
             "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
-            "Placement$",
             "AvailabilityZone$",
             "PublicIpAddress$",
             "PrivateIpAddress$",
@@ -152,7 +152,6 @@ class TestApplyDefaultFilters:
             "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
-            "Placement$",
             "AvailabilityZone$",
             "PublicIpAddress$",
             "PrivateIpAddress$",
@@ -193,7 +192,6 @@ class TestDetermineColumnFilters:
             "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
-            "Placement$",
             "AvailabilityZone$",
             "PublicIpAddress$",
             "PrivateIpAddress$",
@@ -415,6 +413,185 @@ class TestDefaultActionsMap:
 
     def test_default_actions_are_subset_of_default_filters(self):
         assert set(load_default_actions()) <= set(load_default_filters())
+
+
+# Sentinels the synthetic response carries so that map keys and tag names - user
+# data the service model knows nothing about - are recognisable in a flat key.
+_MAP_KEY = "__awsquery_map_key__"
+_STRING_VALUE = "__awsquery_string__"
+_DYNAMIC_SEGMENTS = (_MAP_KEY, _STRING_VALUE)
+_MAX_SAMPLE_DEPTH = 6
+
+
+def _sample_for_shape(shape, depth=0, path=()):
+    """Build one synthetic response member from a botocore shape."""
+    kind = shape.type_name
+    if kind == "structure":
+        if shape.name in path or depth > _MAX_SAMPLE_DEPTH:
+            return {}
+        deeper = path + (shape.name,)
+        return {
+            name: _sample_for_shape(member, depth + 1, deeper)
+            for name, member in shape.members.items()
+        }
+    if kind == "list":
+        return (
+            [] if depth > _MAX_SAMPLE_DEPTH else [_sample_for_shape(shape.member, depth + 1, path)]
+        )
+    if kind == "map":
+        if depth > _MAX_SAMPLE_DEPTH:
+            return {}
+        return {_MAP_KEY: _sample_for_shape(shape.value, depth + 1, path)}
+    if kind in ("integer", "long"):
+        return 1
+    if kind in ("float", "double"):
+        return 1.0
+    if kind == "boolean":
+        return True
+    if kind == "timestamp":
+        return "1970-01-01T00:00:00Z"
+    return _STRING_VALUE
+
+
+def _runtime_keys(service, action):
+    """The flat keys one rendered resource of service.action really carries.
+
+    Returns (keys, map_backed_containers), and empty keys when the operation
+    cannot be sampled at all: the payload is a bare map whose keys are account
+    data (iam get-account-summary renders its columns out of SummaryMap), a list
+    of primitives, or the service model has no output shape for it.
+    """
+    shape = get_shape_cache().get_operation_shape(service, action)
+    if shape is None:
+        return (), ()
+    sample = _sample_for_shape(shape)
+    if not isinstance(sample, dict):
+        return (), ()
+    # Pagination state is stripped long before anything renders, so never a column.
+    sample = {name: value for name, value in sample.items() if name not in METADATA_FIELDS}
+    resources = flatten_response(sample, service, action)
+    if not resources or not isinstance(resources[0], dict):
+        return (), ()
+    keys = list(flatten_dict_keys(resources[0]))
+    if keys == ["value"]:
+        return (), ()
+
+    static, containers = [], set()
+    for key in keys:
+        segments = key.split(".")
+        dynamic = [i for i, segment in enumerate(segments) if segment in _DYNAMIC_SEGMENTS]
+        if not dynamic:
+            static.append(key)
+            continue
+        containers.update(s for s in segments[: dynamic[0]] if not s.isdigit())
+    return tuple(static), tuple(sorted(containers))
+
+
+def _column_complaint(column, keys, containers):
+    """Say why this column filter is wrong for these runtime keys, or None."""
+    pattern, mode = parse_filter_pattern(column)
+    if any(segment in containers for segment in pattern.split(".")):
+        return None  # drills into a map, whose keys are data rather than model
+
+    matches = [key for key in keys if matches_pattern(key, pattern, mode)]
+    if not matches:
+        return f"'{column}' matches nothing in {list(keys)}"
+    if len(matches) == 1 or mode == "exact":
+        return None
+
+    top_level = {key.lower(): key for key in keys if "." not in key}
+    if pattern.lower() in top_level:
+        return f"'{column}' matches {matches}; anchor it as '^{top_level[pattern.lower()]}$'"
+
+    same_leaf = [key for key in matches if key.split(".")[-1].lower() == pattern.lower()]
+    if not same_leaf:
+        return None  # no field of this name; the extra hits are chance suffixes
+    shallowest = min(same_leaf, key=lambda key: (key.count("."), key))
+    depth = shallowest.count(".")
+    if len([key for key in same_leaf if key.count(".") == depth]) > 1:
+        return None  # equally shallow siblings, so no path is the obvious one
+    if any(segment.isdigit() for segment in shallowest.split(".")):
+        return None  # under a list, where an anchored index would pin item zero
+    return f"'{column}' matches {matches}; anchor it as '^{shallowest}$'"
+
+
+@lru_cache(maxsize=1)
+def _default_filter_complaints():
+    """Audit every curated column against the response it will really render.
+
+    One sweep for the whole file: the shared shape cache is reset between tests,
+    so per-test sampling would reload each service model hundreds of times.
+    """
+    complaints = {}
+    for service, actions in load_default_filters().items():
+        for action, config in actions.items():
+            keys, containers = _runtime_keys(service, action)
+            if not keys:
+                continue
+            complaints[(service, action)] = tuple(
+                complaint
+                for complaint in (
+                    _column_complaint(column, keys, containers)
+                    for column in config.get("columns") or []
+                )
+                if complaint
+            )
+    return complaints
+
+
+def _default_filter_entries():
+    """Every entry of default_filters.yaml as (service, action)."""
+    return sorted(
+        (service, action)
+        for service, actions in load_default_filters().items()
+        for action in actions
+    )
+
+
+class TestDefaultColumnsSelectRealFields:
+    """Per-entry validation guard for src/awsquery/default_filters.yaml."""
+
+    @pytest.mark.parametrize("service,action", _default_filter_entries())
+    def test_every_curated_column_picks_out_its_field(self, service, action):
+        complaints = _default_filter_complaints().get((service, action), ())
+
+        assert not complaints, f"{service} {action}\n  " + "\n  ".join(complaints)
+
+    def test_the_sweep_covers_the_bulk_of_the_file(self):
+        audited = len(_default_filter_complaints())
+        total = len(_default_filter_entries())
+
+        assert audited >= total * 0.85, f"only {audited} of {total} entries were sampled"
+
+    def test_a_map_backed_response_is_left_alone(self):
+        keys, _ = _runtime_keys("iam", "get_account_summary")
+
+        assert keys == ()
+        assert _default_filter_complaints().get(("iam", "get_account_summary")) is None
+
+    def test_a_column_naming_no_field_is_reported(self):
+        complaint = _column_complaint("NoSuchField$", ("StackName", "StackId"), ())
+
+        assert complaint is not None
+        assert "matches nothing" in complaint
+
+    def test_a_column_shadowing_an_exact_field_is_reported(self):
+        complaint = _column_complaint("Name$", ("Name", "Owner.Name"), ())
+
+        assert complaint is not None
+        assert "'^Name$'" in complaint
+
+    def test_a_column_with_one_obvious_path_is_reported(self):
+        complaint = _column_complaint("Name$", ("Owner.Name", "Owner.Group.0.Name"), ())
+
+        assert complaint is not None
+        assert "'^Owner.Name$'" in complaint
+
+    def test_a_column_under_a_list_is_accepted(self):
+        assert _column_complaint("Name$", ("Items.0.Name", "Items.0.Tag.Name"), ()) is None
+
+    def test_a_column_drilling_into_a_map_is_accepted(self):
+        assert _column_complaint("Tags.Name$", ("InstanceId",), ("Tags",)) is None
 
 
 class TestYAMLConfigurationStructure:

@@ -89,7 +89,6 @@ class TestAllFeaturesIntegration:
             "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
-            "Placement$",
             "AvailabilityZone$",
             "PublicIpAddress$",
             "PrivateIpAddress$",
@@ -454,7 +453,7 @@ class TestAllFeaturesIntegration:
         expected = [
             "FunctionName$",
             "Runtime$",
-            "Timeout$",
+            "^Timeout$",
             "MemorySize$",
             "Handler$",
             "LastModified$",

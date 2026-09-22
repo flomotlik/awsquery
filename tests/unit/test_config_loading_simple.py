@@ -31,7 +31,6 @@ class TestDefaultFiltersConfig:
             "State.Name$",
             "InstanceLifecycle$",
             "LaunchTime$",
-            "Placement$",
             "AvailabilityZone$",
             "PublicIpAddress$",
             "PrivateIpAddress$",
