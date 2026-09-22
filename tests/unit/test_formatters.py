@@ -1,5 +1,7 @@
 """Unit tests for AWS Query Tool formatting functions."""
 
+import csv
+import io
 import json
 from unittest.mock import Mock, call, patch
 
@@ -8,13 +10,19 @@ from tabulate import tabulate
 
 # Import the functions under test
 from awsquery.formatters import (
+    build_data_rows,
+    build_rows,
     detect_aws_tags,
     extract_and_sort_keys,
     flatten_dict_keys,
     flatten_response,
     flatten_single_response,
+    format_csv_output,
     format_json_output,
+    format_keys_output,
+    format_ndjson_output,
     format_table_output,
+    format_tsv_output,
     make_unique_headers,
     transform_tags_structure,
 )
@@ -169,6 +177,120 @@ class TestFlattenSingleResponse:
         assert "production-logs-bucket" in bucket_names
         assert "staging-backup-bucket" in bucket_names
         assert "development-assets" in bucket_names
+
+
+class TestSingleObjectResponses:
+    # A Get/Describe of one object must not be reduced to whichever list it carries.
+
+    FUNCTION = {
+        "FunctionName": "my-fn",
+        "Runtime": "python3.12",
+        "MemorySize": 512,
+        "Timeout": 30,
+        "Handler": "app.handler",
+        "FunctionArn": "arn:aws:lambda:eu-west-1:111111111111:function:my-fn",
+    }
+
+    def test_nested_list_does_not_replace_the_object(self):
+        response = dict(self.FUNCTION, Layers=[{"Arn": "arn:layer:1", "CodeSize": 1024}])
+
+        result = flatten_response(response, "lambda", "get-function-configuration")
+
+        assert len(result) == 1
+        assert result[0]["FunctionName"] == "my-fn"
+        assert result[0]["Layers"] == [{"Arn": "arn:layer:1", "CodeSize": 1024}]
+
+    @pytest.mark.parametrize("layers", [None, [{"Arn": "arn:layer:1", "CodeSize": 1024}]])
+    def test_default_columns_render_with_and_without_a_layer(self, layers):
+        response = dict(self.FUNCTION)
+        if layers is not None:
+            response["Layers"] = layers
+
+        result = flatten_response([response], "lambda", "get-function-configuration")
+        table = format_table_output(result, ["FunctionName$", "Runtime$", "MemorySize$"])
+
+        assert "my-fn" in table
+        assert "python3.12" in table
+        assert "512" in table
+
+    def test_response_metadata_is_still_dropped(self):
+        response = dict(self.FUNCTION, ResponseMetadata={"RequestId": "abc"})
+
+        result = flatten_response(response, "lambda", "get-function-configuration")
+
+        assert "ResponseMetadata" not in result[0]
+
+    def test_sibling_lists_all_survive(self):
+        response = {
+            "TopicConfigurations": [{"Id": "topic", "TopicArn": "arn:topic"}],
+            "QueueConfigurations": [{"Id": "queue", "QueueArn": "arn:queue"}],
+        }
+
+        result = flatten_response(response, "s3", "get-bucket-notification-configuration")
+
+        assert len(result) == 1
+        assert result[0]["QueueConfigurations"][0]["QueueArn"] == "arn:queue"
+
+    def test_collection_response_still_yields_one_row_per_item(self):
+        response = {
+            "Buckets": [{"Name": "one"}, {"Name": "two"}],
+            "Owner": {"DisplayName": "me"},
+        }
+
+        result = flatten_response(response, "s3", "list-buckets")
+
+        assert [bucket["Name"] for bucket in result] == ["one", "two"]
+
+
+class TestSiblingListSelection:
+    # A bare list of names beside a list of structures is an index, not the resources.
+
+    @pytest.mark.parametrize(
+        "service,action,response,expected",
+        [
+            (
+                "kinesis",
+                "list-streams",
+                {
+                    "StreamNames": ["events", "clicks"],
+                    "StreamSummaries": [
+                        {"StreamName": "events", "StreamStatus": "ACTIVE"},
+                        {"StreamName": "clicks", "StreamStatus": "CREATING"},
+                    ],
+                },
+                ["ACTIVE", "CREATING"],
+            ),
+            (
+                "ec2",
+                "describe-vpc-endpoint-services",
+                {
+                    "ServiceNames": ["com.amazonaws.eu-west-1.s3"],
+                    "ServiceDetails": [
+                        {"ServiceName": "s3", "Owner": "amazon"},
+                        {"ServiceName": "ec2", "Owner": "self"},
+                    ],
+                },
+                ["amazon", "self"],
+            ),
+            (
+                "apigateway",
+                "get-api-keys",
+                {
+                    "warnings": [],
+                    "items": [
+                        {"id": "k1", "name": "partner-key"},
+                        {"id": "k2", "name": "internal-key"},
+                    ],
+                },
+                ["partner-key", "internal-key"],
+            ),
+        ],
+    )
+    def test_structured_sibling_supplies_the_records(self, service, action, response, expected):
+        result = flatten_response(response, service, action)
+
+        assert len(result) == 2
+        assert [list(item.values())[1] for item in result] == expected
 
 
 class TestFlattenDictKeys:
@@ -451,8 +573,9 @@ class TestTableOutput:
         assert "InstanceId" in result
         assert "Name" in result  # Simplified from State.Name
         assert "Code" in result  # Simplified from State.Code
-        assert "Key" in result  # Simplified from Tags.0.Key
-        assert "Value" in result  # Simplified from Tags.0.Value
+        assert "Environment" in result  # Tag key becomes its own column
+        assert "Key" not in result
+        assert "Value" not in result
         assert "i-123" in result
         assert "running" in result
 
@@ -684,8 +807,7 @@ class TestJsonOutput:
         assert resource["Environment"] == "prod"
         assert resource["InstanceId"] == "i-123"
 
-    def test_format_json_output_filters_empty_values(self):
-        # Empty/null values get filtered out
+    def test_format_json_output_keeps_falsy_values_and_drops_nulls(self):
         resources = [
             {"Name": "resource1", "EmptyString": "", "NullValue": None, "Status": "active"}
         ]
@@ -694,9 +816,9 @@ class TestJsonOutput:
 
         assert len(parsed["results"]) == 1
         resource = parsed["results"][0]
-        assert "Name" in resource
-        assert "Status" in resource
-        assert "EmptyString" not in resource
+        assert resource["Name"] == "resource1"
+        assert resource["Status"] == "active"
+        assert resource["EmptyString"] == ""
         assert "NullValue" not in resource
 
     def test_format_json_output_no_matching_resources(self):
@@ -769,9 +891,8 @@ class TestUtilityFunctions:
         assert "InstanceId" in result
         assert "State.Name" in result  # Normalized from State.Name
         assert "State.Code" in result  # Normalized from State.Code
-        assert "Tags_Original.Key" in result  # From Tags.0.Key (original preserved)
-        assert "Tags_Original.Value" in result  # From Tags.0.Value (original preserved)
         assert "Tags.Environment" in result  # Transformed tag map
+        assert not any(key.startswith("Tags_Original") for key in result)
 
         assert result == sorted(result, key=str.lower)
 
@@ -913,7 +1034,7 @@ class TestComplexScenarios:
 
         assert "InstanceId" in result
         assert "Name" in result  # From State.Name
-        assert any(tag in result for tag in ["Key", "Value"])  # From Tags
+        assert "Key" not in result  # raw tag pairs are transformed away
 
         assert "i-1234567890abcdef0" in result
         assert "i-abcdef1234567890" in result
@@ -997,9 +1118,11 @@ class TestComplexScenarios:
         assert len(parsed["results"]) == 1
         resource = parsed["results"][0]
 
-        # All fields get stringified for consistency
-        for key, value in resource.items():
-            assert isinstance(value, str)
+        assert resource["StringField"] == "test-value"
+        assert resource["NumberField"] == 42
+        assert resource["BooleanField"] is True
+        assert resource["SubField2"] == 100
+        assert resource["ArrayOfStrings"] == ["item1", "item2"]
 
     def test_flatten_response_real_paginated_data(self):
         # Realistic paginated data handling
@@ -1167,9 +1290,7 @@ class TestTagTransformation:
         # Tags transformed to map format
         assert result["InstanceId"] == "i-123"
         assert result["Tags"] == {"Name": "web-server", "Environment": "production"}
-
-        # Original preserved for debugging
-        assert result["Tags_Original"] == input_data["Tags"]
+        assert "Tags_Original" not in result
 
     def test_transform_tags_structure_nested_data(self):
         # Nested data structures with Tags
@@ -1200,7 +1321,7 @@ class TestTagTransformation:
         instance1 = result["Instances"][0]
         assert instance1["InstanceId"] == "i-123"
         assert instance1["Tags"] == {"Name": "web-server-1", "Environment": "production"}
-        assert instance1["Tags_Original"] == input_data["Instances"][0]["Tags"]
+        assert "Tags_Original" not in instance1
 
         instance2 = result["Instances"][1]
         assert instance2["InstanceId"] == "i-456"
@@ -1339,9 +1460,7 @@ class TestTagTransformation:
 
         resource = parsed["results"][0]
         assert resource["Tags"] == {"Name": "web-server-1", "Environment": "production"}
-
-        # Original preserved for debugging
-        assert resource["Tags_Original"] == resources[0]["Tags"]
+        assert "Tags_Original" not in resource
 
     def test_extract_and_sort_keys_with_transformed_tags(self):
         # Key extraction includes transformed tag keys
@@ -1371,8 +1490,7 @@ class TestTagTransformation:
         assert len(result["Tags"]) == 100
         assert result["Tags"]["Tag0"] == "Value0"
         assert result["Tags"]["Tag99"] == "Value99"
-
-        assert len(result["Tags_Original"]) == 100
+        assert "Tags_Original" not in result
 
     def test_transform_tags_structure_no_modification_to_original(self):
         # Original data remains unchanged
@@ -1411,4 +1529,425 @@ class TestTagTransformation:
         result = transform_tags_structure(input_data)
 
         assert result["Tags"] == expected_output
-        assert result["Tags_Original"] == tag_input
+        assert "Tags_Original" not in result
+
+
+# Longer than the 80-char cutoff the table builder truncates at, so any test
+# comparing a delimited format against build_rows instead of build_data_rows fails.
+LONG_ARN = "arn:aws:iam::123456789012:role/service-role/" + "AwsQueryIntegrationTestRole" * 3
+
+
+@pytest.fixture
+def delimited_resources():
+    return [
+        {
+            "InstanceId": "i-111",
+            "Tags": [{"Key": "Name", "Value": "web, prod"}],
+            "State": {"Name": "running"},
+            "Note": 'says "hello"',
+            "Arn": LONG_ARN,
+        },
+        {
+            "InstanceId": "i-222",
+            "Tags": [{"Key": "Name", "Value": "db"}],
+            "State": {"Name": "stopped"},
+            "Note": "multi\nline",
+            "Arn": LONG_ARN + "-two",
+        },
+    ]
+
+
+DELIMITED_FILTERS = ["InstanceId$", "Tags.Name$", "State.Name$", "Note$", "Arn$"]
+
+
+class TestCsvOutput:
+
+    def test_headers_and_order_match_the_lossless_builder(self, delimited_resources):
+        headers, rows = build_data_rows(delimited_resources, DELIMITED_FILTERS)
+        parsed = list(
+            csv.reader(io.StringIO(format_csv_output(delimited_resources, DELIMITED_FILTERS)))
+        )
+
+        assert parsed[0] == headers
+        assert parsed[1:] == rows
+
+    def test_value_with_comma_survives_round_trip(self, delimited_resources):
+        output = format_csv_output(delimited_resources, ["InstanceId$", "Tags.Name$"])
+        parsed = list(csv.reader(io.StringIO(output)))
+
+        assert parsed[1] == ["i-111", "web, prod"]
+        assert '"web, prod"' in output
+
+    def test_value_with_quote_survives_round_trip(self, delimited_resources):
+        parsed = list(
+            csv.reader(
+                io.StringIO(format_csv_output(delimited_resources, ["InstanceId$", "Note$"]))
+            )
+        )
+
+        assert parsed[1] == ["i-111", 'says "hello"']
+
+    def test_value_with_newline_survives_round_trip(self, delimited_resources):
+        parsed = list(
+            csv.reader(
+                io.StringIO(format_csv_output(delimited_resources, ["InstanceId$", "Note$"]))
+            )
+        )
+
+        assert parsed[2] == ["i-222", "multi\nline"]
+
+    def test_every_row_has_the_header_width(self, delimited_resources):
+        parsed = list(
+            csv.reader(io.StringIO(format_csv_output(delimited_resources, DELIMITED_FILTERS)))
+        )
+
+        assert all(len(row) == len(parsed[0]) for row in parsed)
+
+    def test_no_trailing_newline(self, delimited_resources):
+        output = format_csv_output(delimited_resources, DELIMITED_FILTERS)
+
+        assert not output.endswith("\n")
+
+    def test_empty_resources_produce_empty_output(self):
+        assert format_csv_output([]) == ""
+
+    def test_unmatched_column_filters_produce_empty_output(self, delimited_resources):
+        assert format_csv_output(delimited_resources, ["NoSuchColumn$"]) == ""
+
+
+class TestTsvOutput:
+
+    def test_headers_and_order_match_the_lossless_builder(self, delimited_resources):
+        headers, rows = build_data_rows(delimited_resources, DELIMITED_FILTERS)
+        parsed = list(
+            csv.reader(
+                io.StringIO(format_tsv_output(delimited_resources, DELIMITED_FILTERS)),
+                delimiter="\t",
+            )
+        )
+
+        assert parsed[0] == headers
+        assert parsed[1:] == rows
+
+    def test_columns_are_tab_separated(self, delimited_resources):
+        output = format_tsv_output(delimited_resources, ["InstanceId$", "State.Name$"])
+
+        assert output.splitlines()[0] == "InstanceId\tName"
+        assert output.splitlines()[1] == "i-111\trunning"
+
+    def test_value_with_comma_is_not_quoted(self, delimited_resources):
+        output = format_tsv_output(delimited_resources, ["InstanceId$", "Tags.Name$"])
+
+        assert "i-111\tweb, prod" in output
+
+    def test_agrees_with_csv_on_parsed_content(self, delimited_resources):
+        csv_rows = list(
+            csv.reader(io.StringIO(format_csv_output(delimited_resources, DELIMITED_FILTERS)))
+        )
+        tsv_rows = list(
+            csv.reader(
+                io.StringIO(format_tsv_output(delimited_resources, DELIMITED_FILTERS)),
+                delimiter="\t",
+            )
+        )
+
+        assert tsv_rows == csv_rows
+
+    def test_empty_resources_produce_empty_output(self):
+        assert format_tsv_output([]) == ""
+
+
+class TestNdjsonOutput:
+
+    def test_every_line_parses_independently(self, delimited_resources):
+        lines = format_ndjson_output(delimited_resources, DELIMITED_FILTERS).splitlines()
+
+        assert len(lines) == len(delimited_resources)
+        assert all(isinstance(json.loads(line), dict) for line in lines)
+
+    def test_no_results_envelope(self, delimited_resources):
+        output = format_ndjson_output(delimited_resources, DELIMITED_FILTERS)
+
+        assert "results" not in output
+        assert not output.lstrip().startswith("{\n")
+
+    def test_keys_match_the_lossless_builder_headers(self, delimited_resources):
+        headers, _ = build_data_rows(delimited_resources, DELIMITED_FILTERS)
+        objects = [
+            json.loads(line)
+            for line in format_ndjson_output(delimited_resources, DELIMITED_FILTERS).splitlines()
+        ]
+
+        assert all(list(obj) == headers for obj in objects)
+
+    def test_values_match_the_csv_cells(self, delimited_resources):
+        headers, rows = build_data_rows(delimited_resources, DELIMITED_FILTERS)
+        objects = [
+            json.loads(line)
+            for line in format_ndjson_output(delimited_resources, DELIMITED_FILTERS).splitlines()
+        ]
+
+        assert [[obj[header] for header in headers] for obj in objects] == rows
+
+    def test_native_value_types_are_preserved(self):
+        resources = [{"Name": "a", "Count": 3, "Enabled": False, "Ratio": 1.5}]
+
+        obj = json.loads(format_ndjson_output(resources, ["Name$", "Count$", "Enabled$", "Ratio$"]))
+
+        assert obj["Count"] == 3
+        assert obj["Enabled"] is False
+        assert obj["Ratio"] == 1.5
+
+    def test_lines_are_compact(self, delimited_resources):
+        output = format_ndjson_output(delimited_resources, ["InstanceId$", "State.Name$"])
+
+        assert output.splitlines()[0] == '{"InstanceId":"i-111","Name":"running"}'
+
+    def test_resources_without_matching_columns_are_skipped(self, delimited_resources):
+        assert format_ndjson_output(delimited_resources, ["NoSuchColumn$"]) == ""
+
+    def test_empty_resources_produce_empty_output(self):
+        assert format_ndjson_output([]) == ""
+
+
+class TestLosslessDelimitedValues:
+    """agent-reference.md promises csv/tsv do not truncate; only the table does."""
+
+    POLICY_DOCUMENT = (
+        '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":'
+        '["ec2:DescribeInstances","ec2:DescribeTags"],"Resource":"*"}]}'
+    )
+
+    def test_csv_keeps_a_long_arn_byte_for_byte(self):
+        resources = [{"Name": "role", "Arn": LONG_ARN}]
+
+        parsed = list(csv.reader(io.StringIO(format_csv_output(resources, ["Name$", "Arn$"]))))
+
+        assert len(LONG_ARN) > 80
+        assert parsed[1] == ["role", LONG_ARN]
+
+    def test_tsv_keeps_a_long_policy_document_byte_for_byte(self):
+        resources = [{"Name": "policy", "Document": self.POLICY_DOCUMENT}]
+
+        parsed = list(
+            csv.reader(
+                io.StringIO(format_tsv_output(resources, ["Name$", "Document$"])), delimiter="\t"
+            )
+        )
+
+        assert len(self.POLICY_DOCUMENT) > 80
+        assert parsed[1] == ["policy", self.POLICY_DOCUMENT]
+
+    def test_ndjson_keeps_a_long_arn_byte_for_byte(self):
+        resources = [{"Name": "role", "Arn": LONG_ARN}]
+
+        obj = json.loads(format_ndjson_output(resources, ["Name$", "Arn$"]))
+
+        assert obj["Arn"] == LONG_ARN
+
+    def test_json_keeps_a_long_arn_byte_for_byte(self):
+        resources = [{"Name": "role", "Arn": LONG_ARN}]
+
+        results = json.loads(format_json_output(resources, ["Name$", "Arn$"]))["results"]
+
+        assert results[0]["Arn"] == LONG_ARN
+
+    def test_the_table_is_the_format_that_truncates(self):
+        resources = [{"Name": "role", "Arn": LONG_ARN}]
+
+        table = format_table_output(resources, ["Name$", "Arn$"], max_width=500)
+
+        assert LONG_ARN not in table
+        assert LONG_ARN[:77] + "..." in table
+
+    def test_truncation_never_leaks_into_the_lossless_builder(self):
+        resources = [{"Name": "role", "Arn": LONG_ARN}]
+
+        _, display_rows = build_rows(resources, ["Name$", "Arn$"])
+        _, data_rows = build_data_rows(resources, ["Name$", "Arn$"])
+
+        assert display_rows[0][1].endswith("...")
+        assert data_rows[0][1] == LONG_ARN
+
+
+class TestOutputFormatAgreement:
+
+    def test_table_csv_tsv_and_ndjson_expose_the_same_columns(self, delimited_resources):
+        headers, _ = build_data_rows(delimited_resources, DELIMITED_FILTERS)
+        csv_headers = format_csv_output(delimited_resources, DELIMITED_FILTERS).splitlines()[0]
+        tsv_headers = format_tsv_output(delimited_resources, DELIMITED_FILTERS).splitlines()[0]
+        first_object = json.loads(
+            format_ndjson_output(delimited_resources, DELIMITED_FILTERS).splitlines()[0]
+        )
+        table = format_table_output(delimited_resources, DELIMITED_FILTERS, max_width=500)
+
+        assert csv_headers == ",".join(headers)
+        assert tsv_headers == "\t".join(headers)
+        assert list(first_object) == headers
+        assert all(header in table for header in headers)
+
+    @pytest.mark.parametrize(
+        "formatter,expected",
+        [
+            (format_csv_output, ""),
+            (format_tsv_output, ""),
+            (format_ndjson_output, ""),
+            (format_table_output, "No results found."),
+        ],
+    )
+    def test_empty_resources_do_not_raise(self, formatter, expected):
+        assert formatter([]) == expected
+
+    def test_empty_resources_json_keeps_envelope(self):
+        assert json.loads(format_json_output([])) == {"results": []}
+
+
+PARITY_RESOURCES = [
+    {"Name": "a", "Count": 0, "Flag": False},
+    {"Name": "b", "Count": 5},
+    {"Name": "", "Count": 0},
+]
+
+PARITY_FILTERS = ["Name$", "Count$"]
+
+
+def json_results(resources, column_filters=None):
+    return json.loads(format_json_output(resources, column_filters))["results"]
+
+
+def ndjson_objects(resources, column_filters=None):
+    output = format_ndjson_output(resources, column_filters)
+    return [json.loads(line) for line in output.splitlines()] if output else []
+
+
+def csv_rows(resources, column_filters=None):
+    output = format_csv_output(resources, column_filters)
+    return list(csv.reader(io.StringIO(output))) if output else []
+
+
+class TestMachineFormatRowParity:
+
+    def test_filtered_formats_emit_one_row_per_resource(self):
+        rows = csv_rows(PARITY_RESOURCES, PARITY_FILTERS)
+
+        assert len(json_results(PARITY_RESOURCES, PARITY_FILTERS)) == len(PARITY_RESOURCES)
+        assert len(ndjson_objects(PARITY_RESOURCES, PARITY_FILTERS)) == len(PARITY_RESOURCES)
+        assert len(rows) == len(PARITY_RESOURCES) + 1
+
+    def test_unfiltered_formats_emit_one_row_per_resource(self):
+        rows = csv_rows(PARITY_RESOURCES)
+
+        assert len(json_results(PARITY_RESOURCES)) == len(PARITY_RESOURCES)
+        assert len(ndjson_objects(PARITY_RESOURCES)) == len(PARITY_RESOURCES)
+        assert len(rows) == len(PARITY_RESOURCES) + 1
+
+    def test_json_and_ndjson_agree_object_for_object(self):
+        assert json_results(PARITY_RESOURCES, PARITY_FILTERS) == ndjson_objects(
+            PARITY_RESOURCES, PARITY_FILTERS
+        )
+
+    def test_json_and_ndjson_agree_without_column_filters(self):
+        assert json_results(PARITY_RESOURCES) == ndjson_objects(PARITY_RESOURCES)
+
+    def test_numbers_stay_numbers_in_both_json_formats(self):
+        from_json = [obj["Count"] for obj in json_results(PARITY_RESOURCES, PARITY_FILTERS)]
+        from_ndjson = [obj["Count"] for obj in ndjson_objects(PARITY_RESOURCES, PARITY_FILTERS)]
+
+        assert from_json == from_ndjson == [0, 5, 0]
+        assert all(type(count) is int for count in from_json + from_ndjson)
+
+    def test_booleans_stay_booleans_in_both_json_formats(self):
+        assert ndjson_objects(PARITY_RESOURCES)[0]["Flag"] is False
+        assert json_results(PARITY_RESOURCES)[0]["Flag"] is False
+
+    def test_falsy_values_keep_their_resource_in_every_format(self):
+        empty_name_row = csv_rows(PARITY_RESOURCES, PARITY_FILTERS)[-1]
+
+        assert json_results(PARITY_RESOURCES, PARITY_FILTERS)[-1] == {"Name": "", "Count": 0}
+        assert ndjson_objects(PARITY_RESOURCES, PARITY_FILTERS)[-1] == {"Name": "", "Count": 0}
+        assert empty_name_row == ["", "0"]
+
+    def test_csv_cells_are_the_stringified_json_values(self):
+        headers, *rows = csv_rows(PARITY_RESOURCES, PARITY_FILTERS)
+        objects = ndjson_objects(PARITY_RESOURCES, PARITY_FILTERS)
+
+        assert headers == ["Name", "Count"]
+        assert rows == [[str(obj[header]) for header in headers] for obj in objects]
+
+    def test_nulls_are_dropped_from_json_formats_but_keep_the_row(self):
+        resources = [{"Name": "a", "Optional": None}, {"Name": "b", "Optional": "set"}]
+        filters = ["Name$", "Optional$"]
+
+        assert json_results(resources, filters) == [{"Name": "a"}, {"Name": "b", "Optional": "set"}]
+        assert ndjson_objects(resources, filters) == json_results(resources, filters)
+        assert csv_rows(resources, filters)[1:] == [["a", ""], ["b", "set"]]
+
+    def test_empty_input_keeps_the_json_envelope_and_empties_the_rest(self):
+        assert json.loads(format_json_output([])) == {"results": []}
+        assert format_ndjson_output([]) == ""
+        assert format_csv_output([]) == ""
+
+    def test_unfiltered_json_returns_whole_resources(self):
+        resources = [{"Name": "a", "Nested": {"Deep": [1, 2]}}]
+
+        assert json_results(resources) == resources
+
+    def test_table_drops_the_all_blank_row_that_machine_formats_keep(self):
+        blank = [{"Name": "", "Count": 0}]
+        table = format_table_output(blank, PARITY_FILTERS, max_width=200)
+
+        assert [line for line in table.splitlines() if line.startswith("|")] == [
+            "| Name   | Count   |"
+        ]
+        assert len(ndjson_objects(blank, PARITY_FILTERS)) == 1
+        assert len(csv_rows(blank, PARITY_FILTERS)) == 2
+
+
+class TestKeysOutput:
+
+    KEYS = ["InstanceId", "State.Name", "Tags.Name"]
+
+    def test_json_wraps_the_list_in_a_keys_object(self):
+        assert json.loads(format_keys_output(self.KEYS, "json")) == {"keys": self.KEYS}
+
+    def test_ndjson_emits_one_json_string_per_line(self):
+        lines = format_keys_output(self.KEYS, "ndjson").splitlines()
+
+        assert [json.loads(line) for line in lines] == self.KEYS
+        assert lines[0] == '"InstanceId"'
+
+    @pytest.mark.parametrize("output_format", ["csv", "tsv"])
+    def test_delimited_formats_carry_a_key_header(self, output_format):
+        delimiter = "\t" if output_format == "tsv" else ","
+        parsed = list(
+            csv.reader(
+                io.StringIO(format_keys_output(self.KEYS, output_format)), delimiter=delimiter
+            )
+        )
+
+        assert parsed == [["key"]] + [[key] for key in self.KEYS]
+
+    def test_table_indents_each_key(self):
+        assert format_keys_output(self.KEYS, "table") == ("  InstanceId\n  State.Name\n  Tags.Name")
+
+    def test_table_is_the_default(self):
+        assert format_keys_output(self.KEYS) == format_keys_output(self.KEYS, "table")
+
+    @pytest.mark.parametrize("output_format", ["table", "ndjson", "csv", "tsv"])
+    def test_line_oriented_formats_have_no_trailing_newline(self, output_format):
+        assert not format_keys_output(self.KEYS, output_format).endswith("\n")
+
+    @pytest.mark.parametrize(
+        "output_format,expected",
+        [("json", '{\n  "keys": []\n}'), ("ndjson", ""), ("csv", "key"), ("table", "")],
+    )
+    def test_empty_key_list(self, output_format, expected):
+        assert format_keys_output([], output_format) == expected
+
+    def test_keys_with_a_delimiter_survive_csv_quoting(self):
+        parsed = list(csv.reader(io.StringIO(format_keys_output(["a,b"], "csv"))))
+
+        assert parsed[1] == ["a,b"]
+
+    def test_generator_input_is_consumed_once(self):
+        assert json.loads(format_keys_output(iter(self.KEYS), "json")) == {"keys": self.KEYS}

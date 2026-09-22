@@ -69,17 +69,23 @@ docs = [
 awsquery = "awsquery.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/yourusername/awsquery"
-Documentation = "https://awsquery.readthedocs.io"
-Repository = "https://github.com/yourusername/awsquery.git"
-Issues = "https://github.com/yourusername/awsquery/issues"
-Changelog = "https://github.com/yourusername/awsquery/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/flomotlik/awsquery"
+Documentation = "https://github.com/flomotlik/awsquery#readme"
+Repository = "https://github.com/flomotlik/awsquery.git"
+Issues = "https://github.com/flomotlik/awsquery/issues"
+Changelog = "https://github.com/flomotlik/awsquery/releases"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-awsquery = ["policy.json", "default_filters.yaml", "default_actions.yaml"]
+awsquery = [
+    "policy.json",
+    "default_filters.yaml",
+    "default_actions.yaml",
+    "data_fields.yaml",
+    "agent-reference.md",
+]
 
 [tool.black]
 line-length = 100

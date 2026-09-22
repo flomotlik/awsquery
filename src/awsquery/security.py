@@ -1,9 +1,11 @@
 """Security validation for AWS Query Tool using simple prefix matching."""
 
+import os
 import sys
-from typing import Optional
+from typing import NoReturn, Optional
 
 from .case_utils import to_pascal_case
+from .errors import ExitCode, fail
 from .utils import debug_print
 
 # Common read-only operation prefixes based on AWS ReadOnly policy analysis
@@ -54,13 +56,43 @@ def is_readonly_operation(action: str) -> bool:
     return False
 
 
+def _is_non_interactive() -> bool:
+    """Whether confirmation prompts are impossible (agent loops, pipes, CI)."""
+    flag = os.environ.get("AWSQUERY_NON_INTERACTIVE", "").strip().lower()
+    if flag and flag not in ("0", "false", "no", "off"):
+        return True
+    try:
+        return not sys.stdin.isatty()
+    except Exception:  # stdin replaced or closed
+        return True
+
+
+def _refuse_unsafe(service: str, action: str) -> NoReturn:
+    """Refuse an unsafe operation that cannot be confirmed interactively."""
+    fail(
+        ExitCode.USAGE,
+        "UnsafeOperationRefused",
+        f"Operation '{service}:{action}' may not be read-only and cannot be "
+        f"confirmed without an interactive terminal.",
+        hint="Pass --allow-unsafe to override",
+    )
+
+
 def prompt_unsafe_operation(service: str, action: str) -> bool:
     """Prompt user to confirm unsafe operation."""
+    if _is_non_interactive():
+        _refuse_unsafe(service, action)
+
     print(f"\nWARNING: Operation '{service}:{action}' may not be read-only.", file=sys.stderr)
     print("This operation could potentially modify AWS resources.", file=sys.stderr)
 
     while True:
-        response = input("Do you want to proceed? (yes/no): ").lower().strip()
+        try:
+            response = input("Do you want to proceed? (yes/no): ").lower().strip()
+        except (EOFError, KeyboardInterrupt):
+            print("", file=sys.stderr)
+            _refuse_unsafe(service, action)
+
         if response in ["yes", "y"]:
             return True
         elif response in ["no", "n"]:

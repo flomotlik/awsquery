@@ -3,7 +3,15 @@ from unittest.mock import Mock, patch
 import pytest
 from botocore.model import ListShape, MapShape, ServiceModel, StringShape, StructureShape
 
-from awsquery.shapes import ShapeCache
+from awsquery.errors import set_structured_errors, structured_errors_enabled
+from awsquery.shapes import (
+    ShapeCache,
+    _is_plural,
+    _names_the_same_thing,
+    _split_verb,
+    get_shape_cache,
+    reset_shape_cache,
+)
 
 
 class TestShapeCacheInitialization:
@@ -417,10 +425,10 @@ class TestDataFieldIdentification:
             "NextToken": Mock(type_name="string"),
         }
 
-        result = cache.identify_data_field(mock_shape)
+        result = cache.identify_data_field(mock_shape, "ec2", "ListItems")
         assert result == "Items"
 
-    def test_identifies_first_of_multiple_list_fields(self):
+    def test_prefers_the_list_named_after_the_operation(self):
         cache = ShapeCache()
 
         mock_list_shape1 = Mock()
@@ -436,8 +444,8 @@ class TestDataFieldIdentification:
             "ResponseMetadata": Mock(type_name="structure"),
         }
 
-        result = cache.identify_data_field(mock_shape)
-        assert result in ["Reservations", "Instances"]
+        result = cache.identify_data_field(mock_shape, "ec2", "DescribeInstances")
+        assert result == "Instances"
 
     def test_identifies_single_non_list_field(self):
         cache = ShapeCache()
@@ -451,7 +459,7 @@ class TestDataFieldIdentification:
             "ResponseMetadata": Mock(type_name="structure"),
         }
 
-        result = cache.identify_data_field(mock_shape)
+        result = cache.identify_data_field(mock_shape, "s3", "GetBucketLocation")
         assert result == "LocationConstraint"
 
     def test_skips_known_metadata_fields(self):
@@ -469,7 +477,7 @@ class TestDataFieldIdentification:
             "Buckets": mock_list_shape,
         }
 
-        result = cache.identify_data_field(mock_shape)
+        result = cache.identify_data_field(mock_shape, "s3", "ListBuckets")
         assert result == "Buckets"
 
     def test_returns_none_when_no_members(self):
@@ -478,13 +486,13 @@ class TestDataFieldIdentification:
         mock_shape = Mock()
         mock_shape.members = {}
 
-        result = cache.identify_data_field(mock_shape)
+        result = cache.identify_data_field(mock_shape, "s3", "ListBuckets")
         assert result is None
 
     def test_returns_none_when_no_shape(self):
         cache = ShapeCache()
 
-        result = cache.identify_data_field(None)
+        result = cache.identify_data_field(None, "s3", "ListBuckets")
         assert result is None
 
     def test_returns_none_when_shape_has_no_members_attribute(self):
@@ -492,8 +500,147 @@ class TestDataFieldIdentification:
 
         mock_shape = Mock(spec=[])
 
-        result = cache.identify_data_field(mock_shape)
+        result = cache.identify_data_field(mock_shape, "s3", "ListBuckets")
         assert result is None
+
+
+class TestCollectionVersusSingleObject:
+    # Real botocore shapes: the rule has to hold against the service models, not mocks.
+
+    @pytest.mark.parametrize(
+        "service,operation,unrelated_list",
+        [
+            ("lambda", "GetFunctionConfiguration", "Layers"),
+            ("sagemaker", "DescribeNotebookInstance", "SecurityGroups"),
+            ("cloudformation", "DescribeChangeSet", "Parameters"),
+            ("sagemaker", "DescribeEndpoint", "ProductionVariants"),
+            ("sagemaker", "DescribeModel", "Containers"),
+            ("elasticbeanstalk", "DescribeEnvironmentHealth", "Causes"),
+            ("kafka", "DescribeConfiguration", "KafkaVersions"),
+            ("iam", "GetSAMLProvider", "Tags"),
+            ("apigatewayv2", "GetRoute", "AuthorizationScopes"),
+            ("s3", "GetBucketWebsite", "RoutingRules"),
+        ],
+    )
+    def test_single_object_response_has_no_data_field(self, service, operation, unrelated_list):
+        cache = ShapeCache()
+        shape = cache.get_operation_shape(service, operation)
+
+        assert shape.members[unrelated_list].type_name == "list"
+        assert cache.identify_data_field(shape, service, operation) is None
+
+    @pytest.mark.parametrize(
+        "service,operation,expected",
+        [
+            ("s3", "ListBuckets", "Buckets"),
+            ("s3", "ListObjectsV2", "Contents"),
+            ("s3", "ListMultipartUploads", "Uploads"),
+            ("route53", "ListHostedZones", "HostedZones"),
+            ("route53", "ListHealthChecks", "HealthChecks"),
+            ("route53", "ListResourceRecordSets", "ResourceRecordSets"),
+            ("ce", "GetRightsizingRecommendation", "RightsizingRecommendations"),
+            ("ec2", "DescribeInstances", "Reservations"),
+            ("ec2", "DescribeInstanceStatus", "InstanceStatuses"),
+            ("cloudformation", "DescribeStacks", "Stacks"),
+            ("apigateway", "GetRestApis", "items"),
+            ("dynamodb", "Scan", "Items"),
+            ("cloudtrail", "LookupEvents", "Events"),
+        ],
+    )
+    def test_collection_response_keeps_its_list(self, service, operation, expected):
+        cache = ShapeCache()
+        shape = cache.get_operation_shape(service, operation)
+
+        assert cache.identify_data_field(shape, service, operation) == expected
+
+    def test_kebab_case_operation_names_resolve(self):
+        cache = ShapeCache()
+
+        data_field, _, _ = cache.get_response_fields("lambda", "get-function-configuration")
+
+        assert data_field is None
+
+    def test_object_fields_become_available_to_filters(self):
+        cache = ShapeCache()
+
+        _, simplified, _ = cache.get_response_fields("lambda", "GetFunctionConfiguration")
+
+        assert simplified["FunctionName"] == "string"
+        assert simplified["MemorySize"] == "integer"
+        assert "Layers.Arn" in simplified
+
+    @pytest.mark.parametrize(
+        "service,operation,bare_list,expected",
+        [
+            ("kinesis", "ListStreams", "StreamNames", "StreamSummaries"),
+            ("ec2", "DescribeVpcEndpointServices", "ServiceNames", "ServiceDetails"),
+            ("apigateway", "GetApiKeys", "warnings", "items"),
+        ],
+    )
+    def test_bare_name_list_loses_to_its_structured_sibling(
+        self, service, operation, bare_list, expected
+    ):
+        cache = ShapeCache()
+        shape = cache.get_operation_shape(service, operation)
+
+        assert shape.members[bare_list].member.type_name != "structure"
+        assert cache.identify_data_field(shape, service, operation) == expected
+
+    def test_a_list_with_no_siblings_is_the_data(self):
+        cache = ShapeCache()
+        shape = cache.get_operation_shape("s3", "GetBucketTagging")
+
+        assert cache.identify_data_field(shape, "s3", "GetBucketTagging") == "TagSet"
+
+
+class TestOperationNameHeuristics:
+
+    @pytest.mark.parametrize(
+        "operation,expected",
+        [
+            ("ListBuckets", ("List", "Buckets")),
+            ("BatchGetProfile", ("BatchGet", "Profile")),
+            ("Scan", ("Scan", "")),
+            ("DescribeStacks", ("Describe", "Stacks")),
+        ],
+    )
+    def test_split_verb(self, operation, expected):
+        assert _split_verb(operation) == expected
+
+    @pytest.mark.parametrize(
+        "word,expected",
+        [
+            ("Stacks", True),
+            ("Policies", True),
+            ("Addresses", True),
+            ("RestApis", True),
+            ("ObjectsV2", True),
+            ("Status", False),
+            ("Address", False),
+            ("Analysis", False),
+            ("EnvironmentHealth", False),
+            ("ChangeSet", False),
+        ],
+    )
+    def test_is_plural(self, word, expected):
+        assert _is_plural(word) is expected
+
+    @pytest.mark.parametrize(
+        "noun,member,expected",
+        [
+            ("Buckets", "Buckets", True),
+            ("InstanceStatus", "InstanceStatuses", True),
+            ("DimensionKeys", "Keys", True),
+            ("UserAuthFactors", "ConfiguredUserAuthFactors", True),
+            ("FunctionConfiguration", "Layers", False),
+            ("BucketWebsite", "RoutingRules", False),
+            # A one-word noun is too weak to claim a longer member name
+            ("Statement", "SubStatements", False),
+            ("Type", "directParentTypes", False),
+        ],
+    )
+    def test_names_the_same_thing(self, noun, member, expected):
+        assert _names_the_same_thing(noun, member) is expected
 
 
 class TestShapeFlattening:
@@ -622,3 +769,55 @@ class TestShapeFlattening:
         result = cache._flatten_shape(mock_shape)
 
         assert result == {}
+
+
+class TestSharedShapeCache:
+
+    def test_repeated_calls_return_the_same_instance(self):
+        assert get_shape_cache() is get_shape_cache()
+
+    def test_parsed_models_are_reused_across_call_sites(self):
+        get_shape_cache().get_service_model("ec2")
+
+        assert "ec2" in get_shape_cache()._cache
+
+    def test_constructing_directly_gives_an_isolated_cache(self):
+        get_shape_cache().get_service_model("ec2")
+        isolated = ShapeCache()
+
+        assert isolated is not get_shape_cache()
+        assert isolated._cache == {}
+
+    def test_reset_drops_the_parsed_models(self):
+        shared = get_shape_cache()
+        shared.get_service_model("ec2")
+
+        reset_shape_cache()
+
+        assert get_shape_cache() is not shared
+        assert get_shape_cache()._cache == {}
+
+    def test_reset_is_safe_before_anything_built_the_cache(self):
+        reset_shape_cache()
+        reset_shape_cache()
+
+        assert get_shape_cache()._cache == {}
+
+
+class TestAutouseFixtureIsolation:
+    # Both tests dirty exactly the state they assert is clean, so they hold
+    # whichever order they run in.
+
+    def test_shared_state_starts_clean_first(self):
+        assert get_shape_cache()._cache == {}
+        assert structured_errors_enabled() is False
+
+        get_shape_cache().get_service_model("ec2")
+        set_structured_errors(True)
+
+    def test_shared_state_starts_clean_second(self):
+        assert get_shape_cache()._cache == {}
+        assert structured_errors_enabled() is False
+
+        get_shape_cache().get_service_model("s3")
+        set_structured_errors(True)

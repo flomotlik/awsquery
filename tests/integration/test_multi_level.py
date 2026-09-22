@@ -508,7 +508,7 @@ class TestMultiLevelWithMultipleFilters:
         ]
 
         # Filter that matches no resources
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="2"):
             execute_multi_level_call("eks", "describe-cluster", ["nonexistent"], [], [])
 
     @patch("awsquery.core.execute_aws_call")
@@ -581,7 +581,7 @@ class TestErrorScenariosIntegration:
             Exception("Operation not found"),
         ]
 
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="2"):
             execute_multi_level_call("custom", "describe-unknown", [], [], [])
 
         captured = capsys.readouterr()
@@ -608,7 +608,7 @@ class TestErrorScenariosIntegration:
             ),
         ]
 
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="2"):
             execute_multi_level_call("eks", "describe-cluster", [], [], [])
 
         captured = capsys.readouterr()
@@ -632,7 +632,7 @@ class TestErrorScenariosIntegration:
             [{"Resources": incomplete_resources}],
         ]
 
-        with pytest.raises(SystemExit, match="1"):
+        with pytest.raises(SystemExit, match="2"):
             execute_multi_level_call("service", "describe-resource", [], [], [])
 
         captured = capsys.readouterr()

@@ -46,3 +46,7 @@ jobs:
       - name: Run security checks
         run: |
           make security-check
+
+      - name: Check agent reference mirror
+        run: |
+          make llms-check

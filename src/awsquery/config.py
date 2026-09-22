@@ -5,7 +5,7 @@ from functools import lru_cache
 
 import yaml
 
-from .utils import debug_print
+from .utils import debug_print, normalize_action_name
 
 
 @lru_cache(maxsize=1)
@@ -95,6 +95,41 @@ def get_default_action(service):
         debug_print(f"No default action configured for {service}")  # pragma: no mutate
 
     return action
+
+
+@lru_cache(maxsize=1)
+def load_data_fields():
+    """Load the curated data field overrides with caching and error handling"""
+    config_path = os.path.join(os.path.dirname(__file__), "data_fields.yaml")
+
+    try:
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+            debug_print(f"Loaded data field overrides from {config_path}")  # pragma: no mutate
+            return config or {}
+    except FileNotFoundError:
+        debug_print(f"Warning: {config_path} not found, no overrides")  # pragma: no mutate
+        return {}
+    except yaml.YAMLError as e:
+        debug_print(f"Warning: Could not parse {config_path}: {e}")  # pragma: no mutate
+        return {}
+    except Exception as e:
+        debug_print(
+            f"Warning: Could not load data field overrides from {config_path}: {e}"
+        )  # pragma: no mutate
+        return {}
+
+
+def get_data_field_override(service, action):
+    """Get the curated data field for service.action, or None if the shape decides"""
+    if not service or not action:
+        return None
+
+    field = load_data_fields().get(service.lower(), {}).get(normalize_action_name(action))
+    if field:
+        debug_print(f"Data field override for {service}.{action}: {field}")  # pragma: no mutate
+
+    return field
 
 
 def apply_default_filters(service, action, user_columns=None, additive=False):

@@ -216,3 +216,10 @@ __marimo__/
 sample-responses
 test_env
 awsinfo
+# Codebase graph output (local tooling)
+graphify-out/
+
+# Local working directories and captured command output
+.development/
+.worktrees/
+output.txt

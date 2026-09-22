@@ -118,35 +118,36 @@ class TestValidateReadonly:
         mock_prompt.assert_called_once_with("ec2", "terminate-instances")
 
 
+@patch("awsquery.security._is_non_interactive", return_value=False)
 class TestPromptUnsafeOperation:
     """Test the interactive prompt for unsafe operations."""
 
     @patch("builtins.input")
-    def test_prompt_yes(self, mock_input):
+    def test_prompt_yes(self, mock_input, mock_interactive):
         """Test accepting an unsafe operation."""
         mock_input.return_value = "yes"
         assert prompt_unsafe_operation("ec2", "terminate-instances") is True
 
     @patch("builtins.input")
-    def test_prompt_no(self, mock_input):
+    def test_prompt_no(self, mock_input, mock_interactive):
         """Test declining an unsafe operation."""
         mock_input.return_value = "no"
         assert prompt_unsafe_operation("ec2", "terminate-instances") is False
 
     @patch("builtins.input")
-    def test_prompt_y(self, mock_input):
+    def test_prompt_y(self, mock_input, mock_interactive):
         """Test accepting with 'y'."""
         mock_input.return_value = "y"
         assert prompt_unsafe_operation("ec2", "terminate-instances") is True
 
     @patch("builtins.input")
-    def test_prompt_n(self, mock_input):
+    def test_prompt_n(self, mock_input, mock_interactive):
         """Test declining with 'n'."""
         mock_input.return_value = "n"
         assert prompt_unsafe_operation("ec2", "terminate-instances") is False
 
     @patch("builtins.input")
-    def test_prompt_retry_invalid(self, mock_input):
+    def test_prompt_retry_invalid(self, mock_input, mock_interactive):
         """Test that invalid input causes retry."""
         mock_input.side_effect = ["maybe", "yes"]
         assert prompt_unsafe_operation("ec2", "terminate-instances") is True

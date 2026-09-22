@@ -83,8 +83,9 @@ class TestValidateReadonlyEdgeCases:
         assert not is_readonly_operation("describe instances")
         assert not is_readonly_operation("describe\tinstances")
 
+    @patch("awsquery.security._is_non_interactive", return_value=False)
     @patch("builtins.input")
-    def test_interactive_prompt_loop(self, mock_input):
+    def test_interactive_prompt_loop(self, mock_input, mock_interactive):
         # Mock the actual input function to return invalid then valid
         mock_input.side_effect = ["maybe", "perhaps", "yes"]
 

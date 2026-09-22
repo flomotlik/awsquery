@@ -8,7 +8,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 from .filters import matches_pattern, parse_filter_pattern
-from .shapes import ShapeCache
+from .shapes import ShapeCache, get_shape_cache
 from .utils import debug_print
 
 
@@ -21,7 +21,7 @@ class FilterValidator:
         Args:
             shape_cache: Optional ShapeCache instance to reuse
         """
-        self.shape_cache = shape_cache or ShapeCache()
+        self.shape_cache = shape_cache or get_shape_cache()
 
     def validate_columns(
         self, service: str, operation: str, column_filters: List[str]
