@@ -88,6 +88,17 @@ def _is_plural(word: str) -> bool:
     return bool(words) and _singularize(words[-1]) != words[-1]
 
 
+def _prefer_structures(shape, members: List[str]) -> str:
+    """Pick the sibling list that holds structures.
+
+    A bare list of names or ids next to a list of structures is an index of that same
+    data: kinesis ListStreams returns StreamNames and StreamSummaries, and only the
+    summaries carry fields to render.
+    """
+    structured = [m for m in members if shape.members[m].member.type_name == "structure"]
+    return (structured or members)[0]
+
+
 def _names_the_same_thing(noun: str, member: str) -> bool:
     """True when a list member name refers to the noun the operation is named after.
 
@@ -289,12 +300,12 @@ class ShapeCache:
 
         verb, noun = _split_verb(to_pascal_case(operation))
 
-        for member in list_fields:
-            if _names_the_same_thing(noun, member):
-                return member
+        named = [m for m in list_fields if _names_the_same_thing(noun, m)]
+        if named:
+            return _prefer_structures(shape, named)
 
         if verb in _COLLECTION_VERBS or _is_plural(noun):
-            return list_fields[0]
+            return _prefer_structures(shape, list_fields)
 
         # A single object that happens to carry child collections.
         debug_print(f"{operation}: response is a single object, keeping its own fields")

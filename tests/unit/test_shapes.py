@@ -569,6 +569,23 @@ class TestCollectionVersusSingleObject:
         assert simplified["MemorySize"] == "integer"
         assert "Layers.Arn" in simplified
 
+    @pytest.mark.parametrize(
+        "service,operation,bare_list,expected",
+        [
+            ("kinesis", "ListStreams", "StreamNames", "StreamSummaries"),
+            ("ec2", "DescribeVpcEndpointServices", "ServiceNames", "ServiceDetails"),
+            ("apigateway", "GetApiKeys", "warnings", "items"),
+        ],
+    )
+    def test_bare_name_list_loses_to_its_structured_sibling(
+        self, service, operation, bare_list, expected
+    ):
+        cache = ShapeCache()
+        shape = cache.get_operation_shape(service, operation)
+
+        assert shape.members[bare_list].member.type_name != "structure"
+        assert cache.identify_data_field(shape, service, operation) == expected
+
     def test_a_list_with_no_siblings_is_the_data(self):
         cache = ShapeCache()
         shape = cache.get_operation_shape("s3", "GetBucketTagging")

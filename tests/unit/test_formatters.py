@@ -242,6 +242,57 @@ class TestSingleObjectResponses:
         assert [bucket["Name"] for bucket in result] == ["one", "two"]
 
 
+class TestSiblingListSelection:
+    # A bare list of names beside a list of structures is an index, not the resources.
+
+    @pytest.mark.parametrize(
+        "service,action,response,expected",
+        [
+            (
+                "kinesis",
+                "list-streams",
+                {
+                    "StreamNames": ["events", "clicks"],
+                    "StreamSummaries": [
+                        {"StreamName": "events", "StreamStatus": "ACTIVE"},
+                        {"StreamName": "clicks", "StreamStatus": "CREATING"},
+                    ],
+                },
+                ["ACTIVE", "CREATING"],
+            ),
+            (
+                "ec2",
+                "describe-vpc-endpoint-services",
+                {
+                    "ServiceNames": ["com.amazonaws.eu-west-1.s3"],
+                    "ServiceDetails": [
+                        {"ServiceName": "s3", "Owner": "amazon"},
+                        {"ServiceName": "ec2", "Owner": "self"},
+                    ],
+                },
+                ["amazon", "self"],
+            ),
+            (
+                "apigateway",
+                "get-api-keys",
+                {
+                    "warnings": [],
+                    "items": [
+                        {"id": "k1", "name": "partner-key"},
+                        {"id": "k2", "name": "internal-key"},
+                    ],
+                },
+                ["partner-key", "internal-key"],
+            ),
+        ],
+    )
+    def test_structured_sibling_supplies_the_records(self, service, action, response, expected):
+        result = flatten_response(response, service, action)
+
+        assert len(result) == 2
+        assert [list(item.values())[1] for item in result] == expected
+
+
 class TestFlattenDictKeys:
 
     def test_flatten_dict_keys_simple_dict(self):

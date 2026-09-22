@@ -1,18 +1,26 @@
 # Response members that hold the resources, for operations where the name cannot say so.
 #
-# shapes.identify_data_field() reads a Get/Describe of a singular noun as "one object"
-# and renders that object, which is what you want for lambda get-function-configuration
-# or sagemaker describe-notebook-instance. A few operations look identical in the service
-# model but are really a thin wrapper around one collection: s3 get-bucket-lifecycle-
-# configuration is a list of rules, codepipeline get-pipeline-state is a list of stages.
-# Nothing in the shape separates the two classes, so those exceptions are named here.
+# shapes.identify_data_field() reads the operation name to decide what a response is, and
+# names an entry here only where that cannot work. Two symptoms send you to this file:
 #
-# Add an entry when the command prints a single row whose cells carry comma-joined values
-# from independent records ("expire-logs, archive" under ID) - that means per-record
-# correspondence was lost. The value is the response member holding those records; check
-# it against `awsquery <service> <action> --schema`. Entries are verified against the
-# service model by the test suite, so a member that stops existing fails a test rather
-# than silently doing nothing.
+# 1. ONE ROW OF COMMA-JOINED VALUES. The operation reads as a Get/Describe of a single
+#    object, so the object is rendered - but it is really a thin wrapper around one
+#    collection, and independent records end up joined into one cell ("expire-logs,
+#    archive" under ID). s3 get-bucket-lifecycle-configuration is a list of rules and
+#    codepipeline get-pipeline-state is a list of stages, yet in the service model they
+#    look exactly like lambda get-function-configuration, which really is one object.
+#
+# 2. AN EMPTY TABLE WHILE THE DATA EXISTS. The response holds several sibling lists and
+#    the wrong one is picked. Where the unwanted sibling is a bare list of names or ids
+#    the shape settles it (kinesis list-streams picks StreamSummaries over StreamNames),
+#    but when every sibling holds structures nothing in the shape can: cloudwatch
+#    describe-alarms returns CompositeAlarms, MetricAlarms and LogAlarms, and picking the
+#    first prints nothing for an account that only has metric alarms.
+#
+# The value is the response member holding the records; check it against
+# `awsquery <service> <action> --schema`. Entries are verified against the service model
+# by the test suite, so a member that stops existing fails a test rather than silently
+# doing nothing.
 #
 # Keys are service, then action in snake_case, as in default_filters.yaml.
 
@@ -20,6 +28,8 @@ ce:
   get_cost_and_usage: ResultsByTime
   get_cost_forecast: ForecastResultsByTime
   get_reservation_utilization: UtilizationsByTime
+cloudwatch:
+  describe_alarms: MetricAlarms
 codepipeline:
   get_pipeline_state: stageStates
 s3:
