@@ -65,7 +65,7 @@ you don't have one.
 | --- | --- |
 | Try it once, install nothing | `uvx awsquery ec2 describe-instances` |
 | Use it every day (and get tab completion) | `uv tool install awsquery` |
-| Run a specific version | `uvx awsquery@1.1.0 ec2 describe-instances` |
+| Run a specific version | `uvx awsquery@1.2.0 ec2 describe-instances` |
 | Run unreleased code from GitHub | `uvx --from git+https://github.com/flomotlik/awsquery awsquery ec2` |
 | Hack on it locally | `uv run awsquery ec2` inside a checkout |
 
@@ -100,7 +100,7 @@ created, and nothing is left behind in your project.
 Pin an exact version when you want reproducibility, or force a check for the newest release:
 
 ```bash
-uvx awsquery@1.1.0 ec2 describe-instances   # pinned, fully reproducible
+uvx awsquery@1.2.0 ec2 describe-instances   # pinned, fully reproducible
 uvx awsquery@latest ec2 describe-instances  # re-checks PyPI for a newer version
 ```
 
@@ -114,7 +114,7 @@ anything:
 alias awsquery='uvx awsquery@latest'
 
 # pin the version instead, if you want everyone on the same release
-alias awsquery='uvx awsquery@1.1.0'
+alias awsquery='uvx awsquery@1.2.0'
 ```
 
 ```fish
@@ -164,7 +164,7 @@ uvx --from git+https://github.com/flomotlik/awsquery awsquery ec2 describe-insta
 
 # a specific branch, tag or commit
 uvx --from git+https://github.com/flomotlik/awsquery@main awsquery ec2 describe-instances
-uvx --from git+https://github.com/flomotlik/awsquery@v1.1.0 awsquery ec2 describe-instances
+uvx --from git+https://github.com/flomotlik/awsquery@v1.2.0 awsquery ec2 describe-instances
 
 # install that version persistently
 uv tool install git+https://github.com/flomotlik/awsquery
@@ -222,12 +222,12 @@ No install step is needed beyond uv itself:
 ```yaml
 # GitHub Actions
 - uses: astral-sh/setup-uv@v6
-- run: uvx awsquery@1.1.0 -j cloudformation describe-stacks -- StackName StackStatus
+- run: uvx awsquery@1.2.0 -j cloudformation describe-stacks -- StackName StackStatus
   env:
     AWS_REGION: eu-central-1
 ```
 
-Pin the version (`awsquery@1.1.0`) in CI so a new release can never change your output format
+Pin the version (`awsquery@1.2.0`) in CI so a new release can never change your output format
 underneath a pipeline.
 
 ### Via pip
